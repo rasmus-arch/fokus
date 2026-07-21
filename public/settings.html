@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Företagsinfo - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <div id="sidebar-container"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto p-6">
+        <div class="mb-6">
+            <h2 class="text-2xl font-semibold text-gray-800">Företagsinformation</h2>
+            <p class="text-sm text-gray-500 mt-1">Logga, organisationsnummer och avtalstexter — grunden för att vitmärka/sälja vidare systemet till annat företag</p>
+        </div>
+
+        <form id="settingsForm" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="bg-white p-6 rounded-lg shadow-sm h-fit space-y-4">
+                <h3 class="text-lg font-medium text-gray-700 border-b pb-2">Logga</h3>
+                <div id="logoPreviewWrap" class="hidden">
+                    <img id="logoPreview" class="h-20 object-contain mb-2 border border-gray-100 rounded p-2">
+                </div>
+                <input type="file" id="sLogo" accept="image/*" class="block w-full text-sm text-gray-600">
+                <p class="text-xs text-gray-400">Används på offerter/köpeavtal (PDF) och inloggningssidan.</p>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-sm lg:col-span-2 space-y-4">
+                <h3 class="text-lg font-medium text-gray-700 border-b pb-2">Företagsuppgifter</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Företagsnamn</label>
+                        <input type="text" id="sCompanyName" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Organisationsnummer</label>
+                        <input type="text" id="sOrgNumber" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Telefon</label>
+                        <input type="text" id="sPhone" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">E-post</label>
+                        <input type="email" id="sEmail" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">Adress</label>
+                        <input type="text" id="sAddress" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-sm lg:col-span-3 space-y-2">
+                <h3 class="text-lg font-medium text-gray-700 border-b pb-2 mb-2">Köpeavtal / avtalstext</h3>
+                <p class="text-xs text-gray-400">Fri text som kan återanvändas i köpeavtal och offerter, t.ex. villkor, garantier och betalningsvillkor.</p>
+                <textarea id="sAgreementText" rows="10" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"></textarea>
+            </div>
+
+            <div class="lg:col-span-3">
+                <button type="submit" class="bg-blue-600 text-white px-6 py-2.5 rounded-md font-medium hover:bg-blue-700 shadow-sm">
+                    <i class="fas fa-save mr-2"></i> Spara företagsinformation
+                </button>
+            </div>
+        </form>
+    </main>
+
+    <script>
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                const s = await res.json();
+                document.getElementById('sCompanyName').value = s.company_name || '';
+                document.getElementById('sOrgNumber').value = s.org_number || '';
+                document.getElementById('sPhone').value = s.phone || '';
+                document.getElementById('sEmail').value = s.email || '';
+                document.getElementById('sAddress').value = s.address || '';
+                document.getElementById('sAgreementText').value = s.agreement_text || '';
+                if (s.logo_url) {
+                    document.getElementById('logoPreview').src = s.logo_url;
+                    document.getElementById('logoPreviewWrap').classList.remove('hidden');
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('company_name', document.getElementById('sCompanyName').value);
+            formData.append('org_number', document.getElementById('sOrgNumber').value);
+            formData.append('phone', document.getElementById('sPhone').value);
+            formData.append('email', document.getElementById('sEmail').value);
+            formData.append('address', document.getElementById('sAddress').value);
+            formData.append('agreement_text', document.getElementById('sAgreementText').value);
+
+            const logoFile = document.getElementById('sLogo').files[0];
+            if (logoFile) formData.append('logo', logoFile);
+
+            try {
+                const res = await fetch('/api/settings', { method: 'PUT', body: formData });
+                const data = await res.json();
+                alert(data.message);
+                loadSettings();
+            } catch (err) { alert('Kunde inte spara.'); }
+        });
+
+        loadSettings();
+    </script>
+    <script src="/menu.js"></script>
+</body>
+</html>

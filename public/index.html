@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logga in - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans flex items-center justify-center min-h-screen p-4">
+
+    <div class="bg-white p-6 md:p-8 rounded-lg shadow-lg w-full max-w-sm border border-gray-200">
+        <div class="text-center mb-6">
+     <img src="https://klaro2.klaralvskok.se/public/uploads/Klaralvskok-logga-1.jpg" alt="Klarälvskök Logotyp" class="h-16 mx-auto mb-3 object-contain" onerror="this.outerHTML='<h1 class=\\'text-3xl font-bold text-gray-800 tracking-tight\\'>Klarälvskök</h1>'">
+            <p class="text-xs md:text-sm text-gray-400 mt-1">Internt affärs- och offertverktyg</p>
+        </div>
+
+        <form id="loginForm" class="space-y-4">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 uppercase tracking-wider">E-postadress</label>
+                <div class="relative mt-1">
+                    <i class="fas fa-envelope absolute left-3 top-3 text-gray-400 text-sm"></i>
+                    <input type="email" id="email" required placeholder="namn@klaralvskok.se" class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-600 uppercase tracking-wider">Lösenord</label>
+                <div class="relative mt-1">
+                    <i class="fas fa-lock absolute left-3 top-3 text-gray-400 text-sm"></i>
+                    <input type="password" id="password" required placeholder="••••••••" class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div id="errorMessage" class="text-red-500 text-xs font-medium hidden bg-red-50 p-2 rounded border border-red-100"></div>
+
+            <button type="submit" class="w-full bg-blue-600 text-white font-medium py-2 rounded-md hover:bg-blue-700 transition text-sm shadow shadow-blue-200 flex items-center justify-center">
+                <i class="fas fa-sign-in-alt mr-2"></i> Logga in
+            </button>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('errorMessage');
+            
+            errorDiv.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    // Spara rollen i webbläsaren för att veta vad menyn ska visa
+                    localStorage.setItem('userRole', data.role);
+                    localStorage.setItem('userId', data.id);
+                    
+                    // Skicka administratörer och säljare till CRM-systemet direkt
+                    if (data.role === 'Montör') {
+                        alert("Välkommen! Montage-vyn är redo att öppnas.");
+                    } else {
+                        window.location.href = '/leads.html';
+                    }
+                } else {
+                    errorDiv.innerText = data.message || "Felaktiga inloggningsuppgifter.";
+                    errorDiv.classList.remove('hidden');
+                }
+            } catch (err) {
+                errorDiv.innerText = "Kunde inte ansluta till servern.";
+                errorDiv.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

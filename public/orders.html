@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aktiva Ordrar - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <div id="sidebar-container" class="shrink-0"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto p-4 md:p-6 lg:p-8 w-full max-w-full">
+        <div class="mb-6">
+            <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Ordrar (Arbetsordrar)</h2>
+            <p class="text-xs md:text-sm text-gray-500 mt-1">Låsta offerter och fildelning för projekt</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6" id="ordersGrid"></div>
+
+        <div id="orderModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-2 md:p-6">
+            <div class="bg-white rounded-lg shadow-2xl w-full max-w-5xl h-[95vh] flex flex-col relative">
+                
+                <header class="p-4 md:p-5 bg-gray-900 text-white flex justify-between items-center shrink-0 rounded-t-lg">
+                    <div>
+                        <h3 class="text-lg md:text-xl font-bold" id="omTitle">Order #...</h3>
+                        <p class="text-xs text-gray-400" id="omCustomer">Kund: ...</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="adminRevertBtn" class="hidden text-xs text-gray-400 hover:text-red-400 font-medium transition mr-3"><i class="fas fa-undo mr-1"></i> Ändra till offert</button>
+                        <button id="adminEditBtn" class="hidden text-xs bg-yellow-500 hover:bg-yellow-600 text-yellow-900 font-bold px-3 py-1.5 rounded"><i class="fas fa-lock-open mr-1"></i> Lås upp i Byggare (Admin)</button>
+                        <button onclick="closeOrderModal()" class="text-gray-300 hover:text-white px-2"><i class="fas fa-times text-2xl"></i></button>
+                    </div>
+                </header>
+
+                <div class="flex flex-col lg:flex-row flex-1 overflow-hidden">
+                    
+                    <div class="w-full lg:w-1/3 bg-gray-50 border-r border-gray-200 p-4 md:p-6 overflow-y-auto flex flex-col gap-4">
+                        <div class="bg-white p-4 rounded shadow-sm border border-gray-200 text-sm">
+                            <h4 class="font-bold text-gray-700 mb-2 border-b pb-1"><i class="fas fa-map-marker-alt text-blue-500 mr-2"></i>Plats & Kontakt</h4>
+                            <p class="mb-1" id="omAddress"></p>
+                            <p class="mb-1" id="omPhone"></p>
+                            <p id="omEmail"></p>
+                        </div>
+
+                        <div class="bg-white p-4 rounded shadow-sm border border-gray-200 text-sm">
+                            <h4 class="font-bold text-gray-700 mb-2 border-b pb-1"><i class="fas fa-hard-hat text-purple-600 mr-2"></i>Ansvarig Montör</h4>
+                            <div id="omInstallerContainer" class="mt-2"></div>
+                            
+                            <a id="btnOrderContractPdf" href="#" target="_blank" class="w-full mt-3 bg-gray-800 text-white font-medium py-2 rounded shadow text-xs hover:bg-gray-900 flex justify-center items-center transition">
+                                <i class="fas fa-file-signature mr-2 text-yellow-400"></i> Skriv ut Köpeavtal (PDF)
+                            </a>
+                        </div>
+                        
+                        <div class="bg-yellow-50 p-4 rounded shadow-sm border border-yellow-200 text-sm flex flex-col gap-2">
+                            <h4 class="font-bold text-yellow-800 border-b border-yellow-300 pb-1"><i class="fas fa-comment-dots mr-2"></i>Kommentarer</h4>
+                            <div>
+                                <label class="block text-[10px] text-gray-500 uppercase font-bold">Kundkommentar (Syns på PDF)</label>
+                                <textarea id="omPublicComment" rows="2" class="w-full mt-1 border border-gray-300 rounded px-2 py-1 text-xs"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-gray-500 uppercase font-bold">Intern kommentar</label>
+                                <textarea id="omInternalComment" rows="2" class="w-full mt-1 border border-yellow-300 bg-white rounded px-2 py-1 text-xs"></textarea>
+                            </div>
+                            <button onclick="saveOrderComments()" class="bg-yellow-600 text-white font-medium py-1.5 rounded text-xs hover:bg-yellow-700 transition">Spara kommentarer</button>
+                        </div>
+
+                        <div class="bg-blue-50 p-4 rounded shadow-sm border border-blue-100 text-sm">
+                            <h4 class="font-bold text-blue-800 mb-2 border-b border-blue-200 pb-1"><i class="fas fa-boxes mr-2"></i>Beställda Artiklar</h4>
+                            <ul id="omCartItems" class="space-y-1.5 text-blue-900"></ul>
+                        </div>
+
+                        <div class="bg-white p-4 rounded shadow-sm border border-gray-200 flex-1">
+                            <h4 class="font-bold text-gray-700 mb-2 border-b pb-1"><i class="fas fa-list-check text-green-500 mr-2"></i>Arbeten utöver standardmontage</h4>
+                            <ul id="omTasks" class="space-y-2 text-xs text-gray-600"></ul>
+                        </div>
+                    </div>
+
+                    <div class="w-full lg:w-2/3 bg-white p-4 md:p-6 flex flex-col h-full overflow-hidden">
+                        <div class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-4 text-center shrink-0 mb-6">
+                            <form id="uploadForm" class="flex flex-col sm:flex-row items-center gap-3 justify-center">
+                                <input type="hidden" id="uploadOrderId">
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1" id="uploadLabel">Välj filer (Bilder/PDF/Word)</label>
+                                    <input type="file" id="fileInput" class="text-xs text-gray-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-blue-600 file:text-white file:font-medium hover:file:bg-blue-700 cursor-pointer">
+                                </div>
+                                <button type="submit" class="bg-green-600 text-white px-4 py-1.5 rounded-md text-sm font-medium hover:bg-green-700 transition w-full sm:w-auto mt-4 sm:mt-0">Ladda upp</button>
+                            </form>
+                            <p id="uploadStatus" class="text-xs mt-2 hidden"></p>
+                        </div>
+
+                        <div class="flex-1 overflow-y-auto pr-2 space-y-6">
+                            <div>
+                                <h4 class="font-bold text-gray-800 mb-3"><i class="fas fa-images text-blue-500 mr-2"></i> Bilder från projektet</h4>
+                                <div id="imageGallery" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-gray-800 mb-3 border-t pt-4"><i class="fas fa-file-pdf text-red-500 mr-2"></i> Dokument (Avtal / Ritningar)</h4>
+                                <ul id="documentList" class="space-y-2"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/menu.js"></script>
+    <script>
+        const userRole = localStorage.getItem('userRole');
+        const userId = localStorage.getItem('userId');
+        let allOrders = [];
+        let installers = [];
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const fileInput = document.getElementById('fileInput');
+            const label = document.getElementById('uploadLabel');
+            if (userRole === 'Montör') {
+                fileInput.accept = ".jpg,.jpeg,.png,.heic,.gif";
+                label.innerText = "Ladda upp bilder (Endast bildfiler tillåtna)";
+            } else {
+                fileInput.accept = ".jpg,.jpeg,.png,.heic,.gif,.pdf,.doc,.docx";
+                label.innerText = "Ladda upp filer (Bilder, PDF, Word)";
+            }
+        });
+
+        async function fetchInstallers() {
+            try {
+                const res = await fetch('/api/installers');
+                installers = await res.json();
+            } catch (err) { console.error(err); }
+        }
+
+        async function fetchOrders() {
+            try {
+                const query = userRole === 'Montör' ? `?installer_id=${userId}` : '';
+                const res = await fetch('/api/orders' + query);
+                allOrders = await res.json();
+                renderOrdersGrid();
+            } catch (e) { console.error(e); }
+        }
+
+        function renderOrdersGrid() {
+            const grid = document.getElementById('ordersGrid');
+            grid.innerHTML = '';
+
+            if(allOrders.length === 0) {
+                grid.innerHTML = '<p class="text-gray-500 col-span-2">Inga aktiva ordrar hittades.</p>';
+                return;
+            }
+
+            allOrders.forEach(o => {
+                grid.innerHTML += `
+                    <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 hover:shadow-md transition cursor-pointer flex flex-col justify-between" onclick="openOrderModal(${o.id})">
+                        <div class="flex justify-between items-start mb-4 border-b border-gray-100 pb-3">
+                            <div>
+                                <span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">Aktiv Order</span>
+                                <h3 class="font-bold text-gray-800 text-lg mt-1">${o.quote_name}</h3>
+                                <p class="text-xs text-gray-400">Order ID: #${o.order_number || o.id}</p>
+                            </div>
+                            <i class="fas fa-chevron-right text-gray-300"></i>
+                        </div>
+                        <div class="text-sm text-gray-600 space-y-1">
+                            <p><i class="fas fa-user text-gray-400 w-5"></i> ${o.customer_name || 'Okänd kund'}</p>
+                            <p><i class="fas fa-map-marker-alt text-gray-400 w-5"></i> ${o.address || 'Adress saknas'}</p>
+                            <p><i class="fas fa-hard-hat text-gray-400 w-5"></i> <span class="font-medium text-gray-800">${o.installer_name || 'Ingen montör tilldelad'}</span></p>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        async function openOrderModal(id) {
+            const order = allOrders.find(o => o.id === id);
+            if (!order) return;
+
+            document.getElementById('omTitle').innerText = order.order_number ? `Order #${order.order_number}` : `Order #${order.id}`;
+            document.getElementById('omCustomer').innerText = `Kund: ${order.customer_name || 'Okänd'}`;
+            document.getElementById('omAddress').innerText = order.address || 'Adress saknas';
+            document.getElementById('omPhone').innerText = order.phone || 'Telefon saknas';
+            document.getElementById('omEmail').innerText = order.email || 'E-post saknas';
+            document.getElementById('uploadOrderId').value = order.id;
+            
+            // Ladda in kommentarerna
+            document.getElementById('omInternalComment').value = order.internal_comment || '';
+            document.getElementById('omPublicComment').value = order.public_comment || '';
+
+            document.getElementById('btnOrderContractPdf').href = `/api/quotes/${order.id}/pdf`;
+
+            const revertBtn = document.getElementById('adminRevertBtn');
+            const editBtn = document.getElementById('adminEditBtn');
+            
+            if (userRole !== 'Montör') {
+                revertBtn.classList.remove('hidden');
+                revertBtn.onclick = () => revertToQuote(order.id);
+            } else {
+                revertBtn.classList.add('hidden');
+            }
+
+            if (userRole === 'Admin') {
+                editBtn.classList.remove('hidden');
+                editBtn.onclick = () => window.location.href = `/quote-builder.html?id=${order.id}`;
+            } else {
+                editBtn.classList.add('hidden');
+            }
+
+            const installerContainer = document.getElementById('omInstallerContainer');
+            if (userRole === 'Montör') {
+                installerContainer.innerHTML = `<p class="font-semibold text-gray-800"><i class="fas fa-user mr-1 text-gray-400"></i> ${order.installer_name || 'Ej tilldelad'}</p>`;
+            } else {
+                let options = `<option value="">-- Ingen vald --</option>`;
+                installers.forEach(inst => {
+                    const isSelected = order.installer_id === inst.id ? 'selected' : '';
+                    options += `<option value="${inst.id}" ${isSelected}>${inst.name}</option>`;
+                });
+                installerContainer.innerHTML = `
+                    <select id="omInstallerSelect" onchange="changeOrderInstaller(${order.id}, this.value)" class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white font-medium text-gray-700 outline-none focus:border-blue-500">
+                        ${options}
+                    </select>
+                `;
+            }
+
+            const cartList = document.getElementById('omCartItems');
+            const tasksList = document.getElementById('omTasks');
+            cartList.innerHTML = ''; tasksList.innerHTML = '';
+
+            if (order.quote_data) {
+                try {
+                    const data = JSON.parse(order.quote_data);
+                    
+                    if (data.quoteCart && data.quoteCart.length > 0) {
+                        data.quoteCart.forEach(item => {
+                            cartList.innerHTML += `
+                                <li class="flex justify-between items-start border-b border-blue-100 pb-1.5">
+                                    <span class="font-medium text-xs leading-tight pr-2"><b>${item.qty}x</b> ${item.name}</span> 
+                                    <span class="text-blue-400 text-[9px] font-mono shrink-0">${item.sku}</span>
+                                </li>`;
+                        });
+                    } else {
+                        cartList.innerHTML = '<li class="italic text-blue-400 text-xs">Inga artiklar i denna order.</li>';
+                    }
+
+                    if(data.selectedConditions) {
+                        const labels = { demontering_luckor: 'Demontering luckbyte', demontering_helkok: 'Demontering helkök', bortforsling: 'Bortforsling', bortforsling_vit: 'Bortforsling vitvaror', inkoppling_vit: 'Inkoppling vitvaror', el: 'In/Urkoppling El', vvs: 'In/Urkoppling VVS' };
+                        for (const [key, val] of Object.entries(data.selectedConditions)) {
+                            if(val.responsibility === 'Klarälvskök') {
+                                tasksList.innerHTML += `<li class="flex items-center"><i class="fas fa-check-circle text-green-500 mr-2"></i> ${labels[key]} ${val.qty > 1 ? `(x${val.qty})` : ''}</li>`;
+                            }
+                        }
+                    }
+                    if(tasksList.innerHTML === '') tasksList.innerHTML = '<li class="italic text-gray-400">Inga särskilda monteringsvillkor.</li>';
+                } catch(e) {}
+            }
+
+            await loadOrderFiles(order.id);
+            document.getElementById('orderModal').classList.remove('hidden');
+        }
+
+        // Spara kommentarerna direkt från ordern
+        async function saveOrderComments() {
+            const orderId = document.getElementById('uploadOrderId').value;
+            const payload = {
+                internal_comment: document.getElementById('omInternalComment').value,
+                public_comment: document.getElementById('omPublicComment').value
+            };
+            try {
+                const res = await fetch(`/api/orders/${orderId}/comments`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    alert("Kommentarerna har sparats!");
+                    fetchOrders(); // Uppdatera listan i bakgrunden
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        async function revertToQuote(orderId) {
+            if (!confirm("Är du säker på att du vill ändra tillbaka denna order till en offert?")) return;
+            const order = allOrders.find(o => o.id === orderId);
+            const data = { status: 'Offert', installer_id: order ? order.installer_id : null };
+            try {
+                const res = await fetch(`/api/quotes/${orderId}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                if (res.ok) { closeOrderModal(); await fetchOrders(); }
+                else alert("Kunde inte återställa till offert.");
+            } catch (err) { console.error(err); }
+        }
+
+        async function changeOrderInstaller(orderId, newInstallerId) {
+            const data = { status: 'Order', installer_id: newInstallerId || null };
+            try {
+                const res = await fetch(`/api/quotes/${orderId}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                if (res.ok) await fetchOrders();
+            } catch (err) { console.error(err); }
+        }
+
+        function closeOrderModal() { document.getElementById('orderModal').classList.add('hidden'); }
+
+        async function loadOrderFiles(orderId) {
+            const imgGal = document.getElementById('imageGallery');
+            const docList = document.getElementById('documentList');
+            imgGal.innerHTML = ''; docList.innerHTML = '';
+            try {
+                const res = await fetch(`/api/orders/${orderId}/files`);
+                const files = await res.json();
+                let imgCount = 0, docCount = 0;
+                files.forEach(f => {
+                    if (f.file_type === 'image') {
+                        imgCount++;
+                        imgGal.innerHTML += `
+                            <div class="relative group block aspect-square bg-gray-100 rounded-md border border-gray-200 overflow-hidden hover:border-blue-500 transition">
+                                <a href="${f.file_url}" target="_blank" class="block w-full h-full">
+                                    <img src="${f.file_url}" class="w-full h-full object-cover">
+                                    <div class="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                                        <i class="fas fa-expand text-white text-xl"></i>
+                                    </div>
+                                </a>
+                                <button onclick="deleteFile(${f.id}, ${orderId})" class="absolute top-1 right-1 bg-red-600 text-white rounded-md w-7 h-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow hover:bg-red-700 z-10" title="Radera bild">
+                                    <i class="fas fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                        `;
+                    } else {
+                        docCount++;
+                        docList.innerHTML += `
+                            <li class="bg-gray-50 border border-gray-200 rounded p-2 flex items-center justify-between hover:bg-gray-100 transition">
+                                <div class="flex items-center truncate pr-2">
+                                    <i class="fas fa-file-alt text-red-500 text-lg w-6 text-center shrink-0"></i>
+                                    <span class="text-sm font-medium text-gray-700 truncate">${f.file_name}</span>
+                                </div>
+                                <div class="flex gap-2 shrink-0">
+                                    <a href="${f.file_url}" target="_blank" class="bg-white border border-gray-300 text-gray-600 px-3 py-1 rounded text-xs font-semibold hover:bg-gray-50">Ladda ner</a>
+                                    <button onclick="deleteFile(${f.id}, ${orderId})" class="bg-red-100 border border-red-200 text-red-600 px-2.5 py-1 rounded text-xs hover:bg-red-200 transition" title="Radera dokument"><i class="fas fa-trash"></i></button>
+                                </div>
+                            </li>
+                        `;
+                    }
+                });
+                if(imgCount === 0) imgGal.innerHTML = '<p class="text-xs text-gray-400 italic col-span-2">Inga bilder uppladdade.</p>';
+                if(docCount === 0) docList.innerHTML = '<p class="text-xs text-gray-400 italic">Inga dokument uppladdade.</p>';
+            } catch(e) {}
+        }
+
+        async function deleteFile(fileId, orderId) {
+            if(!confirm("Är du säker på att du vill radera filen? Den försvinner permanent.")) return;
+            try {
+                const res = await fetch(`/api/orders/files/${fileId}`, { method: 'DELETE' });
+                if(res.ok) {
+                    loadOrderFiles(orderId);
+                } else {
+                    alert("Kunde inte radera filen.");
+                }
+            } catch(e) { console.error("Fel vid radering:", e); }
+        }
+
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('fileInput');
+            const orderId = document.getElementById('uploadOrderId').value;
+            const statusMsg = document.getElementById('uploadStatus');
+
+            if (!fileInput.files[0]) return alert("Välj en fil först.");
+
+            const fileName = fileInput.files[0].name.toLowerCase();
+            if (userRole === 'Montör' && (fileName.endsWith('.pdf') || fileName.endsWith('.doc') || fileName.endsWith('.docx'))) {
+                return alert("Som montör kan du endast ladda upp bilder (JPG, PNG etc).");
+            }
+
+            statusMsg.classList.remove('hidden', 'text-red-500', 'text-green-500');
+            statusMsg.classList.add('text-blue-500');
+            statusMsg.innerText = "Laddar upp fil...";
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('user_id', userId);
+
+            try {
+                const res = await fetch(`/api/orders/${orderId}/files`, { method: 'POST', body: formData });
+                if (res.ok) {
+                    statusMsg.classList.replace('text-blue-500', 'text-green-500');
+                    statusMsg.innerText = "Uppladdning lyckades!";
+                    fileInput.value = '';
+                    loadOrderFiles(orderId);
+                } else {
+                    statusMsg.classList.replace('text-blue-500', 'text-red-500');
+                    statusMsg.innerText = (await res.json()).message;
+                }
+            } catch (err) {
+                statusMsg.classList.replace('text-blue-500', 'text-red-500');
+                statusMsg.innerText = "Nätverksfel vid uppladdning.";
+            }
+        });
+
+        fetchInstallers().then(() => fetchOrders());
+    </script>
+</body>
+</html>

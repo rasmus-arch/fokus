@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leads & Kunder - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <div id="sidebar-container" class="shrink-0"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto p-4 md:p-6 lg:p-8 w-full max-w-full relative">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+            <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Kundregister (CRM)</h2>
+            <button onclick="openCustomerModal()" class="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-md font-medium text-sm hover:bg-blue-700 transition shadow-sm">
+                + Lägg till kund
+            </button>
+        </div>
+
+        <div class="flex space-x-2 border-b border-gray-200 mb-6">
+            <button id="tabLeads" onclick="switchTab('leads')" class="py-2 px-4 border-b-2 border-blue-600 font-bold text-blue-600 outline-none transition">Nya Leads <span id="leadCountBadge" class="ml-1 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full hidden">0</span></button>
+            <button id="tabCustomers" onclick="switchTab('customers')" class="py-2 px-4 font-medium text-gray-500 hover:text-gray-700 outline-none transition border-b-2 border-transparent">Befintliga Kunder</button>
+        </div>
+
+        <div id="viewCustomers" class="hidden bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto w-full flex-col">
+            <table class="w-full text-left border-collapse min-w-[700px]">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200 text-xs text-gray-600 uppercase">
+                        <th class="p-3 md:p-4">Namn</th>
+                        <th class="p-3 md:p-4">Gatuadress</th>
+                        <th class="p-3 md:p-4">Kontaktuppgifter</th>
+                        <th class="p-3 md:p-4 text-right">Åtgärd</th>
+                    </tr>
+                </thead>
+                <tbody id="customerTableBody" class="text-sm"></tbody>
+            </table>
+            <div id="paginationControlsCustomers" class="p-3 md:p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center whitespace-nowrap"></div>
+        </div>
+
+        <div id="viewLeads" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto w-full flex-col">
+            <table class="w-full text-left border-collapse min-w-[700px]">
+                <thead>
+                    <tr class="bg-blue-50 border-b border-blue-100 text-xs text-blue-800 uppercase">
+                        <th class="p-3 md:p-4">Namn</th>
+                        <th class="p-3 md:p-4">E-post</th>
+                        <th class="p-3 md:p-4">Telefon</th>
+                        <th class="p-3 md:p-4">Kommun</th>
+                        <th class="p-3 md:p-4">Inkom datum</th>
+                        <th class="p-3 md:p-4 text-right">Åtgärd</th>
+                    </tr>
+                </thead>
+                <tbody id="leadsTableBody" class="text-sm"></tbody>
+            </table>
+            <div id="paginationControlsLeads" class="p-3 md:p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center whitespace-nowrap"></div>
+        </div>
+
+        <div id="customerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 overflow-y-auto">
+            <div class="bg-white p-5 md:p-6 rounded-lg shadow-xl w-full max-w-md my-auto">
+                <h3 class="text-lg font-bold mb-4 border-b pb-2 text-gray-700" id="modalTitle">Skapa ny kund</h3>
+                <form id="customerForm" class="space-y-3">
+                    <input type="hidden" id="cId">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div><label class="block text-xs font-medium text-gray-700">Namn *</label><input type="text" id="cName" required class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                        <div><label class="block text-xs font-medium text-gray-700">Personnummer</label><input type="text" id="cPersonnummer" placeholder="ÅÅMMDD-XXXX" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    </div>
+                    <div><label class="block text-xs font-medium text-gray-700">Gatuadress</label><input type="text" id="cAddress" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div><label class="block text-xs font-medium text-gray-700">Gatuadress rad 2</label><input type="text" id="cAddress2" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div><label class="block text-xs font-medium text-gray-700">Lgh-nummer</label><input type="text" id="cApartment" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                        <div><label class="block text-xs font-medium text-gray-700">BRF:s org.nr</label><input type="text" id="cBrfOrg" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    </div>
+                    <div><label class="block text-xs font-medium text-gray-700">Fastighetsbeteckning</label><input type="text" id="cProperty" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div><label class="block text-xs font-medium text-gray-700">Email *</label><input type="email" id="cEmail" required class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                        <div><label class="block text-xs font-medium text-gray-700">Telefonnummer</label><input type="text" id="cPhone" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    </div>
+                    <div class="flex justify-end gap-2 pt-4 mt-2 border-t border-gray-100">
+                        <button type="button" onclick="document.getElementById('customerModal').classList.add('hidden')" class="px-4 py-2 bg-gray-200 rounded text-sm font-medium hover:bg-gray-300">Avbryt</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700">Spara kund</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="customerCard" class="fixed right-0 top-0 bottom-0 w-full md:w-[400px] bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-40 flex flex-col border-l border-gray-200">
+            <div class="p-4 bg-gray-800 text-white flex justify-between items-center shrink-0">
+                <h3 id="cardName" class="text-lg font-semibold truncate pr-2">Kundnamn</h3>
+                <div class="space-x-2 shrink-0">
+                    <button onclick="editCurrentCustomer()" class="text-gray-300 hover:text-white text-sm"><i class="fas fa-edit"></i></button>
+                    <button onclick="closeCard()" class="text-gray-300 hover:text-white ml-2"><i class="fas fa-times text-xl"></i></button>
+                </div>
+            </div>
+            <div class="p-4 border-b border-gray-100 bg-gray-50 shrink-0 text-xs space-y-2 text-gray-700">
+                <p class="flex items-center"><i class="fas fa-envelope w-5 text-gray-400"></i> <span id="cardEmail" class="truncate"></span></p>
+                <p class="flex items-center"><i class="fas fa-phone w-5 text-gray-400"></i> <span id="cardPhone"></span></p>
+                <p class="flex items-center"><i class="fas fa-map-marker-alt w-5 text-gray-400"></i> <span id="cardAddress" class="truncate"></span></p>
+            </div>
+            <div class="p-4 flex-1 overflow-y-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h4 class="font-semibold text-gray-800">Kundens offerter</h4>
+                    <button onclick="promptCreateQuote()" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded font-medium hover:bg-green-700 shadow-sm">+ Skapa ny</button>
+                </div>
+                <div id="quoteList" class="space-y-3"></div>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="/menu.js"></script>
+    <script>
+        let currentCustomer = null;
+        let allCustomers = [];
+        let allLeads = [];
+        
+        let currentPageCust = 1;
+        let currentPageLeads = 1;
+        const rowsPerPage = 15;
+
+        // Togglar mellan flikarna
+        function switchTab(tab) {
+            const tabLeads = document.getElementById('tabLeads');
+            const tabCustomers = document.getElementById('tabCustomers');
+            const viewLeads = document.getElementById('viewLeads');
+            const viewCustomers = document.getElementById('viewCustomers');
+
+            if (tab === 'leads') {
+                tabLeads.className = "py-2 px-4 border-b-2 border-blue-600 font-bold text-blue-600 outline-none transition";
+                tabCustomers.className = "py-2 px-4 font-medium text-gray-500 hover:text-gray-700 outline-none transition border-b-2 border-transparent";
+                viewLeads.classList.remove('hidden');
+                viewLeads.classList.add('flex');
+                viewCustomers.classList.add('hidden');
+                viewCustomers.classList.remove('flex');
+                renderLeads();
+            } else {
+                tabCustomers.className = "py-2 px-4 border-b-2 border-blue-600 font-bold text-blue-600 outline-none transition";
+                tabLeads.className = "py-2 px-4 font-medium text-gray-500 hover:text-gray-700 outline-none transition border-b-2 border-transparent";
+                viewCustomers.classList.remove('hidden');
+                viewCustomers.classList.add('flex');
+                viewLeads.classList.add('hidden');
+                viewLeads.classList.remove('flex');
+                renderCustomers();
+            }
+        }
+
+        // ==========================================
+        // LEADS-LOGIK
+        // ==========================================
+        async function fetchLeads() {
+            try {
+                const res = await fetch('/api/leads');
+                allLeads = await res.json();
+                
+                const badge = document.getElementById('leadCountBadge');
+                if(allLeads.length > 0) {
+                    badge.innerText = allLeads.length;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+                
+                renderLeads();
+            } catch (err) { console.error(err); }
+        }
+
+        function renderLeads() {
+            const tbody = document.getElementById('leadsTableBody');
+            const pagination = document.getElementById('paginationControlsLeads');
+            tbody.innerHTML = '';
+            
+            if (!allLeads || allLeads.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">Du har inga nya leads. Bra jobbat!</td></tr>';
+                pagination.innerHTML = ''; return;
+            }
+
+            const totalPages = Math.ceil(allLeads.length / rowsPerPage);
+            if (currentPageLeads > totalPages) currentPageLeads = Math.max(1, totalPages);
+            if (currentPageLeads < 1) currentPageLeads = 1;
+
+            const start = (currentPageLeads - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+            const paginated = allLeads.slice(start, end);
+
+            paginated.forEach(l => {
+                const date = new Date(l.created_at).toLocaleDateString('sv-SE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                tbody.innerHTML += `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
+                        <td class="p-3 md:p-4 font-bold text-gray-800">${l.name || '-'}</td>
+                        <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm">
+                            <a href="mailto:${l.email}" class="text-blue-600 hover:underline">${l.email || '-'}</a>
+                        </td>
+                        <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm">${l.phone || '-'}</td>
+                        <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm">
+                            <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-medium border border-gray-200">${l.kommun || '-'}</span>
+                        </td>
+                        <td class="p-3 md:p-4 text-gray-400 text-xs">${date}</td>
+                        <td class="p-3 md:p-4 text-right whitespace-nowrap">
+                            <button onclick="convertToCustomer(${l.id})" class="bg-green-100 text-green-700 hover:bg-green-200 border border-green-200 px-3 py-1.5 rounded text-xs font-bold transition mr-2"><i class="fas fa-user-plus mr-1"></i> Gör till kund</button>
+                            <button onclick="deleteLead(${l.id})" class="text-red-400 hover:text-red-600 px-2"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            pagination.innerHTML = `
+                <span class="text-xs text-gray-500">Visar ${start + 1}-${Math.min(end, allLeads.length)} av ${allLeads.length}</span>
+                <div class="flex gap-2">
+                    <button type="button" onclick="changePageLeads(-1)" class="px-3 py-1 border rounded text-xs font-medium ${currentPageLeads === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}" ${currentPageLeads === 1 ? 'disabled' : ''}>Föregående</button>
+                    <button type="button" onclick="changePageLeads(1)" class="px-3 py-1 border rounded text-xs font-medium ${currentPageLeads >= totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}" ${currentPageLeads >= totalPages ? 'disabled' : ''}>Nästa</button>
+                </div>
+            `;
+        }
+
+        function changePageLeads(dir) { currentPageLeads += dir; renderLeads(); }
+
+        async function convertToCustomer(leadId) {
+            if(!confirm("Vill du konvertera denna lead till en riktig kund i registret?")) return;
+            try {
+                const res = await fetch(`/api/leads/${leadId}/convert`, { method: 'POST' });
+                if(res.ok) {
+                    await fetchLeads();
+                    await fetchCustomers();
+                    alert("Lead konverterad till kund!");
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function deleteLead(leadId) {
+            if(!confirm("Vill du ta bort denna lead?")) return;
+            try {
+                const res = await fetch(`/api/leads/${leadId}`, { method: 'DELETE' });
+                if(res.ok) fetchLeads();
+            } catch(e) { console.error(e); }
+        }
+
+        // ==========================================
+        // KUND-LOGIK (BEFINTLIG)
+        // ==========================================
+        async function fetchCustomers() {
+            try {
+                const res = await fetch('/api/customers');
+                allCustomers = await res.json();
+                renderCustomers();
+            } catch (err) { console.error(err); }
+        }
+
+        function renderCustomers() {
+            const tbody = document.getElementById('customerTableBody');
+            const pagination = document.getElementById('paginationControlsCustomers');
+            tbody.innerHTML = '';
+            
+            if (!allCustomers || allCustomers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500">Inga kunder registrerade än.</td></tr>';
+                pagination.innerHTML = ''; return;
+            }
+
+            const totalPages = Math.ceil(allCustomers.length / rowsPerPage);
+            if (currentPageCust > totalPages) currentPageCust = Math.max(1, totalPages);
+            if (currentPageCust < 1) currentPageCust = 1;
+
+            const start = (currentPageCust - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+            const paginated = allCustomers.slice(start, end);
+
+            paginated.forEach(c => {
+                const pnrStr = c.personnummer ? `<br><span class="text-xs text-gray-400 font-mono">${c.personnummer}</span>` : '';
+                tbody.innerHTML += `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onclick="openCard(${c.id})">
+                        <td class="p-3 md:p-4">
+                            <span class="font-medium text-blue-600 block">${c.name || '-'}</span>
+                            ${pnrStr}
+                        </td>
+                        <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm truncate max-w-[150px] md:max-w-xs">${c.address || ''} ${c.address2 ? ', ' + c.address2 : ''}</td>
+                        <td class="p-3 md:p-4 text-gray-500 text-[11px] md:text-xs truncate">${c.email || ''}<br><span class="text-gray-400">${c.phone || ''}</span></td>
+                        <td class="p-3 md:p-4 text-right"><i class="fas fa-chevron-right text-gray-400"></i></td>
+                    </tr>
+                `;
+            });
+
+            pagination.innerHTML = `
+                <span class="text-xs text-gray-500">Visar ${start + 1}-${Math.min(end, allCustomers.length)} av ${allCustomers.length}</span>
+                <div class="flex gap-2">
+                    <button type="button" onclick="changePageCust(-1)" class="px-3 py-1 border rounded text-xs font-medium ${currentPageCust === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}" ${currentPageCust === 1 ? 'disabled' : ''}>Föregående</button>
+                    <button type="button" onclick="changePageCust(1)" class="px-3 py-1 border rounded text-xs font-medium ${currentPageCust >= totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}" ${currentPageCust >= totalPages ? 'disabled' : ''}>Nästa</button>
+                </div>
+            `;
+        }
+
+        function changePageCust(dir) { currentPageCust += dir; renderCustomers(); }
+
+        function openCustomerModal(customer = null) {
+            document.getElementById('customerModal').classList.remove('hidden');
+            if (customer) {
+                document.getElementById('modalTitle').innerText = "Ändra kund";
+                document.getElementById('cId').value = customer.id;
+                document.getElementById('cName').value = customer.name;
+                document.getElementById('cPersonnummer').value = customer.personnummer || '';
+                document.getElementById('cAddress').value = customer.address || '';
+                document.getElementById('cAddress2').value = customer.address2 || '';
+                document.getElementById('cApartment').value = customer.apartment_number || '';
+                document.getElementById('cBrfOrg').value = customer.brf_org_nr || '';
+                document.getElementById('cProperty').value = customer.property_designation || '';
+                document.getElementById('cEmail').value = customer.email;
+                document.getElementById('cPhone').value = customer.phone || '';
+            } else {
+                document.getElementById('modalTitle').innerText = "Skapa ny kund";
+                document.getElementById('customerForm').reset();
+                document.getElementById('cId').value = '';
+            }
+        }
+
+        function editCurrentCustomer() { openCustomerModal(currentCustomer); }
+
+        document.getElementById('customerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('cId').value;
+            const data = {
+                name: document.getElementById('cName').value, 
+                personnummer: document.getElementById('cPersonnummer').value,
+                address: document.getElementById('cAddress').value,
+                address2: document.getElementById('cAddress2').value, 
+                apartment_number: document.getElementById('cApartment').value,
+                brf_org_nr: document.getElementById('cBrfOrg').value, 
+                property_designation: document.getElementById('cProperty').value,
+                email: document.getElementById('cEmail').value, 
+                phone: document.getElementById('cPhone').value
+            };
+            
+            const res = await fetch(id ? `/api/customers/${id}` : '/api/customers', {
+                method: id ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            
+            if(res.ok) {
+                document.getElementById('customerModal').classList.add('hidden');
+                await fetchCustomers();
+                if(id) { openCard(parseInt(id)); }
+            }
+        });
+
+        function openCard(id) {
+            const customer = allCustomers.find(c => c.id === id);
+            if (!customer) return;
+            currentCustomer = customer;
+            document.getElementById('cardName').innerText = customer.name;
+            document.getElementById('cardEmail').innerText = customer.email;
+            document.getElementById('cardPhone').innerText = customer.phone;
+            document.getElementById('cardAddress').innerText = (customer.address || '') + (customer.address2 ? ', ' + customer.address2 : '');
+            
+            document.getElementById('customerCard').classList.remove('translate-x-full');
+            fetchQuotesForCustomer(customer.id);
+        }
+
+        function closeCard() { document.getElementById('customerCard').classList.add('translate-x-full'); }
+
+        async function fetchQuotesForCustomer(id) {
+            const res = await fetch(`/api/customers/${id}/quotes`);
+            const quotes = await res.json();
+            const list = document.getElementById('quoteList');
+            list.innerHTML = quotes.length === 0 ? '<p class="text-sm text-gray-400 italic">Kunden har inga offerter än.</p>' : '';
+            quotes.forEach(q => {
+                list.innerHTML += `
+                    <div class="bg-white border border-gray-200 rounded p-3 text-sm shadow-sm mb-2">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-semibold text-gray-800 truncate pr-2">${q.quote_name}</span>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded uppercase shrink-0 ${q.status === 'Order' ? 'bg-green-100 text-green-800' : (q.status === 'Förlorad offert' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800')}">${q.status}</span>
+                        </div>
+                        <button onclick="window.location.href='/quote-builder.html?id=${q.id}'" class="w-full bg-blue-50 border border-blue-200 text-blue-700 py-1.5 rounded text-xs font-medium hover:bg-blue-100 transition">Öppna Offert</button>
+                    </div>
+                `;
+            });
+        }
+
+        async function promptCreateQuote() {
+            const quoteName = prompt("Namn på offerten:");
+            if(!quoteName) return;
+            const res = await fetch('/api/quotes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customer_id: currentCustomer.id, quote_name: quoteName })
+            });
+            const data = await res.json();
+            if(res.ok) window.location.href = `/quote-builder.html?id=${data.quoteId}`;
+        }
+
+        // Initiera båda listorna
+        switchTab('leads'); 
+        fetchLeads();
+        fetchCustomers();
+    </script>
+</body>
+</html>

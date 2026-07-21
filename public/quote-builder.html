@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offertbyggare - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .html-desc table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+        .html-desc th, .html-desc td { border: 1px solid #e5e7eb; padding: 6px; text-align: left; }
+        .html-desc ul { list-style-type: disc; padding-left: 20px; margin-top: 5px; }
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans flex flex-col md:flex-row h-screen overflow-hidden">
+
+    <div id="sidebar-container" class="shrink-0"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden w-full">
+        <header class="bg-white p-4 shadow-sm shrink-0 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 z-10 border-b">
+            <div>
+                <h2 class="text-lg md:text-xl font-semibold text-gray-800">Offertbyggare</h2>
+                <p class="text-xs md:text-sm text-gray-500"><span class="font-bold text-blue-600" id="headerQuoteName">Laddar...</span></p>
+            </div>
+            <div class="flex w-full sm:w-auto gap-2">
+                <a id="btnQuotePdf" href="#" target="_blank" class="hidden flex-1 sm:flex-none bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-md font-medium transition shadow-sm flex items-center justify-center text-sm">
+                    <i class="fas fa-file-pdf mr-2 text-red-400"></i> Skapa PDF
+                </a>
+                <button onclick="saveQuote()" class="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-md font-medium transition shadow-sm flex items-center justify-center text-sm">
+                    <i class="fas fa-save mr-2"></i> Spara Offert
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+            <div class="w-full lg:w-3/5 bg-gray-50 flex flex-col border-b lg:border-b-0 lg:border-r border-gray-200 h-[50vh] lg:h-full overflow-hidden">
+                <div class="p-3 md:p-4 bg-white border-b border-gray-200 shrink-0 space-y-2">
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
+                        <input type="text" id="searchInput" placeholder="Sök på produkt..." class="w-full pl-9 pr-4 py-1.5 border border-gray-300 rounded-md text-sm outline-none focus:border-blue-500">
+                    </div>
+                    <div class="flex gap-2">
+                        <select id="catFilter" class="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs md:text-sm bg-white focus:border-blue-500 outline-none">
+                            <option value="">Alla kategorier</option>
+                        </select>
+                        <select id="sortFilter" class="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs md:text-sm bg-white focus:border-blue-500 outline-none">
+                            <option value="name_asc">Namn (A-Ö)</option>
+                            <option value="name_desc">Namn (Ö-A)</option>
+                            <option value="price_asc">Pris (Lägst)</option>
+                            <option value="price_desc">Pris (Högst)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex-1 flex flex-col min-h-0 p-3 md:p-4">
+                    <div class="flex-1 overflow-y-auto min-h-0 mb-3 pr-2">
+                        <div id="productGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4 content-start"></div>
+                    </div>
+                    <div id="paginationControls" class="pt-3 border-t border-gray-200 flex justify-between items-center text-xs text-gray-500 shrink-0"></div>
+                </div>
+            </div>
+
+            <div class="w-full lg:w-2/5 flex flex-col bg-white h-[50vh] lg:h-full overflow-hidden">
+                <div class="p-3 bg-gray-800 text-white shrink-0 flex justify-between items-center shadow-md z-10">
+                    <h3 class="font-semibold text-sm md:text-base"><i class="fas fa-file-invoice-dollar mr-2"></i> Innehåll</h3>
+                    <div class="flex gap-1.5">
+                        <button onclick="openCountertopModal()" class="text-[11px] bg-blue-600 hover:bg-blue-500 px-2.5 py-1.5 rounded border border-blue-500 font-medium shadow-sm transition"><i class="fas fa-layer-group mr-1"></i> Bänkskiva</button>
+                        <button onclick="openManualFrontModal()" class="text-[11px] bg-gray-700 hover:bg-gray-600 px-2.5 py-1.5 rounded border border-gray-600 font-medium transition"><i class="fas fa-door-open mr-1"></i> Lucka/Front</button>
+                        <button onclick="document.getElementById('freeTextModal').classList.remove('hidden')" class="text-[11px] bg-gray-700 hover:bg-gray-600 px-2.5 py-1.5 rounded border border-gray-600 font-medium transition">+ Fritext</button>
+                    </div>
+                </div>
+                
+                <div class="flex-1 bg-gray-50 flex flex-col overflow-y-auto min-h-0">
+                    <div class="p-3 md:p-4 bg-white border-b border-gray-200 shrink-0">
+                        <h4 class="font-semibold text-gray-800 text-xs md:text-sm mb-2"><i class="fas fa-paint-roller text-blue-600 mr-2"></i> Specifikationer</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
+                            <div>
+                                <label class="block text-[10px] text-gray-400 uppercase">Material bänkskiva</label>
+                                <select id="qsMaterial" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded bg-white text-xs outline-none focus:border-blue-500">
+                                    <option value="">-- Välj --</option><option value="Laminat">Laminat</option><option value="Kvartskomposit">Kvartskomposit</option><option value="Cosmolite">Cosmolite</option><option value="Trä">Trä</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-[10px] text-gray-400 uppercase">Färg bänkskiva</label><input type="text" id="qsColor" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-blue-500"></div>
+                            <div><label class="block text-[10px] text-gray-400 uppercase">Modell lucka</label><input type="text" id="qsDoor" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-blue-500"></div>
+                            <div class="sm:col-span-3">
+                                <label class="block text-[10px] text-gray-400 uppercase">Dörrmodell (för automatisk lucka/lådfront-prissättning)</label>
+                                <select id="qsDoorModelId" onchange="onDoorModelChange()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded bg-white text-xs outline-none focus:border-blue-500">
+                                    <option value="">-- Ingen vald --</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 md:p-4 space-y-3 shrink-0" id="quoteItemsList"></div>
+
+                    <div class="bg-white border-t border-gray-200 shrink-0">
+                        <div class="p-3 md:p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition" onclick="toggleConditions()">
+                            <h4 class="font-semibold text-gray-800 text-xs md:text-sm"><i class="fas fa-clipboard-check text-blue-600 mr-2"></i> Monteringsvillkor & Avgifter</h4>
+                            <i id="condIcon" class="fas fa-chevron-up text-gray-400"></i>
+                        </div>
+                        <div id="condWrapper" class="px-3 md:px-4 pb-3 md:pb-4">
+                            <div class="overflow-x-auto w-full mb-4">
+                                <table class="w-full text-xs text-left min-w-[380px]">
+                                    <thead><tr class="text-gray-500 border-b border-gray-200"><th class="pb-2 font-medium w-5/12">Moment</th><th class="pb-2 font-medium text-center w-2/12">Antal</th><th class="pb-2 font-medium text-center w-2/12">K-Kök</th><th class="pb-2 font-medium text-center w-2/12">Kund</th><th class="pb-2 font-medium text-right w-2/12">Pris</th></tr></thead>
+                                    <tbody id="conditionsBody" class="text-gray-700"></tbody>
+                                </table>
+                            </div>
+                            <div class="space-y-3 pt-3 border-t border-gray-100">
+                                <div class="bg-gray-50 p-2.5 md:p-3 rounded border border-gray-200 text-xs md:text-sm space-y-2">
+                                    <label class="font-semibold text-gray-800 block border-b border-gray-200 pb-1">Startavgift (kr)</label>
+                                    <div class="grid grid-cols-2 gap-2 md:gap-3 pt-1">
+                                        <div><label class="block text-[10px] text-gray-400 uppercase">Material</label><input type="number" id="startFeeProduct" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-gray-800"></div>
+                                        <div><label class="block text-[10px] text-gray-400 uppercase">Montage (Ej ROT)</label><input type="number" id="startFeeNonRot" value="1800" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-gray-800"></div>
+                                        <div><label class="block text-[10px] text-blue-500 uppercase">ROT (K-kök)</label><input type="number" id="startFeeRotComp" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-blue-200 bg-blue-50 rounded text-blue-800"></div>
+                                        <div><label class="block text-[10px] text-purple-500 uppercase">ROT (Montör)</label><input type="number" id="startFeeRotInst" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-purple-200 bg-purple-50 rounded text-purple-800"></div>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50 p-2.5 md:p-3 rounded border border-gray-200 text-xs md:text-sm gap-2">
+                                    <label class="font-semibold text-gray-800 sm:w-1/3">Ytbehandling</label>
+                                    <div class="flex flex-1 items-center gap-1.5 justify-end w-full">
+                                        <select id="colorSelect" onchange="toggleCustomColor(); renderCart()" class="w-full sm:w-auto px-2 py-1 border border-gray-300 rounded bg-white">
+                                            <option value="">-- Välj --</option><option value="Valfri NCS-kod">Valfri NCS-kod</option>
+                                            <optgroup label="Målade kulörer"><option value="Höststorm S7000-N">Höststorm S7000-N</option><option value="Dis S2500-N">Dis S2500-N</option><option value="Strand S1505-Y20R">Strand S1505-Y20R</option><option value="Vassgrå S2703-Y19R">Vassgrå S2703-Y19R</option><option value="Sjösten S4806-Y38R">Sjösten S4806-Y38R</option><option value="Vårgrön S2020-G50Y">Vårgrön S2020-G50Y</option><option value="Snö S0500">Snö S0500</option><option value="Kalk S0502-Y">Kalk S0502-Y</option><option value="Skogsgrön S5005-G20Y">Skogsgrön S5005-G20Y</option><option value="Ängsgrön S2005-G20Y">Ängsgrön S2005-G20Y</option><option value="Duggregn S4802-B15G">Duggregn S4802-B15G</option></optgroup>
+                                            <optgroup label="Bets"><option value="Bets 005">Bets 005</option><option value="Bets 010">Bets 010</option><option value="Bets 015">Bets 015</option><option value="Bets 020">Bets 020</option><option value="Bets 040">Bets 040</option><option value="Bets 061">Bets 061</option><option value="Bets 063">Bets 063</option><option value="Bets 2% vit">Bets 2% vit</option><option value="Bets Pärlgrå">Bets Pärlgrå</option><option value="Bets Elegant Grey">Bets Elegant Grey</option></optgroup>
+                                        </select>
+                                        <input type="text" id="colorCustom" placeholder="Kod" class="hidden w-16 px-2 py-1 border border-gray-300 rounded text-xs">
+                                        <input type="number" id="feeColor" min="0" value="0" onchange="renderCart()" class="w-16 px-2 py-1 border border-gray-300 rounded text-right">
+                                        <span class="text-gray-400">kr</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 md:p-4 bg-white border-t border-gray-200 shrink-0">
+                        <h4 class="font-semibold text-gray-800 text-xs md:text-sm mb-2"><i class="fas fa-comment-dots text-blue-600 mr-2"></i> Kommentarer</h4>
+                        <div class="space-y-3">
+                            <div><label class="block text-[10px] text-gray-500 uppercase font-bold mb-1">Kundkommentar (Syns på PDF)</label><textarea id="publicComment" rows="2" class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs outline-none focus:border-blue-500"></textarea></div>
+                            <div><label class="block text-[10px] text-gray-500 uppercase font-bold mb-1">Intern kommentar</label><textarea id="internalComment" rows="2" class="w-full px-2 py-1.5 border border-yellow-300 bg-yellow-50 rounded text-xs outline-none focus:border-yellow-500"></textarea></div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="p-3 md:p-4 bg-white border-t border-gray-200 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] text-xs md:text-sm z-10">
+                    <div class="bg-gray-50 p-2.5 rounded border border-gray-200 mb-2 flex items-center justify-between shadow-sm">
+                        <span class="font-medium text-gray-700">Totalrabatt på material</span>
+                        <div class="flex items-center gap-1">
+                            <input type="number" id="globalDiscount" value="0" min="0" onchange="renderCart()" class="w-16 px-2 py-1 border border-gray-300 rounded text-right font-bold text-red-600">
+                            <select id="globalDiscountType" onchange="renderCart()" class="border border-gray-300 rounded px-1.5 py-1 bg-white">
+                                <option value="%">%</option><option value="kr">kr</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 p-2.5 rounded border border-gray-200 mb-3 shadow-sm flex items-center">
+                        <label class="flex items-center gap-2 font-medium text-gray-700 cursor-pointer w-full select-none">
+                            <input type="checkbox" id="useRotCheckbox" checked onchange="renderCart()" class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            Ansök om ROT-avdrag (30% på arbetskostnad)
+                        </label>
+                    </div>
+
+                    <div class="bg-blue-50 border border-blue-100 p-2 rounded text-[11px] mb-3">
+                        <div class="flex justify-between text-blue-700"><span>Klarälvsköks del:</span><span id="sumCompanyCut" class="font-bold">0.00 kr</span></div>
+                        <div class="flex justify-between text-blue-700 mt-0.5"><span>Montörens del:</span><span id="sumInstallerCut" class="font-bold">0.00 kr</span></div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <div class="flex justify-between text-gray-500"><span>Material (exkl. moms)</span><span id="sumMaterialEx">0.00 kr</span></div>
+                        <div class="flex justify-between text-gray-500"><span>Tjänster, ej ROT (inkl. moms)</span><span id="sumNonRotServices">0.00 kr</span></div>
+                        <div class="flex justify-between text-gray-500 border-t pt-1"><span>Arbete, ROT (inkl. moms)</span><span id="sumInstall">0.00 kr</span></div>
+                        <div class="flex justify-between text-gray-500"><span>Total Moms (25%)</span><span id="sumVat">0.00 kr</span></div>
+                        <div class="flex justify-between font-medium text-green-600 border-b pb-1.5"><span>ROT-avdrag (-30%)</span><span id="sumRot">- 0.00 kr</span></div>
+                        <div class="flex justify-between text-base font-bold text-gray-900 pt-1"><span>Att betala</span><span id="sumTotal">0.00 kr</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="countertopModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-2 md:p-4 overflow-y-auto">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-6xl flex flex-col my-auto relative border border-gray-300 max-h-[95vh]">
+            <header class="p-4 bg-gray-900 text-white flex justify-between items-center rounded-t-lg shrink-0">
+                <h3 class="font-bold text-lg"><i class="fas fa-layer-group text-blue-400 mr-2"></i> Kalkylator: Bänkskiva & Ritning</h3>
+                <button onclick="document.getElementById('countertopModal').classList.add('hidden')" class="text-gray-300 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+            </header>
+
+            <div class="flex flex-col md:flex-row h-full overflow-hidden">
+                <div class="w-full md:w-2/3 p-4 md:p-6 overflow-y-auto space-y-6 bg-white">
+                    
+                    <div>
+                        <h4 class="text-sm font-bold text-blue-800 mb-3 border-b border-blue-100 pb-1">1. Välj Material, Färg & Tjocklek</h4>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">Material</label>
+                                <select id="ctMaterial" onchange="ctUpdateColors()" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 outline-none">
+                                    <option value="">Välj...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">Färg / Dekor</label>
+                                <select id="ctColor" onchange="ctUpdateThicknesses()" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 outline-none disabled:bg-gray-100" disabled>
+                                    <option value="">Välj material</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">Tjocklek (mm)</label>
+                                <select id="ctThickness" onchange="ctUpdateEdges()" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 outline-none disabled:bg-gray-100" disabled>
+                                    <option value="">Välj färg</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between items-end mb-3 border-b border-blue-100 pb-1">
+                            <h4 class="text-sm font-bold text-blue-800">2. Form & Mått (Ange RYGGMÅTT i millimeter)</h4>
+                            <div class="flex items-center gap-2">
+                                <label class="text-xs font-semibold text-gray-600">Form / Antal delar:</label>
+                                <select id="ctShape" onchange="ctUpdateShape()" class="border border-gray-300 rounded px-2 py-1 text-xs bg-white focus:border-blue-500 outline-none disabled:bg-gray-100" disabled>
+                                    <option value="1">Rak skiva (1 del)</option>
+                                    <option value="2">L-Kök (2 delar)</option>
+                                    <option value="3">U-Kök (3 delar)</option>
+                                    <option value="4">Stort / Ö (4 delar)</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <p id="ctDepthWarning" class="text-xs text-red-500 mb-2 font-medium hidden bg-red-50 p-2 rounded border border-red-200"><i class="fas fa-exclamation-triangle mr-1"></i> En av skivorna har ett djup som saknar pris i listan!</p>
+
+                        <div id="ctPartsContainer" class="space-y-3">
+                            <div id="ctPart_1" class="bg-gray-50 border border-gray-200 rounded p-3 opacity-50 pointer-events-none">
+                                <h5 class="font-bold text-gray-700 text-xs mb-2">Del 1 (Bas / Horisontell)</h5>
+                                <div class="grid grid-cols-2 gap-3 mb-2">
+                                    <div><label class="block text-[10px] text-gray-500 uppercase font-bold">Längd Ryggmått (mm)</label><input type="number" id="ctLength_1" min="0" oninput="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"></div>
+                                    <div><label class="block text-[10px] text-gray-500 uppercase font-bold">Djup (mm)</label><input type="number" id="ctDepth_1" min="0" oninput="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"></div>
+                                </div>
+                                <div id="ctEdgeSection_1" class="hidden pt-2 border-t border-gray-200 mt-2">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label class="block text-[10px] text-blue-600 uppercase font-bold">Kantpolering (Visas i blått på skiss)</label>
+                                        <select id="ctEdgeProfile_1" onchange="ctCalculate()" class="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white w-1/2"></select>
+                                    </div>
+                                    <div class="grid grid-cols-4 gap-2 mt-1">
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeFront_1" onchange="ctCalculate()" class="rounded text-blue-600"> Fram (Ner)</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeBack_1" onchange="ctCalculate()" class="rounded text-blue-600"> Bak (Upp)</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeLeft_1" onchange="ctCalculate()" class="rounded text-blue-600"> Vänster</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeRight_1" onchange="ctCalculate()" class="rounded text-blue-600"> Höger</label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div id="ctPart_2" class="bg-gray-50 border border-gray-200 rounded p-3 hidden opacity-50 pointer-events-none">
+                                <h5 class="font-bold text-gray-700 text-xs mb-2">Del 2 (Höger vinge / Vertikal)</h5>
+                                <div class="grid grid-cols-2 gap-3 mb-2">
+                                    <div><label class="block text-[10px] text-gray-500 uppercase font-bold">Längd Ryggmått (mm)</label><input type="number" id="ctLength_2" min="0" oninput="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"></div>
+                                    <div><label class="block text-[10px] text-gray-500 uppercase font-bold">Djup (mm)</label><input type="number" id="ctDepth_2" min="0" oninput="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"></div>
+                                </div>
+                                
+                                <div class="mt-2 pt-2 border-t border-gray-200">
+                                    <label class="block text-[10px] text-gray-500 uppercase font-bold mb-1">Skarvtyp (Hur skivorna möts i hörnet)</label>
+                                    <select id="ctJoint_2" onchange="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-xs bg-white outline-none focus:border-blue-500">
+                                        <option value="horizontal">Standard: Del 1 går hela vägen in i hörnet</option>
+                                        <option value="vertical">Alternativ: Del 2 går hela vägen in i hörnet</option>
+                                    </select>
+                                </div>
+
+                                <div id="ctEdgeSection_2" class="hidden pt-2 border-t border-gray-200 mt-2">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label class="block text-[10px] text-blue-600 uppercase font-bold">Kantpolering</label>
+                                        <select id="ctEdgeProfile_2" onchange="ctCalculate()" class="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white w-1/2"></select>
+                                    </div>
+                                    <div class="grid grid-cols-4 gap-2 mt-1">
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeFront_2" onchange="ctCalculate()" class="rounded text-blue-600"> Botten</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeBack_2" onchange="ctCalculate()" class="rounded text-blue-600"> Topp</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeLeft_2" onchange="ctCalculate()" class="rounded text-blue-600"> Vänster (Inne)</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeRight_2" onchange="ctCalculate()" class="rounded text-blue-600"> Höger (Ute)</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="ctPart_3" class="bg-gray-50 border border-gray-200 rounded p-3 hidden opacity-50 pointer-events-none">
+                                <h5 class="font-bold text-gray-700 text-xs mb-2">Del 3 (Vänster vinge / Vertikal)</h5>
+                                <div class="grid grid-cols-2 gap-3 mb-2">
+                                    <div><label class="block text-[10px] text-gray-500 uppercase font-bold">Längd Ryggmått (mm)</label><input type="number" id="ctLength_3" min="0" oninput="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"></div>
+                                    <div><label class="block text-[10px] text-gray-500 uppercase font-bold">Djup (mm)</label><input type="number" id="ctDepth_3" min="0" oninput="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"></div>
+                                </div>
+
+                                <div class="mt-2 pt-2 border-t border-gray-200">
+                                    <label class="block text-[10px] text-gray-500 uppercase font-bold mb-1">Skarvtyp (Hur skivorna möts i hörnet)</label>
+                                    <select id="ctJoint_3" onchange="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-xs bg-white outline-none focus:border-blue-500">
+                                        <option value="horizontal">Standard: Del 1 går hela vägen in i hörnet</option>
+                                        <option value="vertical">Alternativ: Del 3 går hela vägen in i hörnet</option>
+                                    </select>
+                                </div>
+
+                                <div id="ctEdgeSection_3" class="hidden pt-2 border-t border-gray-200 mt-2">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label class="block text-[10px] text-blue-600 uppercase font-bold">Kantpolering</label>
+                                        <select id="ctEdgeProfile_3" onchange="ctCalculate()" class="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white w-1/2"></select>
+                                    </div>
+                                    <div class="grid grid-cols-4 gap-2 mt-1">
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeFront_3" onchange="ctCalculate()" class="rounded text-blue-600"> Botten</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeBack_3" onchange="ctCalculate()" class="rounded text-blue-600"> Topp</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeLeft_3" onchange="ctCalculate()" class="rounded text-blue-600"> Vänster (Ute)</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeRight_3" onchange="ctCalculate()" class="rounded text-blue-600"> Höger (Inne)</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="ctPart_4" class="bg-gray-50 border border-gray-200 rounded p-3 hidden opacity-50 pointer-events-none">
+                                <h5 class="font-bold text-gray-700 text-xs mb-2">Del 4 (Fristående Köksö)</h5>
+                                <div class="grid grid-cols-2 gap-3 mb-2">
+                                    <div><label class="block text-[10px] text-gray-500 uppercase font-bold">Längd (mm)</label><input type="number" id="ctLength_4" min="0" oninput="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"></div>
+                                    <div><label class="block text-[10px] text-gray-500 uppercase font-bold">Djup (mm)</label><input type="number" id="ctDepth_4" min="0" oninput="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"></div>
+                                </div>
+                                <div id="ctEdgeSection_4" class="hidden pt-2 border-t border-gray-200 mt-2">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label class="block text-[10px] text-blue-600 uppercase font-bold">Kantpolering</label>
+                                        <select id="ctEdgeProfile_4" onchange="ctCalculate()" class="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white w-1/2"></select>
+                                    </div>
+                                    <div class="grid grid-cols-4 gap-2 mt-1">
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeFront_4" onchange="ctCalculate()" class="rounded text-blue-600"> Fram</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeBack_4" onchange="ctCalculate()" class="rounded text-blue-600"> Bak</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeLeft_4" onchange="ctCalculate()" class="rounded text-blue-600"> Vänster</label>
+                                        <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer"><input type="checkbox" id="ctEdgeRight_4" onchange="ctCalculate()" class="rounded text-blue-600"> Höger</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="text-sm font-bold text-blue-800 mb-3 border-b border-blue-100 pb-1">3. Urtag för Diskho & Spishäll (Mått till Centrum)</h4>
+                        <div class="space-y-4 bg-gray-50 p-4 border border-gray-200 rounded">
+                            
+                            <div class="border-b border-gray-200 pb-4">
+                                <label class="flex items-center gap-2 font-bold text-gray-800 text-sm mb-3 cursor-pointer select-none">
+                                    <input type="checkbox" id="ctHoActive" onchange="document.getElementById('ctHoWrapper').classList.toggle('hidden'); ctCalculate();" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500">
+                                    Inkludera urtag för Diskho / Vask
+                                </label>
+                                <div id="ctHoWrapper" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3 border border-gray-200 rounded shadow-sm">
+                                    <div><label class="block text-[10px] uppercase font-bold text-gray-500 mb-1">Placering</label><select id="ctHoPart" onchange="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-xs bg-white outline-none"><option value="1">Del 1</option><option value="2">Del 2</option><option value="3">Del 3</option><option value="4">Del 4</option></select></div>
+                                    <div><label class="block text-[10px] uppercase font-bold text-blue-600 mb-1">X (Till Centrum från Vänster)</label><input type="number" id="ctHoX" value="400" min="0" oninput="ctCalculate()" class="w-full border border-blue-200 bg-blue-50 rounded px-2 py-1 text-sm font-bold text-blue-800"></div>
+                                    <div><label class="block text-[10px] uppercase font-bold text-blue-600 mb-1">Y (Till Centrum från Bakkant)</label><input type="number" id="ctHoY" value="300" min="0" oninput="ctCalculate()" class="w-full border border-blue-200 bg-blue-50 rounded px-2 py-1 text-sm font-bold text-blue-800"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="flex items-center gap-2 font-bold text-gray-800 text-sm mb-3 cursor-pointer select-none">
+                                    <input type="checkbox" id="ctHallActive" onchange="document.getElementById('ctHallWrapper').classList.toggle('hidden'); ctCalculate();" class="w-4 h-4 rounded text-red-600 focus:ring-red-500">
+                                    Inkludera urtag för Spishäll
+                                </label>
+                                <div id="ctHallWrapper" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3 border border-gray-200 rounded shadow-sm">
+                                    <div><label class="block text-[10px] uppercase font-bold text-gray-500 mb-1">Placering</label><select id="ctHallPart" onchange="ctCalculate()" class="w-full border border-gray-300 rounded px-2 py-1 text-xs bg-white outline-none"><option value="1">Del 1</option><option value="2">Del 2</option><option value="3">Del 3</option><option value="4">Del 4</option></select></div>
+                                    <div><label class="block text-[10px] uppercase font-bold text-red-600 mb-1">X (Till Centrum från Vänster)</label><input type="number" id="ctHallX" value="1200" min="0" oninput="ctCalculate()" class="w-full border border-red-200 bg-red-50 rounded px-2 py-1 text-sm font-bold text-red-800"></div>
+                                    <div><label class="block text-[10px] uppercase font-bold text-red-600 mb-1">Y (Till Centrum från Bakkant)</label><input type="number" id="ctHallY" value="300" min="0" oninput="ctCalculate()" class="w-full border border-red-200 bg-red-50 rounded px-2 py-1 text-sm font-bold text-red-800"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="text-sm font-bold text-blue-800 mb-3 border-b border-blue-100 pb-1">4. Fabrikstjänster (Håltagning mm)</h4>
+                        <div id="ctServicesList" class="space-y-2 opacity-50 pointer-events-none">
+                            <p class="text-xs text-gray-400 italic">Välj ett material för att se tillgängliga tjänster.</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="w-full md:w-1/3 bg-gray-50 border-t md:border-t-0 md:border-l border-gray-200 flex flex-col shrink-0">
+                    
+                    <div class="p-4 bg-white border-b border-gray-200 shrink-0">
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="font-bold text-xs text-blue-600 uppercase tracking-wide"><i class="fas fa-drafting-compass mr-1"></i> Skalenlig Live-skiss</h4>
+                            <span class="text-[10px] text-gray-400 italic">Klicka för att förstora</span>
+                        </div>
+                        <div id="ctSvgContainer" onclick="openEnlargedSvg()" class="w-full h-48 bg-gray-100 border border-gray-200 rounded flex items-center justify-center p-1 overflow-hidden shadow-inner relative group cursor-pointer">
+                            <p class="text-xs text-gray-400 italic">Fyll i mått för att generera ritning</p>
+                        </div>
+                    </div>
+
+                    <div class="p-5 flex-1 space-y-4 overflow-y-auto">
+                        <h4 class="font-bold text-gray-800 border-b border-gray-300 pb-2">Sammanställning</h4>
+                        
+                        <div class="space-y-2 text-sm text-gray-600">
+                            <div class="flex justify-between"><span id="summaryMatName">Material (0 lpm)</span><span id="summaryMatPrice" class="font-medium text-gray-800">0 kr</span></div>
+                            <div class="flex justify-between"><span id="summaryEdgeName">Kantprofil (0 m)</span><span id="summaryEdgePrice" class="font-medium text-gray-800">0 kr</span></div>
+                            <div class="flex justify-between"><span id="summaryServicesName">Tjänster (0 st)</span><span id="summaryServicesPrice" class="font-medium text-gray-800">0 kr</span></div>
+                            <div class="flex justify-between border-b border-gray-200 pb-2"><span id="summaryInstallName">Montage (0 lpm)</span><span id="summaryInstallPrice" class="font-medium text-purple-700">0 kr</span></div>
+                            <div class="flex justify-between text-lg font-bold text-blue-800 pt-1">
+                                <span>Totalt (ink moms):</span><span id="summaryTotal">0 kr</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-5 border-t border-gray-200 bg-white shrink-0">
+                        <button id="ctAddBtn" onclick="addCountertopToQuote()" class="w-full bg-green-600 text-white font-bold py-3 rounded-md shadow hover:bg-green-700 transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                            <i class="fas fa-plus-circle mr-2"></i> Lägg till i Offert
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="enlargeSvgModal" class="hidden fixed inset-0 bg-black bg-opacity-80 z-[70] flex flex-col items-center justify-center p-4 md:p-10">
+        <button onclick="closeEnlargedSvg()" class="absolute top-4 right-4 text-white hover:text-gray-300 z-10 transition transform hover:scale-110"><i class="fas fa-times text-4xl"></i></button>
+        <div id="enlargedSvgWrapper" class="bg-gray-100 rounded-lg p-6 w-full h-full max-w-6xl max-h-[90vh] flex items-center justify-center relative overflow-hidden shadow-2xl">
+        </div>
+    </div>
+
+    <div id="productModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-2 md:p-4">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[95vh] flex flex-col overflow-hidden relative">
+            <button onclick="closeProductModal()" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 z-10 bg-white bg-opacity-80 rounded-full w-8 h-8 flex items-center justify-center shadow"><i class="fas fa-times text-xl"></i></button>
+            <div class="flex flex-col md:flex-row overflow-y-auto md:overflow-hidden h-full">
+                <div class="w-full md:w-1/2 bg-gray-50 flex flex-col p-3 border-b md:border-b-0 md:border-r border-gray-200">
+                    <img id="modalMainImage" src="" class="w-full h-48 md:h-64 object-contain bg-white rounded border border-gray-100">
+                    <div id="modalThumbnails" class="flex gap-2 overflow-x-auto py-2"></div>
+                </div>
+                <div class="w-full md:w-1/2 flex flex-col justify-between">
+                    <div class="p-4 md:p-6 overflow-y-auto">
+                        <span id="modalSku" class="text-[10px] font-mono text-gray-400 block"></span>
+                        <h2 id="modalTitle" class="text-xl font-bold text-gray-800 mb-2"></h2>
+                        <div id="modalDesc" class="text-xs md:text-sm text-gray-600 html-desc mb-4"></div>
+
+                        <div id="modalVariations" class="hidden space-y-3 border-t border-gray-200 pt-4">
+                            <h4 class="text-xs font-bold text-gray-800 mb-1">Välj alternativ:</h4>
+                            <div class="flex gap-3">
+                                <div id="modalVar1Container" class="hidden flex-1">
+                                    <label id="modalVar1Label" class="block text-[10px] text-gray-500 uppercase font-bold mb-1"></label>
+                                    <select id="modalVar1Select" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 bg-white"></select>
+                                </div>
+                                <div id="modalVar2Container" class="hidden flex-1">
+                                    <label id="modalVar2Label" class="block text-[10px] text-gray-500 uppercase font-bold mb-1"></label>
+                                    <select id="modalVar2Select" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 bg-white"></select>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                    <div class="p-4 bg-gray-50 border-t border-gray-100 shrink-0">
+                        <div class="flex justify-between items-end text-xs md:text-sm mb-3">
+                            <div><p class="text-gray-400">Material:</p><p id="modalPrice" class="text-base font-bold text-gray-900"></p></div>
+                            <div class="text-right"><p class="text-gray-400">Montage:</p><p id="modalInstall" class="text-base font-semibold text-purple-700"></p></div>
+                        </div>
+                        <button id="modalAddBtn" onclick="addProductToQuote()" class="w-full bg-blue-600 text-white font-medium py-2.5 rounded hover:bg-blue-700 transition text-sm shadow">Lägg till i Offert</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="freeTextModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+        <div class="bg-white p-5 rounded-lg shadow-xl w-full max-w-md relative">
+            <h3 class="font-bold text-gray-800 mb-3 border-b pb-2">Lägg till Fritext-rad</h3>
+            <div class="space-y-3 text-sm">
+                <div><label class="block text-xs font-semibold text-gray-600">Beskrivning</label><input type="text" id="ftName" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
+                <div><label class="block text-xs font-semibold text-gray-600">Pris Material (ink moms)</label><input type="number" id="ftPrice" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label class="block text-xs font-semibold text-gray-600">Pris Montage K-kök (ink moms)</label><input type="number" id="ftInstallCompany" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
+                    <div><label class="block text-xs font-semibold text-gray-600">Pris Montage Montör (ink moms)</label><input type="number" id="ftInstallInstaller" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
+                <button onclick="document.getElementById('freeTextModal').classList.add('hidden')" class="px-4 py-2 bg-gray-200 rounded text-xs font-medium hover:bg-gray-300">Avbryt</button>
+                <button onclick="addFreeTextRow()" class="px-4 py-2 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 shadow-sm">Lägg till</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="manualFrontModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+        <div class="bg-white p-5 rounded-lg shadow-xl w-full max-w-md relative">
+            <h3 class="font-bold text-gray-800 mb-3 border-b pb-2">Lägg till lös lucka/front</h3>
+            <div class="space-y-3 text-sm">
+                <div class="bg-blue-50 border border-blue-200 rounded px-3 py-2">
+                    <span class="text-[10px] text-gray-500 uppercase block">Prisgrupp (från Specifikationer)</span>
+                    <span class="font-semibold text-gray-800" id="mfModelName">-</span>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600">Typ</label>
+                    <select id="mfType" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1 bg-white"></select>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label class="block text-xs font-semibold text-gray-600">Höjd (mm)</label><input type="number" id="mfHeight" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
+                    <div><label class="block text-xs font-semibold text-gray-600">Bredd (mm)</label><input type="number" id="mfWidth" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
+                </div>
+                <div id="mfPricePreview" class="text-xs bg-gray-50 border border-gray-200 rounded px-3 py-2 text-gray-500 italic">Fyll i höjd och bredd för att se pris.</div>
+                <div><label class="block text-xs font-semibold text-gray-600">Antal</label><input type="number" id="mfQty" value="1" min="1" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
+            </div>
+            <div class="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
+                <button onclick="document.getElementById('manualFrontModal').classList.add('hidden')" class="px-4 py-2 bg-gray-200 rounded text-xs font-medium hover:bg-gray-300">Avbryt</button>
+                <button onclick="addManualFrontRow()" class="px-4 py-2 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 shadow-sm">Lägg till</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/menu.js"></script>
+    <script>
+        let products = []; let quoteCart = []; const quoteId = new URLSearchParams(window.location.search).get('id');
+        let ctConfig = { materials: [], colors: [], prices: [], services: [], edges: [] };
+        let doorModels = []; let selectedDoorModelId = ''; let doorModelPriceItems = [];
+
+        let currentModalProduct = null;
+        let parsedVariations = [];
+        let selectedVariation = null;
+
+        let filteredProducts = [];
+        let currentPage = 1;
+        const itemsPerPage = 24;
+
+        window.currentCountertopSvg = '';
+        
+        const conditionsList = [
+            { id: 'demontering_luckor', label: 'Demontering luckbyte', hasQty: false, price: 2000, isRot: true, installerCut: 1200 },
+            { id: 'demontering_helkok', label: 'Demontering helkök per stomme', hasQty: true, price: 600, isRot: true, installerCut: 500 },
+            { id: 'bortforsling', label: 'Bortforsling', hasQty: false, price: 2000, isRot: false, installerCut: 2000 },
+            { id: 'bortforsling_vit', label: 'Bortforsling av vitvaror (vid köp av nya)', hasQty: true, price: 1000, isRot: false, installerCut: 1000 },
+            { id: 'inkoppling_vit', label: 'Inkoppling av vitvaror', hasQty: true, price: 1000, isRot: true, installerCut: 1000 },
+            { id: 'el', label: 'In/Urkoppling el', hasQty: false, hasCustomPrice: true, price: 0, isRot: true, installerCut: 0 },
+            { id: 'vvs', label: 'In/Urkoppling VVS', hasQty: false, hasCustomPrice: true, price: 0, isRot: true, installerCut: 0 }
+        ];
+        
+        let selectedConditions = {}; 
+        conditionsList.forEach(c => { selectedConditions[c.id] = { responsibility: '', qty: 1, customPrice: 0 }; });
+
+        // ==========================================
+        // BÄNKSKIVE-LOGIK (MED GEOMETRISK SVG-MOTOR)
+        // ==========================================
+        async function fetchCountertopConfig() {
+            try { const res = await fetch('/api/countertops/config'); if (res.ok) ctConfig = await res.json(); } catch(e) {}
+        }
+
+        function openCountertopModal() {
+            document.getElementById('countertopModal').classList.remove('hidden');
+            
+            const matSelect = document.getElementById('ctMaterial');
+            matSelect.innerHTML = '<option value="">Välj material...</option>';
+            if (ctConfig.materials) {
+                ctConfig.materials.forEach(m => { matSelect.innerHTML += `<option value="${m.id}">${m.name}</option>`; });
+            }
+
+            document.getElementById('ctColor').innerHTML = '<option value="">Välj material först</option>'; document.getElementById('ctColor').disabled = true;
+            document.getElementById('ctThickness').innerHTML = '<option value="">Välj färg först</option>'; document.getElementById('ctThickness').disabled = true;
+            document.getElementById('ctShape').value = "1"; document.getElementById('ctShape').disabled = true;
+            
+            document.getElementById('ctHoActive').checked = false; document.getElementById('ctHoWrapper').classList.add('hidden');
+            document.getElementById('ctHallActive').checked = false; document.getElementById('ctHallWrapper').classList.add('hidden');
+
+            ctUpdateShape(); ctCalculate();
+        }
+
+        function ctUpdateColors() {
+            const matId = document.getElementById('ctMaterial').value;
+            const colSelect = document.getElementById('ctColor');
+            const thkSelect = document.getElementById('ctThickness');
+            const shapeSelect = document.getElementById('ctShape');
+            const servicesList = document.getElementById('ctServicesList');
+            
+            if (matId) {
+                const colors = ctConfig.colors.filter(c => c.material_id == matId);
+                colSelect.innerHTML = '<option value="">Välj färg / dekor...</option>';
+                colors.forEach(c => colSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+                colSelect.disabled = false;
+
+                servicesList.innerHTML = ''; servicesList.classList.remove('opacity-50', 'pointer-events-none');
+                const validServices = ctConfig.services.filter(s => s.material_id == null || s.material_id == matId);
+                
+                if(validServices.length === 0) servicesList.innerHTML = '<p class="text-xs text-gray-400 italic">Inga tjänster tillgängliga.</p>';
+                validServices.forEach(s => {
+                    servicesList.innerHTML += `
+                        <div class="flex justify-between items-center bg-gray-50 border border-gray-200 rounded p-2">
+                            <div><p class="text-sm font-medium text-gray-800">${s.name}</p><p class="text-[10px] text-gray-500">${parseFloat(s.price).toLocaleString('sv-SE')} kr / ${s.price_type === 'per_lm' ? 'lpm' : 'st'}</p></div>
+                            <input type="number" id="ctSrv_${s.id}" data-type="${s.price_type}" data-price="${s.price}" min="0" value="0" oninput="ctCalculate()" class="w-16 border border-gray-300 rounded text-center py-1 text-sm bg-white outline-none focus:border-blue-500">
+                        </div>`;
+                });
+            } else {
+                colSelect.innerHTML = '<option value="">Välj material först</option>'; colSelect.disabled = true;
+                servicesList.innerHTML = '<p class="text-xs text-gray-400 italic">Välj ett material för att se tillgängliga tjänster.</p>'; servicesList.classList.add('opacity-50', 'pointer-events-none');
+            }
+
+            thkSelect.innerHTML = '<option value="">Välj färg först</option>'; thkSelect.disabled = true; shapeSelect.disabled = true;
+            for(let i=1; i<=4; i++) document.getElementById(`ctPart_${i}`).classList.add('opacity-50', 'pointer-events-none');
+            ctCalculate();
+        }
+
+        function ctUpdateThicknesses() {
+            const colId = document.getElementById('ctColor').value;
+            const thkSelect = document.getElementById('ctThickness');
+            const shapeSelect = document.getElementById('ctShape');
+
+            if (colId) {
+                const pricesForColor = ctConfig.prices.filter(p => p.color_id == colId);
+                if (pricesForColor.length === 0) { thkSelect.innerHTML = '<option value="">Inga priser inlagda</option>'; thkSelect.disabled = true; } 
+                else {
+                    const uniqueThicks = [...new Set(pricesForColor.map(p => p.thickness))].sort((a,b)=>a-b);
+                    thkSelect.innerHTML = '<option value="">Välj tjocklek...</option>';
+                    uniqueThicks.forEach(t => thkSelect.innerHTML += `<option value="${t}">${t} mm</option>`); thkSelect.disabled = false;
+                }
+            } else { thkSelect.innerHTML = '<option value="">Välj färg först</option>'; thkSelect.disabled = true; }
+
+            shapeSelect.disabled = true;
+            for(let i=1; i<=4; i++) document.getElementById(`ctPart_${i}`).classList.add('opacity-50', 'pointer-events-none');
+            ctCalculate();
+        }
+
+        function ctUpdateEdges() {
+            const matId = document.getElementById('ctMaterial').value;
+            const thk = document.getElementById('ctThickness').value;
+            const shapeSelect = document.getElementById('ctShape');
+
+            if (thk) {
+                shapeSelect.disabled = false;
+                for(let i=1; i<=4; i++) document.getElementById(`ctPart_${i}`).classList.remove('opacity-50', 'pointer-events-none');
+                const validEdges = ctConfig.edges.filter(e => e.material_id == matId && e.thickness == thk);
+                
+                for(let i=1; i<=4; i++) {
+                    const edgeSelect = document.getElementById(`ctEdgeProfile_${i}`); const edgeSection = document.getElementById(`ctEdgeSection_${i}`);
+                    if (validEdges.length > 0) {
+                        edgeSection.classList.remove('hidden'); edgeSelect.innerHTML = '<option value="">Välj profil...</option>';
+                        validEdges.forEach(e => edgeSelect.innerHTML += `<option value="${e.id}" data-price="${e.price_per_lm}">${e.name} (${e.price_per_lm}kr/m)</option>`);
+                    } else {
+                        edgeSection.classList.add('hidden'); edgeSelect.innerHTML = ''; document.getElementById(`ctEdgeFront_${i}`).checked = false; document.getElementById(`ctEdgeBack_${i}`).checked = false; document.getElementById(`ctEdgeLeft_${i}`).checked = false; document.getElementById(`ctEdgeRight_${i}`).checked = false;
+                    }
+                }
+            } else {
+                shapeSelect.disabled = true;
+                for(let i=1; i<=4; i++) { document.getElementById(`ctPart_${i}`).classList.add('opacity-50', 'pointer-events-none'); document.getElementById(`ctEdgeSection_${i}`).classList.add('hidden'); }
+            }
+            ctCalculate();
+        }
+
+        function ctUpdateShape() {
+            const count = parseInt(document.getElementById('ctShape').value) || 1;
+            for(let i=1; i<=4; i++) {
+                const partDiv = document.getElementById(`ctPart_${i}`);
+                if(i <= count) partDiv.classList.remove('hidden');
+                else {
+                    partDiv.classList.add('hidden'); document.getElementById(`ctLength_${i}`).value = ''; document.getElementById(`ctDepth_${i}`).value = '';
+                    document.getElementById(`ctEdgeFront_${i}`).checked = false; document.getElementById(`ctEdgeBack_${i}`).checked = false; document.getElementById(`ctEdgeLeft_${i}`).checked = false; document.getElementById(`ctEdgeRight_${i}`).checked = false; document.getElementById(`ctEdgeProfile_${i}`).value = '';
+                }
+            }
+            ctCalculate();
+        }
+
+        function ctCalculate() {
+            const colSelect = document.getElementById('ctColor');
+            const thkSelect = document.getElementById('ctThickness');
+            const btn = document.getElementById('ctAddBtn');
+            const warning = document.getElementById('ctDepthWarning');
+            const count = parseInt(document.getElementById('ctShape').value) || 1;
+
+            let materialPrice = 0; let edgePrice = 0; let servicesPrice = 0; let activeServicesCount = 0;
+            let totalLpm = 0; let totalEdgeMeters = 0;
+            let allPartsValid = true; let hasAtLeastOneValidPart = false; let anyDepthError = false;
+
+            const colId = colSelect.value;
+            const thk = thkSelect.value;
+
+            // Hämta inmatade RYGGMÅTT
+            let p1_rawL = parseFloat(document.getElementById('ctLength_1').value) || 0; let p1_d = parseFloat(document.getElementById('ctDepth_1').value) || 0;
+            let p2_rawL = parseFloat(document.getElementById('ctLength_2').value) || 0; let p2_d = parseFloat(document.getElementById('ctDepth_2').value) || 0;
+            let p3_rawL = parseFloat(document.getElementById('ctLength_3').value) || 0; let p3_d = parseFloat(document.getElementById('ctDepth_3').value) || 0;
+            let p4_rawL = parseFloat(document.getElementById('ctLength_4').value) || 0; let p4_d = parseFloat(document.getElementById('ctDepth_4').value) || 0;
+
+            let joint2 = document.getElementById('ctJoint_2') ? document.getElementById('ctJoint_2').value : 'horizontal';
+            let joint3 = document.getElementById('ctJoint_3') ? document.getElementById('ctJoint_3').value : 'horizontal';
+
+            // Räkna ut faktiska SÅGMÅTT baserat på skarv-val
+            let offsetX = (count >= 3 && joint3 === 'vertical' && p3_rawL > 0) ? p3_d : 0;
+            
+            let p1_calcL = Math.max(0, p1_rawL - (count >= 3 && joint3 === 'vertical' ? p3_d : 0) - (count >= 2 && joint2 === 'vertical' ? p2_d : 0));
+            let p1_x = offsetX; let p1_y = 0;
+            
+            let p2_calcL = Math.max(0, (joint2 === 'vertical') ? p2_rawL : p2_rawL - p1_d);
+            let p2_x = offsetX + p1_rawL - p2_d; let p2_y = (joint2 === 'vertical') ? 0 : p1_d;
+            
+            let p3_calcL = Math.max(0, (joint3 === 'vertical') ? p3_rawL : p3_rawL - p1_d);
+            let p3_x = 0; let p3_y = (joint3 === 'vertical') ? 0 : p1_d;
+
+            let p4_calcL = p4_rawL;
+            let p4_x = offsetX + p1_rawL / 2 - p4_rawL / 2; let p4_y = Math.max(p1_d + p2_rawL, p1_d + p3_rawL) + 400;
+
+            let activeParts = [];
+            if (p1_rawL > 0 && p1_d > 0) activeParts.push({ id: 1, rawL: p1_rawL, d: p1_d, calcL: p1_calcL, x: p1_x, y: p1_y, w: p1_calcL, h: p1_d });
+            if (count >= 2 && p2_rawL > 0 && p2_d > 0) activeParts.push({ id: 2, rawL: p2_rawL, d: p2_d, calcL: p2_calcL, x: p2_x, y: p2_y, w: p2_d, h: p2_calcL });
+            if (count >= 3 && p3_rawL > 0 && p3_d > 0) activeParts.push({ id: 3, rawL: p3_rawL, d: p3_d, calcL: p3_calcL, x: p3_x, y: p3_y, w: p3_d, h: p3_calcL });
+            if (count >= 4 && p4_rawL > 0 && p4_d > 0) activeParts.push({ id: 4, rawL: p4_rawL, d: p4_d, calcL: p4_calcL, x: p4_x, y: p4_y, w: p4_rawL, h: p4_d });
+
+            activeParts.forEach(part => {
+                hasAtLeastOneValidPart = true;
+                totalLpm += (part.calcL / 1000);
+
+                if (colId && thk) {
+                    const priceBand = ctConfig.prices.find(p => p.color_id == colId && p.thickness == thk && part.d >= p.depth_min && part.d <= p.depth_max);
+                    if (priceBand) materialPrice += (part.calcL / 1000) * parseFloat(priceBand.price_per_lm);
+                    else { anyDepthError = true; allPartsValid = false; }
+                } else { allPartsValid = false; }
+
+                const edgeSelect = document.getElementById(`ctEdgeProfile_${part.id}`);
+                if (edgeSelect && edgeSelect.value) {
+                    const pricePerLm = parseFloat(edgeSelect.options[edgeSelect.selectedIndex].dataset.price) || 0;
+                    let edgeMeters = 0;
+                    
+                    let fEdge = (part.id === 2 || part.id === 3) ? part.d : part.calcL;
+                    let bEdge = (part.id === 2 || part.id === 3) ? part.d : part.calcL;
+                    let lEdge = (part.id === 2 || part.id === 3) ? part.calcL : part.d;
+                    let rEdge = (part.id === 2 || part.id === 3) ? part.calcL : part.d;
+
+                    if (document.getElementById(`ctEdgeFront_${part.id}`).checked) edgeMeters += (fEdge / 1000);
+                    if (document.getElementById(`ctEdgeBack_${part.id}`).checked) edgeMeters += (bEdge / 1000);
+                    if (document.getElementById(`ctEdgeLeft_${part.id}`).checked) edgeMeters += (lEdge / 1000);
+                    if (document.getElementById(`ctEdgeRight_${part.id}`).checked) edgeMeters += (rEdge / 1000);
+                    
+                    edgePrice += edgeMeters * pricePerLm; totalEdgeMeters += edgeMeters;
+                }
+            });
+
+            if (anyDepthError) warning.classList.remove('hidden'); else warning.classList.add('hidden');
+
+            ctConfig.services.forEach(s => {
+                const input = document.getElementById(`ctSrv_${s.id}`);
+                if (input) {
+                    const qty = parseFloat(input.value) || 0;
+                    if (qty > 0) {
+                        if(input.dataset.type === 'per_lm') { servicesPrice += (qty * totalLpm * parseFloat(input.dataset.price)); activeServicesCount += 1; } 
+                        else { servicesPrice += (qty * parseFloat(input.dataset.price)); activeServicesCount += qty; }
+                    }
+                }
+            });
+
+            let installPrice = totalLpm * 1000;
+            const total = materialPrice + edgePrice + servicesPrice + installPrice;
+
+            document.getElementById('summaryMatName').innerText = `Material (${totalLpm.toFixed(2)} lpm)`;
+            document.getElementById('summaryMatPrice').innerText = `${Math.round(materialPrice).toLocaleString('sv-SE')} kr`;
+            document.getElementById('summaryEdgeName').innerText = `Kantprofil (${totalEdgeMeters.toFixed(2)} m)`;
+            document.getElementById('summaryEdgePrice').innerText = `${Math.round(edgePrice).toLocaleString('sv-SE')} kr`;
+            document.getElementById('summaryServicesName').innerText = `Tjänster (${activeServicesCount} st/m)`;
+            document.getElementById('summaryServicesPrice').innerText = `${Math.round(servicesPrice).toLocaleString('sv-SE')} kr`;
+            document.getElementById('summaryInstallName').innerText = `Montage (${totalLpm.toFixed(2)} lpm)`;
+            document.getElementById('summaryInstallPrice').innerText = `${Math.round(installPrice).toLocaleString('sv-SE')} kr`;
+            document.getElementById('summaryTotal').innerText = `${Math.round(total).toLocaleString('sv-SE')} kr`;
+
+            btn.disabled = !(hasAtLeastOneValidPart && allPartsValid && !anyDepthError);
+
+            // ==========================================
+            // SVG-RITMOTOR: STÖRRE TYPSNITT & RYGGMÅTT
+            // ==========================================
+            const svgContainer = document.getElementById('ctSvgContainer');
+            if (hasAtLeastOneValidPart) {
+                let svgContent = '';
+                let minX = 0, maxX = 0, minY = 0, maxY = 0;
+                
+                activeParts.forEach(p => {
+                    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x + p.w);
+                    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y + p.h);
+                });
+                
+                let totalW = maxX - minX; let totalH = maxY - minY; let pad = 300; 
+                
+                svgContent = `<svg width="100%" height="100%" viewBox="${minX - pad} ${minY - pad} ${totalW + pad*2} ${totalH + pad*2}" xmlns="http://www.w3.org/2000/svg" style="background:#f3f4f6;">`;
+                
+                // Rita ut skivorna
+                activeParts.forEach(p => {
+                    svgContent += `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" fill="#e5e7eb" rx="4" />`;
+                    let fCheck = document.getElementById(`ctEdgeFront_${p.id}`).checked;
+                    let bCheck = document.getElementById(`ctEdgeBack_${p.id}`).checked;
+                    let lCheck = document.getElementById(`ctEdgeLeft_${p.id}`).checked;
+                    let rCheck = document.getElementById(`ctEdgeRight_${p.id}`).checked;
+                    
+                    svgContent += `<line x1="${p.x}" y1="${p.y}" x2="${p.x + p.w}" y2="${p.y}" stroke="${bCheck ? '#2563eb' : '#9ca3af'}" stroke-width="${bCheck ? '24' : '6'}" />`;
+                    svgContent += `<line x1="${p.x}" y1="${p.y + p.h}" x2="${p.x + p.w}" y2="${p.y + p.h}" stroke="${fCheck ? '#2563eb' : '#9ca3af'}" stroke-width="${fCheck ? '24' : '6'}" />`;
+                    svgContent += `<line x1="${p.x}" y1="${p.y}" x2="${p.x}" y2="${p.y + p.h}" stroke="${lCheck ? '#2563eb' : '#9ca3af'}" stroke-width="${lCheck ? '24' : '6'}" />`;
+                    svgContent += `<line x1="${p.x + p.w}" y1="${p.y}" x2="${p.x + p.w}" y2="${p.y + p.h}" stroke="${rCheck ? '#2563eb' : '#9ca3af'}" stroke-width="${rCheck ? '24' : '6'}" />`;
+                    
+                    // Roterad inre text för vertikala delar (vingar)
+                    let isVertical = (p.id === 2 || p.id === 3);
+                    if (isVertical) {
+                        svgContent += `<g transform="rotate(-90, ${p.x + p.w/2}, ${p.y + p.h/2})">`;
+                        svgContent += `<text x="${p.x + p.w/2}" y="${p.y + p.h/2 - 25}" font-size="50" font-weight="bold" fill="#374151" text-anchor="middle">Del ${p.id}</text>`;
+                        svgContent += `<text x="${p.x + p.w/2}" y="${p.y + p.h/2 + 30}" font-size="36" fill="#4b5563" text-anchor="middle">Kapsnitt: ${Math.round(p.calcL)} mm</text>`;
+                        svgContent += `<text x="${p.x + p.w/2}" y="${p.y + p.h/2 + 80}" font-size="36" fill="#4b5563" text-anchor="middle">Djup: ${Math.round(p.d)} mm</text>`;
+                        svgContent += `</g>`;
+                    } else {
+                        svgContent += `<text x="${p.x + p.w/2}" y="${p.y + p.h/2 - 25}" font-size="50" font-weight="bold" fill="#374151" text-anchor="middle">Del ${p.id}</text>`;
+                        svgContent += `<text x="${p.x + p.w/2}" y="${p.y + p.h/2 + 30}" font-size="36" fill="#4b5563" text-anchor="middle">Kapsnitt: ${Math.round(p.calcL)} mm</text>`;
+                        svgContent += `<text x="${p.x + p.w/2}" y="${p.y + p.h/2 + 80}" font-size="36" fill="#4b5563" text-anchor="middle">Djup: ${Math.round(p.d)} mm</text>`;
+                    }
+                });
+
+                // Yttre text (Ryggmått) i tydligt blått format
+                if (p1_rawL > 0) {
+                    svgContent += `<text x="${p1_x + p1_rawL/2}" y="${p1_y - 40}" font-size="56" font-weight="bold" fill="#1d4ed8" text-anchor="middle">${Math.round(p1_rawL)}</text>`;
+                }
+                if (count >= 2 && p2_rawL > 0) {
+                    let rx = p2_x + p2_d + 50; let ry = p2_y + p2_rawL/2;
+                    svgContent += `<text x="${rx}" y="${ry}" font-size="56" font-weight="bold" fill="#1d4ed8" text-anchor="middle" transform="rotate(90, ${rx}, ${ry})">${Math.round(p2_rawL)}</text>`;
+                }
+                if (count >= 3 && p3_rawL > 0) {
+                    let rx = p3_x - 50; let ry = p3_y + p3_rawL/2;
+                    svgContent += `<text x="${rx}" y="${ry}" font-size="56" font-weight="bold" fill="#1d4ed8" text-anchor="middle" transform="rotate(-90, ${rx}, ${ry})">${Math.round(p3_rawL)}</text>`;
+                }
+                if (count >= 4 && p4_rawL > 0) {
+                    svgContent += `<text x="${p4_x + p4_rawL/2}" y="${p4_y - 40}" font-size="56" font-weight="bold" fill="#1d4ed8" text-anchor="middle">${Math.round(p4_rawL)}</text>`;
+                    svgContent += `<text x="${p4_x - 40}" y="${p4_y + p4_d/2}" font-size="56" font-weight="bold" fill="#1d4ed8" text-anchor="middle" transform="rotate(-90, ${p4_x - 40}, ${p4_y + p4_d/2})">${Math.round(p4_d)}</text>`;
+                }
+                
+                // Generisk Diskho (Urtag)
+                if (document.getElementById('ctHoActive').checked) {
+                    let hoPart = parseInt(document.getElementById('ctHoPart').value) || 1;
+                    let hoX = parseFloat(document.getElementById('ctHoX').value) || 0;
+                    let hoY = parseFloat(document.getElementById('ctHoY').value) || 0;
+                    
+                    let targetPart = activeParts.find(p => p.id === hoPart);
+                    if (targetPart) {
+                        let cx = targetPart.x + hoX; let cy = targetPart.y + hoY;
+                        let hoW = 500; let hoD = 400; // Generiska mått
+                        svgContent += `
+                            <rect x="${cx - hoW/2}" y="${cy - hoD/2}" width="${hoW}" height="${hoD}" fill="#eff6ff" stroke="#2563eb" stroke-width="8" stroke-dasharray="15,10" />
+                            <text x="${cx}" y="${cy - 10}" font-size="40" font-weight="bold" fill="#2563eb" text-anchor="middle">Diskho</text>
+                            <text x="${cx}" y="${cy + 30}" font-size="28" fill="#2563eb" text-anchor="middle">(Ej skalenlig)</text>
+                            <circle cx="${cx}" cy="${cy}" r="8" fill="#2563eb" />
+                        `;
+                    }
+                }
+
+                // Generisk Spishäll (Urtag)
+                if (document.getElementById('ctHallActive').checked) {
+                    let hallPart = parseInt(document.getElementById('ctHallPart').value) || 1;
+                    let hallX = parseFloat(document.getElementById('ctHallX').value) || 0;
+                    let hallY = parseFloat(document.getElementById('ctHallY').value) || 0;
+                    
+                    let targetPart = activeParts.find(p => p.id === hallPart);
+                    if (targetPart) {
+                        let cx = targetPart.x + hallX; let cy = targetPart.y + hallY;
+                        let hallW = 600; let hallD = 500; // Generiska mått
+                        svgContent += `
+                            <rect x="${cx - hallW/2}" y="${cy - hallD/2}" width="${hallW}" height="${hallD}" fill="#fef2f2" stroke="#dc2626" stroke-width="8" stroke-dasharray="15,10" />
+                            <text x="${cx}" y="${cy - 10}" font-size="40" font-weight="bold" fill="#dc2626" text-anchor="middle">Spishäll</text>
+                            <text x="${cx}" y="${cy + 30}" font-size="28" fill="#dc2626" text-anchor="middle">(Ej skalenlig)</text>
+                            <circle cx="${cx}" cy="${cy}" r="8" fill="#dc2626" />
+                        `;
+                    }
+                }
+                
+                svgContent += `</svg>`;
+                
+                window.currentCountertopSvg = svgContent;
+                let overlay = `<div class="absolute inset-0 bg-black bg-opacity-10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><span class="bg-gray-900 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-lg"><i class="fas fa-search-plus mr-1"></i> Förstora ritning</span></div>`;
+                svgContainer.innerHTML = svgContent + overlay;
+                
+            } else {
+                window.currentCountertopSvg = '';
+                svgContainer.innerHTML = '<p class="text-xs text-gray-400 italic">Fyll i mått för att generera ritning</p>';
+            }
+        }
+
+        function openEnlargedSvg() {
+            if(!window.currentCountertopSvg) return;
+            document.getElementById('enlargedSvgWrapper').innerHTML = window.currentCountertopSvg;
+            document.getElementById('enlargeSvgModal').classList.remove('hidden');
+        }
+        function closeEnlargedSvg() {
+            document.getElementById('enlargeSvgModal').classList.add('hidden');
+        }
+
+        function viewCartDrawing(index) {
+            if(quoteCart[index] && quoteCart[index].drawingSvg) {
+                window.currentCountertopSvg = quoteCart[index].drawingSvg;
+                openEnlargedSvg();
+            }
+        }
+
+        function addCountertopToQuote() {
+            const matSelect = document.getElementById('ctMaterial');
+            const colSelect = document.getElementById('ctColor');
+            const thkSelect = document.getElementById('ctThickness');
+            const count = parseInt(document.getElementById('ctShape').value) || 1;
+
+            const matName = matSelect.options[matSelect.selectedIndex].text;
+            const colName = colSelect.options[colSelect.selectedIndex].text;
+            const thk = thkSelect.value;
+
+            let hoActive = document.getElementById('ctHoActive').checked;
+            let hoPart = parseInt(document.getElementById('ctHoPart').value) || 1;
+            let hoX = document.getElementById('ctHoX').value; let hoY = document.getElementById('ctHoY').value;
+
+            let hallActive = document.getElementById('ctHallActive').checked;
+            let hallPart = parseInt(document.getElementById('ctHallPart').value) || 1;
+            let hallX = document.getElementById('ctHallX').value; let hallY = document.getElementById('ctHallY').value;
+            
+            let joint2 = document.getElementById('ctJoint_2') ? document.getElementById('ctJoint_2').value : 'horizontal';
+            let joint3 = document.getElementById('ctJoint_3') ? document.getElementById('ctJoint_3').value : 'horizontal';
+
+            let p1_rawL = parseFloat(document.getElementById('ctLength_1').value) || 0; let p1_d = parseFloat(document.getElementById('ctDepth_1').value) || 0;
+            let p2_rawL = parseFloat(document.getElementById('ctLength_2').value) || 0; let p2_d = parseFloat(document.getElementById('ctDepth_2').value) || 0;
+            let p3_rawL = parseFloat(document.getElementById('ctLength_3').value) || 0; let p3_d = parseFloat(document.getElementById('ctDepth_3').value) || 0;
+            let p4_rawL = parseFloat(document.getElementById('ctLength_4').value) || 0; let p4_d = parseFloat(document.getElementById('ctDepth_4').value) || 0;
+
+            let p1_calcL = Math.max(0, p1_rawL - (count >= 3 && joint3 === 'vertical' ? p3_d : 0) - (count >= 2 && joint2 === 'vertical' ? p2_d : 0));
+            let p2_calcL = Math.max(0, (joint2 === 'vertical') ? p2_rawL : p2_rawL - p1_d);
+            let p3_calcL = Math.max(0, (joint3 === 'vertical') ? p3_rawL : p3_rawL - p1_d);
+            let p4_calcL = p4_rawL;
+
+            let activeParts = [];
+            if (p1_rawL > 0 && p1_d > 0) activeParts.push({ id: 1, rawL: p1_rawL, d: p1_d, calcL: p1_calcL });
+            if (count >= 2 && p2_rawL > 0 && p2_d > 0) activeParts.push({ id: 2, rawL: p2_rawL, d: p2_d, calcL: p2_calcL });
+            if (count >= 3 && p3_rawL > 0 && p3_d > 0) activeParts.push({ id: 3, rawL: p3_rawL, d: p3_d, calcL: p3_calcL });
+            if (count >= 4 && p4_rawL > 0 && p4_d > 0) activeParts.push({ id: 4, rawL: p4_rawL, d: p4_d, calcL: p4_calcL });
+
+            let addedDrawing = false;
+
+            activeParts.forEach(part => {
+                const priceBand = ctConfig.prices.find(p => p.color_id == colSelect.value && p.thickness == thk && part.d >= p.depth_min && part.d <= p.depth_max);
+                const materialPrice = (part.calcL / 1000) * parseFloat(priceBand.price_per_lm);
+
+                const installIncVat = (part.calcL / 1000) * 1000;
+                const companyShare = (part.calcL / 1000) * 100;
+                const installerShare = (part.calcL / 1000) * 900;
+
+                let extraInfo = '';
+                if (hoActive && hoPart === part.id) extraInfo += ` - [Diskho Centrum X:${hoX} Y:${hoY}]`;
+                if (hallActive && hallPart === part.id) extraInfo += ` - [Häll Centrum X:${hallX} Y:${hallY}]`;
+                
+                if (part.id === 2 && joint2 === 'vertical') extraInfo += ' (Går hela vägen in i hörnet)';
+                if (part.id === 3 && joint3 === 'vertical') extraInfo += ' (Går hela vägen in i hörnet)';
+                if (part.id === 1) {
+                    if (count >= 2 && joint2 === 'vertical') extraInfo += ' (Ansluter till vänster om Del 2)';
+                    if (count >= 3 && joint3 === 'vertical') extraInfo += ' (Ansluter till höger om Del 3)';
+                }
+
+                quoteCart.push({ 
+                    cartId: 'ct_' + Date.now() + part.id, id: null, sku: 'BÄNKSKIVA', 
+                    name: `Bänkskiva ${matName} - ${colName} (${thk}mm) | Del ${part.id} (Kapsnitt: ${part.calcL}x${part.d}mm | Ryggmått: ${part.rawL}mm)${extraInfo}`, 
+                    priceIncVat: materialPrice, installIncVat: installIncVat, companyShare: companyShare, installerShare: installerShare, 
+                    qty: 1, discount: 0, isFreeText: true,
+                    drawingSvg: !addedDrawing ? window.currentCountertopSvg : null 
+                });
+                addedDrawing = true;
+
+                const edgeSelect = document.getElementById(`ctEdgeProfile_${part.id}`);
+                if (edgeSelect && edgeSelect.value) {
+                    const edgeName = edgeSelect.options[edgeSelect.selectedIndex].text.split('(')[0].trim();
+                    const pricePerLm = parseFloat(edgeSelect.options[edgeSelect.selectedIndex].dataset.price) || 0;
+                    
+                    let partEdges = []; let edgeMeters = 0;
+                    let fEdge = (part.id === 2 || part.id === 3) ? part.d : part.calcL;
+                    let bEdge = (part.id === 2 || part.id === 3) ? part.d : part.calcL;
+                    let lEdge = (part.id === 2 || part.id === 3) ? part.calcL : part.d;
+                    let rEdge = (part.id === 2 || part.id === 3) ? part.calcL : part.d;
+
+                    if (document.getElementById(`ctEdgeFront_${part.id}`).checked) { edgeMeters += (fEdge/1000); partEdges.push('Fram'); }
+                    if (document.getElementById(`ctEdgeBack_${part.id}`).checked) { edgeMeters += (bEdge/1000); partEdges.push('Bak'); }
+                    if (document.getElementById(`ctEdgeLeft_${part.id}`).checked) { edgeMeters += (lEdge/1000); partEdges.push('Vänster'); }
+                    if (document.getElementById(`ctEdgeRight_${part.id}`).checked) { edgeMeters += (rEdge/1000); partEdges.push('Höger'); }
+                    
+                    if(edgeMeters > 0) {
+                        quoteCart.push({ 
+                            cartId: 'edge_' + Date.now() + part.id, id: null, sku: 'TJÄNST', 
+                            name: `Kantprofil: ${edgeName} (Del ${part.id}: ${partEdges.join(', ')}) - Totalt ${edgeMeters.toFixed(2)}m`, 
+                            priceIncVat: (edgeMeters * pricePerLm), installIncVat: 0, companyShare: 0, installerShare: 0, 
+                            qty: 1, discount: 0, isFreeText: true 
+                        });
+                    }
+                }
+            });
+
+            let totalLpm = activeParts.reduce((sum, p) => sum + (p.calcL/1000), 0);
+
+            ctConfig.services.forEach(s => {
+                const input = document.getElementById(`ctSrv_${s.id}`);
+                if (input) {
+                    const qty = parseFloat(input.value) || 0;
+                    if (qty > 0) {
+                        if(input.dataset.type === 'per_lm') {
+                            quoteCart.push({ 
+                                cartId: 'srv_' + Date.now() + s.id, id: null, sku: 'TJÄNST', name: `${s.name} (${qty}x)`, 
+                                priceIncVat: (qty * totalLpm * parseFloat(input.dataset.price)), installIncVat: 0, companyShare: 0, installerShare: 0, 
+                                qty: 1, discount: 0, isFreeText: true 
+                            });
+                        } else {
+                            quoteCart.push({ 
+                                cartId: 'srv_' + Date.now() + s.id, id: null, sku: 'TJÄNST', name: s.name, 
+                                priceIncVat: parseFloat(input.dataset.price), installIncVat: 0, companyShare: 0, installerShare: 0, 
+                                qty: qty, discount: 0, isFreeText: true 
+                            });
+                        }
+                    }
+                }
+            });
+
+            document.getElementById('countertopModal').classList.add('hidden');
+            renderCart();
+        }
+
+        // ==========================================
+        // PRODUKTGRID & PAGINERINGS-MOTOR
+        // ==========================================
+        async function fetchProducts() {
+            try {
+                const res = await fetch('/api/products'); 
+                if (res.ok) {
+                    products = await res.json();
+                    const cats = [...new Set(products.map(p => p.category).filter(c => c))];
+                    const catSelect = document.getElementById('catFilter');
+                    cats.forEach(c => { catSelect.innerHTML += `<option value="${c}">${c}</option>`; });
+                    applyFilters();
+                }
+            } catch(e) {}
+        }
+
+        function applyFilters() {
+            const term = document.getElementById('searchInput').value.toLowerCase(); 
+            const cat = document.getElementById('catFilter').value; 
+            const sort = document.getElementById('sortFilter').value;
+            
+            filteredProducts = products.filter(p =>
+                (p.name.toLowerCase().includes(term) || (p.sku && p.sku.toLowerCase().includes(term))) &&
+                (cat === "" || p.category === cat) &&
+                (!selectedDoorModelId || !p.door_model_id || String(p.door_model_id) === String(selectedDoorModelId))
+            );
+            
+            filteredProducts.sort((a, b) => {
+                if (sort === 'name_asc') return a.name.localeCompare(b.name); 
+                if (sort === 'name_desc') return b.name.localeCompare(a.name);
+                if (sort === 'price_asc') return (parseFloat(a.standard_price)||0) - (parseFloat(b.standard_price)||0);
+                if (sort === 'price_desc') return (parseFloat(b.standard_price)||0) - (parseFloat(a.standard_price)||0);
+            });
+            
+            currentPage = 1; 
+            renderProductsGrid();
+        }
+
+        function renderProductsGrid() {
+            const grid = document.getElementById('productGrid'); 
+            const pagination = document.getElementById('paginationControls');
+            grid.innerHTML = '';
+            
+            if (filteredProducts.length === 0) {
+                grid.innerHTML = '<p class="col-span-full text-center text-gray-400 py-6 text-sm">Inga produkter hittades.</p>';
+                if(pagination) pagination.innerHTML = '';
+                return;
+            }
+
+            const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+            const start = (currentPage - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const paginated = filteredProducts.slice(start, end);
+
+            paginated.forEach(p => {
+                const imgSrc = p.image_url ? p.image_url : '/logo.png';
+                grid.innerHTML += `
+                    <div onclick='openProductModal(${JSON.stringify(p).replace(/'/g, "&#39;")})' class="bg-white border border-gray-200 rounded-md shadow-sm hover:shadow-md transition overflow-hidden flex flex-col cursor-pointer hover:border-blue-400">
+                        <div class="h-24 md:h-28 bg-gray-50 flex items-center justify-center overflow-hidden p-2"><img src="${imgSrc}" class="w-full h-full object-contain"></div>
+                        <div class="p-2.5 flex-1 flex flex-col"><span class="text-[9px] text-gray-400 font-mono">${p.sku}</span><h4 class="font-semibold text-gray-800 text-xs md:text-sm mb-1 truncate">${p.name}</h4><p class="text-xs text-gray-600 mt-auto font-bold">${p.has_variations === 1 ? 'Variabel pris' : (parseFloat(p.standard_price)||0).toLocaleString() + ' kr'}</p></div>
+                    </div>`;
+            });
+
+            if (pagination) {
+                pagination.innerHTML = `
+                    <span>Visar ${start + 1}-${Math.min(end, filteredProducts.length)} av ${filteredProducts.length}</span>
+                    <div class="space-x-1">
+                        <button onclick="changePage(-1)" class="px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 transition" ${currentPage === 1 ? 'disabled' : ''}>Föregående</button>
+                        <button onclick="changePage(1)" class="px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 transition" ${currentPage >= totalPages ? 'disabled' : ''}>Nästa</button>
+                    </div>`;
+            }
+        }
+
+        function changePage(dir) {
+            currentPage += dir;
+            renderProductsGrid();
+            document.getElementById('productGrid').parentElement.scrollTop = 0;
+        }
+
+        function openProductModal(p) {
+            currentModalProduct = p; parsedVariations = []; selectedVariation = null;
+            document.getElementById('modalTitle').innerText = p.name; 
+            document.getElementById('modalDesc').innerHTML = p.description || '<p class="italic text-gray-400 text-xs">Beskrivning saknas</p>';
+            
+            const varContainer = document.getElementById('modalVariations');
+            const v1Cont = document.getElementById('modalVar1Container'); const v2Cont = document.getElementById('modalVar2Container');
+            const v1Sel = document.getElementById('modalVar1Select'); const v2Sel = document.getElementById('modalVar2Select');
+
+            if (p.has_variations === 1) {
+                varContainer.classList.remove('hidden');
+                try { parsedVariations = JSON.parse(p.variations || '[]'); } catch(e){}
+
+                if (parsedVariations.length > 0) {
+                    const firstVar = parsedVariations[0];
+                    if (firstVar.attr1_name) {
+                        v1Cont.classList.remove('hidden'); document.getElementById('modalVar1Label').innerText = firstVar.attr1_name;
+                        const unique1 = [...new Set(parsedVariations.map(v => v.attr1_value))];
+                        v1Sel.innerHTML = unique1.map(val => `<option value="${val}">${val}</option>`).join('');
+                    } else { v1Cont.classList.add('hidden'); }
+
+                    if (firstVar.attr2_name) { v2Cont.classList.remove('hidden'); document.getElementById('modalVar2Label').innerText = firstVar.attr2_name; } 
+                    else { v2Cont.classList.add('hidden'); }
+
+                    v1Sel.onchange = updateVariationSelection; v2Sel.onchange = updateVariationSelection;
+                    updateVariationSelection();
+                }
+            } else {
+                varContainer.classList.add('hidden'); v1Cont.classList.add('hidden'); v2Cont.classList.add('hidden');
+                document.getElementById('modalSku').innerText = p.sku + ' | ' + (p.category || 'Okategoriserad');
+                document.getElementById('modalPrice').innerText = (parseFloat(p.standard_price) || 0).toLocaleString() + ' kr'; 
+                document.getElementById('modalInstall').innerText = (parseFloat(p.installation_price) || 0) > 0 ? (parseFloat(p.installation_price) || 0).toLocaleString() + ' kr' : '0 kr';
+                document.getElementById('modalAddBtn').disabled = false; document.getElementById('modalAddBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+
+            let images = []; if(p.image_url) images.push(p.image_url);
+            if(p.gallery) { try { const parsed = JSON.parse(p.gallery); if(Array.isArray(parsed)) images = images.concat(parsed); } catch(e){} }
+            if(images.length === 0) images.push('/logo.png');
+            document.getElementById('modalMainImage').src = images[0];
+            const thumbContainer = document.getElementById('modalThumbnails'); thumbContainer.innerHTML = '';
+            if(images.length > 1) { images.forEach(img => { thumbContainer.innerHTML += `<img src="${img}" onclick="document.getElementById('modalMainImage').src='${img}'" class="w-12 h-12 md:w-14 md:h-14 object-contain border bg-white rounded cursor-pointer hover:border-blue-500">`; }); }
+            document.getElementById('productModal').classList.remove('hidden');
+        }
+
+        function updateVariationSelection() {
+            const v1Sel = document.getElementById('modalVar1Select'); const v2Sel = document.getElementById('modalVar2Select');
+            const val1 = v1Sel.value; const matchingVars = parsedVariations.filter(v => v.attr1_value === val1);
+
+            if (matchingVars.length > 0 && matchingVars[0].attr2_name) {
+                const currentV2Val = v2Sel.value; const unique2 = [...new Set(matchingVars.map(v => v.attr2_value))];
+                v2Sel.innerHTML = unique2.map(val => `<option value="${val}">${val}</option>`).join('');
+                if (unique2.includes(currentV2Val)) v2Sel.value = currentV2Val; else v2Sel.value = unique2[0];
+            }
+
+            const val2 = v2Sel.value; selectedVariation = parsedVariations.find(v => v.attr1_value === val1 && (v.attr2_value === val2 || !v.attr2_name));
+
+            if (selectedVariation) {
+                document.getElementById('modalSku').innerText = selectedVariation.sku + ' | ' + (currentModalProduct.category || 'Okategoriserad');
+                document.getElementById('modalPrice').innerText = (parseFloat(selectedVariation.price) || 0).toLocaleString() + ' kr';
+                document.getElementById('modalInstall').innerText = (parseFloat(selectedVariation.install_price) || 0) > 0 ? (parseFloat(selectedVariation.install_price) || 0).toLocaleString() + ' kr' : '0 kr';
+                document.getElementById('modalAddBtn').disabled = false; document.getElementById('modalAddBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                document.getElementById('modalPrice').innerText = '- kr'; document.getElementById('modalInstall').innerText = '- kr';
+                document.getElementById('modalAddBtn').disabled = true; document.getElementById('modalAddBtn').classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        function closeProductModal() { document.getElementById('productModal').classList.add('hidden'); }
+
+        function addProductToQuote() {
+            if (currentModalProduct.has_variations === 1) {
+                if (!selectedVariation) return alert("Välj en giltig variant först.");
+                let varDesc = []; if (selectedVariation.attr1_value) varDesc.push(selectedVariation.attr1_value); if (selectedVariation.attr2_value) varDesc.push(selectedVariation.attr2_value);
+                const nameSuffix = varDesc.length > 0 ? ` - ${varDesc.join(' / ')}` : '';
+                const installTot = parseFloat(selectedVariation.install_price) || 0; const instShare = parseFloat(selectedVariation.installer_share) || 0;
+                const cartId = currentModalProduct.id + '_' + selectedVariation.sku;
+                
+                const existing = quoteCart.find(item => item.cartId === cartId);
+                if(existing) { existing.qty += 1; } else {
+                    quoteCart.push({ cartId: cartId, id: currentModalProduct.id, sku: selectedVariation.sku, name: currentModalProduct.name + nameSuffix, priceIncVat: parseFloat(selectedVariation.price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0 });
+                    const variantWidth = getVariantWidth(selectedVariation, currentModalProduct);
+                    addAutoFrontsForProduct({ ...currentModalProduct, width: variantWidth });
+                }
+            } else {
+                const cartId = currentModalProduct.id + '_base'; const existing = quoteCart.find(item => item.cartId === cartId);
+                if(existing) { existing.qty += 1; } else {
+                    const installTot = parseFloat(currentModalProduct.installation_price) || 0; const instShare = parseFloat(currentModalProduct.installer_share) || 0;
+                    quoteCart.push({ cartId: cartId, id: currentModalProduct.id, sku: currentModalProduct.sku, name: currentModalProduct.name, priceIncVat: parseFloat(currentModalProduct.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0 });
+                    addAutoFrontsForProduct(currentModalProduct);
+                }
+            }
+            renderCart(); closeProductModal();
+        }
+
+        // Vissa produkter (t.ex. skåp med Legrabox/Basic-lådor) har bredden som en variant-egenskap
+        // istället för ett fast stomme-mått. Plockar ut ett numeriskt breddvärde från variantens
+        // attribut (t.ex. "600" i kolumnen Bredd), annars faller vi tillbaka på produktens egna stomme-bredd.
+        function getVariantWidth(variation, product) {
+            const candidates = [variation.attr1_value, variation.attr2_value];
+            for (const c of candidates) {
+                const n = parseInt(String(c).replace(/[^0-9]/g, ''));
+                if (!isNaN(n) && n >= 100 && n <= 3000) return n;
+            }
+            return product.width;
+        }
+
+        // ==========================================
+        // AUTOMATISK LUCKA/LÅDFRONT-BERÄKNING
+        // ==========================================
+        async function fetchDoorModels() {
+            try {
+                const res = await fetch('/api/door-models');
+                doorModels = await res.json();
+                const sel = document.getElementById('qsDoorModelId');
+                sel.innerHTML = '<option value="">-- Ingen vald --</option>';
+                doorModels.forEach(m => { sel.innerHTML += `<option value="${m.id}">${m.name}</option>`; });
+            } catch (e) { console.error(e); }
+        }
+
+        async function onDoorModelChange() {
+            selectedDoorModelId = document.getElementById('qsDoorModelId').value;
+            doorModelPriceItems = [];
+            applyFilters();
+            if (!selectedDoorModelId) return;
+            try {
+                const res = await fetch(`/api/door-models/${selectedDoorModelId}/prices`);
+                doorModelPriceItems = await res.json();
+            } catch (e) { console.error(e); }
+        }
+
+        // Räknar ut fronternas mått (bredd/höjd i mm) utifrån stommens mått och front_layout-konfigurationen.
+        function computeFrontPieces(frontLayout, stommeWidth, stommeHeight) {
+            const W = parseFloat(stommeWidth) || 0; const H = parseFloat(stommeHeight) || 0;
+            const pieces = [];
+            if (!frontLayout || !frontLayout.type) return pieces;
+
+            if (frontLayout.type === 'door') {
+                pieces.push({ label: 'Lucka', component_type: 'lucka', width: W - 4, height: H - 6 });
+            } else if (frontLayout.type === 'drawers') {
+                const count = frontLayout.count;
+                const width = W - 4;
+                if (count === 2) {
+                    const h = (H - 6) / 2;
+                    pieces.push({ label: 'Lådfront 1', component_type: 'ladfront', width, height: h });
+                    pieces.push({ label: 'Lådfront 2', component_type: 'ladfront', width, height: h });
+                } else if (count === 3) {
+                    const f1 = 135, f2 = 273, f3 = H - f1 - f2 - 6 - 6;
+                    pieces.push({ label: 'Lådfront 1', component_type: 'ladfront', width, height: f1 });
+                    pieces.push({ label: 'Lådfront 2', component_type: 'ladfront', width, height: f2 });
+                    pieces.push({ label: 'Lådfront 3', component_type: 'ladfront', width, height: f3 });
+                } else if (count === 4) {
+                    const f1 = 135, f2 = 135, f3 = 135, f4 = H - 6 - 9 - (f1 + f2 + f3);
+                    pieces.push({ label: 'Lådfront 1', component_type: 'ladfront', width, height: f1 });
+                    pieces.push({ label: 'Lådfront 2', component_type: 'ladfront', width, height: f2 });
+                    pieces.push({ label: 'Lådfront 3', component_type: 'ladfront', width, height: f3 });
+                    pieces.push({ label: 'Lådfront 4', component_type: 'ladfront', width, height: f4 });
+                } else if (count === 5) {
+                    const f1 = 135, f2 = 135, f3 = 135, f4 = 135, f5 = H - 6 - 9 - (f1 + f2 + f3 + f4);
+                    pieces.push({ label: 'Lådfront 1', component_type: 'ladfront', width, height: f1 });
+                    pieces.push({ label: 'Lådfront 2', component_type: 'ladfront', width, height: f2 });
+                    pieces.push({ label: 'Lådfront 3', component_type: 'ladfront', width, height: f3 });
+                    pieces.push({ label: 'Lådfront 4', component_type: 'ladfront', width, height: f4 });
+                    pieces.push({ label: 'Lådfront 5', component_type: 'ladfront', width, height: f5 });
+                }
+            } else if (frontLayout.type === 'fixed135') {
+                const width = W - 4;
+                for (let i = 1; i <= frontLayout.count; i++) pieces.push({ label: `Lådfront ${i}`, component_type: 'ladfront', width, height: 135 });
+            } else if (frontLayout.type === 'custom' && Array.isArray(frontLayout.fronts)) {
+                frontLayout.fronts.forEach((f, i) => pieces.push({ label: `Front ${i + 1}`, component_type: f.component_type || 'ladfront', width: f.width || (W - 4), height: f.height }));
+            }
+            return pieces;
+        }
+
+        // Slår upp priset för en front-bit mot den valda dörrmodellens prislista.
+        function lookupFrontPrice(piece) {
+            const match = doorModelPriceItems.find(p =>
+                p.component_type === piece.component_type &&
+                piece.height >= p.height_min && piece.height <= p.height_max &&
+                piece.width >= p.width_min && piece.width <= p.width_max
+            );
+            return match ? parseFloat(match.price) : null;
+        }
+
+        function addAutoFrontsForProduct(product) {
+            if (!product.front_layout) return;
+            let frontLayout;
+            try { frontLayout = JSON.parse(product.front_layout); } catch (e) { return; }
+            const stommeWidth = product.width; const stommeHeight = product.height;
+            if (!stommeWidth || !stommeHeight) return;
+
+            const pieces = computeFrontPieces(frontLayout, stommeWidth, stommeHeight);
+            if (pieces.length === 0) return;
+
+            if (!selectedDoorModelId) {
+                alert(`"${product.name}" har en frontkonfiguration, men ingen dörrmodell är vald för offerten. Välj en dörrmodell under Specifikationer så läggs luckor/lådfronter till automatiskt.`);
+                return;
+            }
+
+            pieces.forEach((piece, idx) => {
+                const price = lookupFrontPrice(piece);
+                const roundedH = Math.round(piece.height); const roundedW = Math.round(piece.width);
+                const label = `${piece.label} till ${product.name} (${roundedW}x${roundedH}mm)`;
+                if (price === null) {
+                    quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'PRIS SAKNAS', name: `${label} - INGET PRIS HITTAT, kontrollera prislistan`, priceIncVat: 0, installIncVat: 0, companyShare: 0, installerShare: 0, qty: 1, discount: 0, isFreeText: true });
+                } else {
+                    quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'AUTO-' + piece.component_type.toUpperCase(), name: label, priceIncVat: price, installIncVat: 0, companyShare: 0, installerShare: 0, qty: 1, discount: 0, isFreeText: true });
+                }
+            });
+        }
+
+        function addFreeTextRow() {
+            const name = document.getElementById('ftName').value; const price = parseFloat(document.getElementById('ftPrice').value) || 0;
+            const installCompany = parseFloat(document.getElementById('ftInstallCompany').value) || 0; const installInstaller = parseFloat(document.getElementById('ftInstallInstaller').value) || 0;
+            if(!name) return alert("Beskrivning saknas");
+            quoteCart.push({ cartId: 'ft_' + Date.now(), id: null, sku: 'FRITEXT', name: name, priceIncVat: price, installIncVat: (installCompany + installInstaller), companyShare: installCompany, installerShare: installInstaller, qty: 1, discount: 0, isFreeText: true });
+            document.getElementById('ftName').value = ''; document.getElementById('ftPrice').value = '0'; document.getElementById('ftInstallCompany').value = '0'; document.getElementById('ftInstallInstaller').value = '0';
+            document.getElementById('freeTextModal').classList.add('hidden'); renderCart();
+        }
+
+        // ==========================================
+        // LÖS LUCKA/FRONT (manuellt tillägg utanför skåp-auto-beräkningen)
+        // ==========================================
+        const typeLabels = { lucka: 'Lucka', ladfront: 'Lådfront', grytfront: 'Grytfront', ovrigt: 'Övrigt' };
+
+        function openManualFrontModal() {
+            if (!selectedDoorModelId) {
+                alert('Välj en prisgrupp/dörrmodell under Specifikationer högst upp innan du lägger till en lös lucka eller front.');
+                return;
+            }
+            const model = doorModels.find(m => String(m.id) === String(selectedDoorModelId));
+            document.getElementById('mfModelName').innerText = model ? model.name : '-';
+
+            // Fyll typ-listan med bara de typer som faktiskt finns i den valda prisgruppens prislista.
+            const availableTypes = [...new Set(doorModelPriceItems.map(p => p.component_type))];
+            const typeSel = document.getElementById('mfType');
+            typeSel.innerHTML = availableTypes.map(t => `<option value="${t}">${typeLabels[t] || t}</option>`).join('');
+            if (availableTypes.length === 0) typeSel.innerHTML = '<option value="">Inga priser inlagda för denna prisgrupp</option>';
+
+            document.getElementById('mfHeight').value = 0;
+            document.getElementById('mfWidth').value = 0;
+            document.getElementById('mfQty').value = 1;
+            document.getElementById('manualFrontModal').classList.remove('hidden');
+            updateManualFrontPricePreview();
+        }
+
+        function updateManualFrontPricePreview() {
+            const preview = document.getElementById('mfPricePreview');
+            const type = document.getElementById('mfType').value;
+            const height = parseFloat(document.getElementById('mfHeight').value) || 0;
+            const width = parseFloat(document.getElementById('mfWidth').value) || 0;
+
+            if (!type) { preview.innerText = 'Prisgruppen saknar prisrader.'; return; }
+            if (!height || !width) { preview.innerText = 'Fyll i höjd och bredd för att se pris.'; return; }
+
+            const price = lookupFrontPrice({ component_type: type, height, width });
+            if (price === null) {
+                preview.innerText = 'Inget pris hittades för dessa mått i vald prisgrupp.';
+                preview.classList.add('text-red-500'); preview.classList.remove('text-gray-500', 'text-gray-700', 'font-semibold');
+            } else {
+                preview.innerText = `Pris: ${price.toLocaleString()} kr`;
+                preview.classList.remove('text-red-500', 'text-gray-500'); preview.classList.add('text-gray-700', 'font-semibold');
+            }
+        }
+
+        ['mfType', 'mfHeight', 'mfWidth'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateManualFrontPricePreview);
+        });
+        document.getElementById('mfType').addEventListener('change', updateManualFrontPricePreview);
+
+        function addManualFrontRow() {
+            const model = doorModels.find(m => String(m.id) === String(selectedDoorModelId));
+            const type = document.getElementById('mfType').value;
+            const height = parseFloat(document.getElementById('mfHeight').value) || 0;
+            const width = parseFloat(document.getElementById('mfWidth').value) || 0;
+            const qty = parseInt(document.getElementById('mfQty').value) || 1;
+
+            if (!type) return alert('Vald prisgrupp saknar prisrader att lägga till.');
+            if (!height || !width) return alert('Ange höjd och bredd.');
+
+            const price = lookupFrontPrice({ component_type: type, height, width });
+            const label = `${typeLabels[type] || type} - ${model ? model.name : ''} (${width}x${height}mm)`;
+
+            if (price === null) {
+                quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'PRIS SAKNAS', name: `${label} - INGET PRIS HITTAT, kontrollera prislistan`, priceIncVat: 0, installIncVat: 0, companyShare: 0, installerShare: 0, qty, discount: 0, isFreeText: true });
+            } else {
+                quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'MANUELL-' + type.toUpperCase(), name: label, priceIncVat: price, installIncVat: 0, companyShare: 0, installerShare: 0, qty, discount: 0, isFreeText: true });
+            }
+            document.getElementById('manualFrontModal').classList.add('hidden');
+            renderCart();
+        }
+
+        function toggleConditions() { const wrapper = document.getElementById('condWrapper'); const icon = document.getElementById('condIcon'); wrapper.classList.toggle('hidden'); icon.classList.toggle('fa-chevron-down'); icon.classList.toggle('fa-chevron-up'); }
+        
+        async function loadQuoteData() {
+            if (!quoteId) { document.getElementById('headerQuoteName').innerText = "Testoffert (Går ej att spara)"; renderConditions(); return; }
+            try {
+                const res = await fetch(`/api/quotes/${quoteId}`);
+                if (res.ok) {
+                    const data = await res.json(); 
+                    document.getElementById('headerQuoteName').innerText = `Offert: ${data.quote_name}`;
+                    document.getElementById('globalDiscount').value = data.global_discount || 0; document.getElementById('globalDiscountType').value = data.discount_type || '%'; document.getElementById('internalComment').value = data.internal_comment || ''; document.getElementById('publicComment').value = data.public_comment || '';
+                    if (data.quote_data) {
+                        const qd = JSON.parse(data.quote_data); if (qd.quoteCart) quoteCart = qd.quoteCart; 
+                        if (qd.selectedConditions) { for (const key in qd.selectedConditions) { if(selectedConditions[key]) { selectedConditions[key].responsibility = qd.selectedConditions[key].responsibility || ''; selectedConditions[key].qty = qd.selectedConditions[key].qty || 1; selectedConditions[key].customPrice = qd.selectedConditions[key].customPrice || 0; } } }
+                        if (qd.useRot !== undefined) document.getElementById('useRotCheckbox').checked = qd.useRot;
+                        if (qd.kitchenSpecs) { document.getElementById('qsMaterial').value = qd.kitchenSpecs.material || ''; document.getElementById('qsColor').value = qd.kitchenSpecs.color || ''; document.getElementById('qsDoor').value = qd.kitchenSpecs.door || ''; if (qd.kitchenSpecs.doorModelId) { document.getElementById('qsDoorModelId').value = qd.kitchenSpecs.doorModelId; onDoorModelChange(); } }
+                        if (qd.extraFees) { document.getElementById('startFeeProduct').value = qd.extraFees.startFeeProduct || 0; document.getElementById('startFeeNonRot').value = qd.extraFees.startFeeNonRot || 1800; document.getElementById('startFeeRotComp').value = qd.extraFees.startFeeRotComp || 0; document.getElementById('startFeeRotInst').value = qd.extraFees.startFeeRotInst || 0; document.getElementById('colorSelect').value = qd.extraFees.colorSelect || ''; document.getElementById('colorCustom').value = qd.extraFees.colorCustom || ''; document.getElementById('feeColor').value = qd.extraFees.feeColor || 0; toggleCustomColor(); }
+                    }
+                    const pdfBtn = document.getElementById('btnQuotePdf'); pdfBtn.href = `/api/quotes/${quoteId}/pdf`; pdfBtn.classList.remove('hidden');
+                }
+            } catch (e) {}
+            renderConditions(); renderCart();
+        }
+
+        async function saveQuote() {
+            if (!quoteId) return alert("Saknar ID.");
+            const btn = document.querySelector('header button[onclick="saveQuote()"]'); const originalText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Sparar...'; btn.disabled = true;
+            const payload = { quoteCart, selectedConditions, kitchenSpecs: { material: document.getElementById('qsMaterial').value, color: document.getElementById('qsColor').value, door: document.getElementById('qsDoor').value, doorModelId: document.getElementById('qsDoorModelId').value }, extraFees: { startFeeProduct: document.getElementById('startFeeProduct').value, startFeeNonRot: document.getElementById('startFeeNonRot').value, startFeeRotComp: document.getElementById('startFeeRotComp').value, startFeeRotInst: document.getElementById('startFeeRotInst').value, colorSelect: document.getElementById('colorSelect').value, colorCustom: document.getElementById('colorCustom').value, feeColor: document.getElementById('feeColor').value }, globalDiscount: document.getElementById('globalDiscount').value, discountType: document.getElementById('globalDiscountType').value, useRot: document.getElementById('useRotCheckbox').checked, internal_comment: document.getElementById('internalComment').value, public_comment: document.getElementById('publicComment').value };
+            try { const res = await fetch(`/api/quotes/${quoteId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); const data = await res.json(); alert(data.message); } catch (error) { alert("Nätverksfel."); } finally { btn.innerHTML = originalText; btn.disabled = false; }
+        }
+
+        function renderConditions() {
+            const tbody = document.getElementById('conditionsBody'); tbody.innerHTML = '';
+            conditionsList.forEach(cond => {
+                const current = selectedConditions[cond.id]; let unitPrice = cond.hasCustomPrice ? (parseFloat(current.customPrice) || 0) : cond.price; let rowPrice = current.responsibility === 'Klarälvskök' && unitPrice > 0 ? unitPrice * (cond.hasQty ? current.qty : 1) : 0; let priceCell = '';
+                if (cond.hasCustomPrice) priceCell = `<div class="flex justify-end items-center"><input type="number" min="0" value="${current.customPrice || ''}" placeholder="0" onchange="updateConditionPrice('${cond.id}', this.value)" ${current.responsibility !== 'Klarälvskök' ? 'disabled' : ''} class="w-16 border border-gray-300 rounded text-right py-0.5 px-1 bg-white text-[11px] disabled:bg-gray-100"> <span class="ml-1 text-gray-500">kr</span></div>`;
+                else priceCell = `<span class="font-semibold text-gray-500 whitespace-nowrap">${rowPrice > 0 ? rowPrice.toLocaleString() + ' kr' : '-'}</span>`;
+                tbody.innerHTML += `<tr class="border-b border-gray-100 hover:bg-gray-50 text-xs"><td class="py-1.5 font-medium leading-tight">${cond.label}</td><td class="py-1.5 text-center">${cond.hasQty ? `<input type="number" min="1" value="${current.qty}" onchange="updateConditionQty('${cond.id}', this.value)" class="w-9 border rounded text-center py-0.5 bg-white text-[11px]">` : '-'}</td><td class="py-1.5 text-center"><input type="radio" name="${cond.id}" value="Klarälvskök" ${current.responsibility === 'Klarälvskök' ? 'checked' : ''} onclick="toggleConditionResponsibility('${cond.id}', 'Klarälvskök')" class="w-3.5 h-3.5 cursor-pointer"></td><td class="py-1.5 text-center"><input type="radio" name="${cond.id}" value="Kund" ${current.responsibility === 'Kund' ? 'checked' : ''} onclick="toggleConditionResponsibility('${cond.id}', 'Kund')" class="w-3.5 h-3.5 cursor-pointer"></td><td class="py-1.5 text-right pr-1">${priceCell}</td></tr>`;
+            });
+        }
+        function toggleConditionResponsibility(id, val) { if (selectedConditions[id].responsibility === val) selectedConditions[id].responsibility = ''; else selectedConditions[id].responsibility = val; renderConditions(); renderCart(); }
+        function updateConditionQty(id, val) { selectedConditions[id].qty = parseInt(val) || 1; renderConditions(); renderCart(); }
+        function updateConditionPrice(id, val) { selectedConditions[id].customPrice = parseFloat(val) || 0; renderConditions(); renderCart(); }
+        function updateQty(index, newQty) { if(newQty < 1) quoteCart.splice(index, 1); else quoteCart[index].qty = parseInt(newQty); renderCart(); }
+        function updateDiscount(index, newDiscount) { let val = parseFloat(newDiscount) || 0; quoteCart[index].discount = Math.min(100, Math.max(0, val)); renderCart(); }
+        function removeRow(index) { quoteCart.splice(index, 1); renderCart(); }
+        function toggleCustomColor() { const s = document.getElementById('colorSelect'); const c = document.getElementById('colorCustom'); if(s.value === 'Valfri NCS-kod') c.classList.remove('hidden'); else { c.classList.add('hidden'); c.value = ''; } }
+
+        function renderCart() {
+            const list = document.getElementById('quoteItemsList');
+            const globalDiscountVal = parseFloat(document.getElementById('globalDiscount').value) || 0; const globalDiscountType = document.getElementById('globalDiscountType').value;
+            const startFeeProduct = parseFloat(document.getElementById('startFeeProduct').value) || 0; const startFeeNonRot = parseFloat(document.getElementById('startFeeNonRot').value) || 0; const startFeeRotComp = parseFloat(document.getElementById('startFeeRotComp').value) || 0; const startFeeRotInst = parseFloat(document.getElementById('startFeeRotInst').value) || 0; const colorFee = parseFloat(document.getElementById('feeColor').value) || 0;
+            const useRot = document.getElementById('useRotCheckbox').checked;
+            
+            list.innerHTML = quoteCart.length === 0 ? '<p class="text-center text-gray-400 py-6 italic text-xs">Korgen är tom.</p>' : '';
+            let totalMaterialBeforeGlobalDiscount = 0, totalRotInstallIncVat = 0, totalNonRotInstallIncVat = 0, totalCompanyCut = 0, totalInstallerCut = 0;
+
+            quoteCart.forEach((item, index) => {
+                const rowMaterialTotal = (item.priceIncVat * (1 - (item.discount / 100))) * item.qty; const rowInstallTotal = item.installIncVat * item.qty;
+                totalMaterialBeforeGlobalDiscount += rowMaterialTotal; totalRotInstallIncVat += rowInstallTotal; 
+                totalCompanyCut += (item.companyShare || 0) * item.qty; totalInstallerCut += (item.installerShare || 0) * item.qty;
+
+                let drawingBtn = '';
+                if (item.drawingSvg) {
+                    drawingBtn = `<button onclick="viewCartDrawing(${index})" class="mt-1 text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold hover:bg-blue-200 transition"><i class="fas fa-image mr-1"></i> Visa ritning</button>`;
+                }
+
+                list.innerHTML += `
+                    <div class="bg-white p-2.5 rounded border border-gray-200 text-xs shadow-sm">
+                        <div class="flex justify-between items-start mb-1">
+                            <div class="w-10/12">
+                                <h5 class="font-bold text-gray-800 leading-tight">${item.name}</h5>
+                                <span class="text-[9px] text-gray-400 font-mono">${item.sku}</span>
+                                ${drawingBtn}
+                            </div>
+                            <button onclick="removeRow(${index})" class="text-red-400 hover:text-red-600 px-1"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="flex justify-between items-center mt-1.5 gap-1.5">
+                            <div class="flex items-center border rounded bg-gray-50"><button onclick="updateQty(${index}, ${item.qty - 1})" class="px-1.5 py-0.5 hover:bg-gray-200">-</button><span class="w-6 text-center font-medium">${item.qty}</span><button onclick="updateQty(${index}, ${item.qty + 1})" class="px-1.5 py-0.5 hover:bg-gray-200">+</button></div>
+                            <div class="flex items-center text-[11px]"><label class="text-gray-400 mr-0.5">Rabatt:</label><input type="number" value="${item.discount}" onchange="updateDiscount(${index}, this.value)" class="w-9 border rounded py-0.5 text-center text-red-500 font-bold">%</div>
+                            <div class="text-right flex-1 font-semibold text-gray-800">${rowMaterialTotal.toLocaleString('sv-SE', {minimumFractionDigits:2, maximumFractionDigits:2})} kr</div>
+                        </div>
+                    </div>`;
+            });
+
+            conditionsList.forEach(cond => {
+                const current = selectedConditions[cond.id];
+                if (current && current.responsibility === 'Klarälvskök') {
+                    const unitPrice = cond.hasCustomPrice ? (parseFloat(current.customPrice) || 0) : cond.price;
+                    if (unitPrice > 0) {
+                        const qty = cond.hasQty ? current.qty : 1; const rowTotal = unitPrice * qty; const instCut = cond.installerCut * qty;
+                        if(cond.isRot) totalRotInstallIncVat += rowTotal; else totalNonRotInstallIncVat += rowTotal;
+                        totalInstallerCut += instCut; totalCompanyCut += (rowTotal - instCut);
+                    }
+                }
+            });
+
+            totalMaterialBeforeGlobalDiscount += startFeeProduct + colorFee; totalCompanyCut += startFeeProduct + colorFee + startFeeNonRot + startFeeRotComp;
+            totalNonRotInstallIncVat += startFeeNonRot; totalRotInstallIncVat += (startFeeRotComp + startFeeRotInst); totalInstallerCut += startFeeRotInst;
+            
+            let globalDiscountAmount = globalDiscountType === '%' ? totalMaterialBeforeGlobalDiscount * (globalDiscountVal / 100) : globalDiscountVal;
+            let totalMaterialIncVat = Math.max(0, totalMaterialBeforeGlobalDiscount - globalDiscountAmount);
+            const rotDeduction = useRot ? (totalRotInstallIncVat * 0.30) : 0; const finalToPay = totalMaterialIncVat + totalRotInstallIncVat + totalNonRotInstallIncVat - rotDeduction;
+
+            document.getElementById('sumMaterialEx').innerText = (totalMaterialIncVat/1.25).toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumNonRotServices').innerText = totalNonRotInstallIncVat.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumInstall').innerText = totalRotInstallIncVat.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumVat').innerText = ((totalMaterialIncVat+totalRotInstallIncVat+totalNonRotInstallIncVat)-(totalMaterialIncVat/1.25)-(totalRotInstallIncVat/1.25)-(totalNonRotInstallIncVat/1.25)).toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumRot').innerText = '- ' + rotDeduction.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumTotal').innerText = finalToPay.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumCompanyCut').innerText = totalCompanyCut.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumInstallerCut').innerText = totalInstallerCut.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
+        }
+
+        fetchCountertopConfig();
+        fetchDoorModels();
+        fetchProducts().then(() => loadQuoteData());
+    </script>
+</body>
+</html>

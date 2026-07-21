@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Montage & Kalender - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <div id="sidebar-container" class="shrink-0"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto p-4 md:p-6 lg:p-8 w-full max-w-full">
+        <div class="mb-6">
+            <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Montage & Planering</h2>
+            <p class="text-xs md:text-sm text-gray-500 mt-1">Kalender, datumhantering och checklistor för produktion</p>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div class="xl:col-span-1 bg-white p-4 rounded-lg shadow-sm border border-gray-200 h-[600px] flex flex-col">
+                <h3 class="font-bold text-gray-800 border-b pb-2 mb-3"><i class="fas fa-list-check text-blue-500 mr-2"></i> Aktiva Ordrar</h3>
+                <div id="orderList" class="flex-1 overflow-y-auto space-y-3 pr-2"></div>
+            </div>
+            <div class="xl:col-span-2 bg-white p-4 rounded-lg shadow-sm border border-gray-200 h-[600px]">
+                <div id="calendar" class="h-full"></div>
+            </div>
+        </div>
+
+        <div id="assemblyModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-2 md:p-6">
+            <div class="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col relative overflow-hidden">
+                <header class="p-4 bg-gray-900 text-white flex justify-between items-center shrink-0">
+                    <h3 class="font-bold text-lg" id="modalTitle">Montagehantering: ...</h3>
+                    <button onclick="closeModal()" class="text-gray-300 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+                </header>
+
+                <div class="flex flex-col md:flex-row flex-1 overflow-y-auto">
+                    <div class="w-full md:w-1/3 bg-gray-50 p-4 border-b md:border-b-0 md:border-r border-gray-200">
+                        <input type="hidden" id="manageOrderId">
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 mb-1">Beräknad från fabrik</label>
+                                <input type="date" id="dateFactory" class="w-full border rounded px-2 py-1.5 text-sm bg-white" disabled>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 mb-1">Planerad Montagestart</label>
+                                <input type="date" id="dateStart" class="w-full border rounded px-2 py-1.5 text-sm bg-white">
+                            </div>
+                            
+                            <div class="border-t border-gray-200 pt-4 mt-4">
+                                <label class="block text-xs font-bold text-gray-700 mb-1">Slutgiltig Status (Montör)</label>
+                                <select id="statusSelect" class="w-full border border-blue-300 bg-blue-50 text-blue-900 font-semibold rounded px-2 py-1.5 text-sm outline-none">
+                                    <option value="Ej påbörjad">Ej påbörjad</option>
+                                    <option value="Pågående">Pågående</option>
+                                    <option value="Monterad utan anmärkning">Monterad utan anmärkning</option>
+                                    <option value="Monterad m. anmärkning (Säljare OK)">Monterad m. anmärkning (Säljare OK)</option>
+                                    <option value="Monterad m. anmärkning (Ej godkänd)">Monterad m. anmärkning (Ej godkänd)</option>
+                                </select>
+                            </div>
+
+                            <button onclick="saveAssemblyStatus()" class="w-full bg-blue-600 text-white font-medium py-2 rounded shadow text-sm hover:bg-blue-700 mt-2">Spara Datum & Status</button>
+                            
+                            <a id="btnPdf" href="#" target="_blank" class="w-full mt-4 bg-gray-800 text-white font-medium py-2 rounded shadow text-sm hover:bg-gray-900 flex justify-center items-center">
+                                <i class="fas fa-file-pdf mr-2 text-red-400"></i> Skriv ut PDF (Checklista)
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="w-full md:w-2/3 bg-white p-4 flex flex-col">
+                        <h4 class="font-bold text-gray-800 mb-2 border-b pb-1 text-sm"><i class="fas fa-boxes text-blue-500 mr-2"></i> Digital Checklista (Artiklar)</h4>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse min-w-[500px]">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-[10px] text-gray-600 uppercase">
+                                        <th class="p-2 w-1/2">Artikel</th>
+                                        <th class="p-2 text-center" title="Levererad från Fabrik"><i class="fas fa-industry"></i> Fabr.</th>
+                                        <th class="p-2 text-center" title="Packad i bil"><i class="fas fa-truck"></i> Bil</th>
+                                        <th class="p-2 text-center" title="Monterad"><i class="fas fa-hammer"></i> Mont.</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="itemsTableBody" class="text-xs"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/menu.js"></script>
+    <script>
+        const userRole = localStorage.getItem('userRole');
+        const userId = localStorage.getItem('userId');
+        let calendar;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (userRole !== 'Montör') {
+                document.getElementById('dateFactory').disabled = false;
+            }
+
+            const calendarEl = document.getElementById('calendar');
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                locale: 'sv',
+                firstDay: 1, 
+                headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listWeek' },
+                buttonText: { today: 'Idag', month: 'Månad', list: 'Lista' },
+                events: [] 
+            });
+            calendar.render();
+            loadOrdersAndCalendar();
+        });
+
+        async function loadOrdersAndCalendar() {
+            try {
+                const query = userRole === 'Montör' ? `?installer_id=${userId}` : '';
+                const res = await fetch('/api/orders' + query);
+                const orders = await res.json();
+                
+                const list = document.getElementById('orderList');
+                list.innerHTML = '';
+                const events = [];
+
+                orders.forEach(o => {
+                    list.innerHTML += `
+                        <div class="p-3 border border-gray-200 rounded-md bg-gray-50 hover:bg-white hover:shadow-sm cursor-pointer transition" onclick="openManageModal(${o.id}, '${o.quote_name}')">
+                            <h4 class="font-bold text-gray-800 text-sm truncate">${o.quote_name}</h4>
+                            <div class="text-xs text-gray-500 mt-1 flex justify-between">
+                                <span>Montör: ${o.installer_name || 'Ej vald'}</span>
+                            </div>
+                        </div>
+                    `;
+
+                    if (o.factory_date) events.push({ title: `🏭 Fabrik: ${o.quote_name}`, start: o.factory_date, color: '#eab308' });
+                    if (o.assembly_start_date) events.push({ title: `🔨 Byggstart: ${o.quote_name}`, start: o.assembly_start_date, color: '#3b82f6' });
+                    if (o.assembly_completed_date && o.assembly_status.includes("Monterad")) {
+                        events.push({ title: `✅ Klar: ${o.quote_name}`, start: o.assembly_completed_date, color: o.assembly_status.includes("anmärkning") ? '#ef4444' : '#22c55e' });
+                    }
+                });
+
+                calendar.removeAllEvents();
+                calendar.addEventSource(events);
+            } catch (err) { console.error(err); }
+        }
+
+        async function openManageModal(orderId, name) {
+            document.getElementById('modalTitle').innerText = "Montagehantering: " + name;
+            document.getElementById('manageOrderId').value = orderId;
+            
+            // Koppla PDF-knappen direkt till serverns nya generator
+            document.getElementById('btnPdf').href = `/api/orders/${orderId}/assembly/pdf`;
+
+            try {
+                const res = await fetch(`/api/orders/${orderId}/assembly`);
+                const data = await res.json();
+                
+                if(data.quote) {
+                    document.getElementById('dateFactory').value = data.quote.factory_date ? data.quote.factory_date.split('T')[0] : '';
+                    document.getElementById('dateStart').value = data.quote.assembly_start_date ? data.quote.assembly_start_date.split('T')[0] : '';
+                    document.getElementById('statusSelect').value = data.quote.assembly_status || 'Ej påbörjad';
+                }
+
+                const tbody = document.getElementById('itemsTableBody');
+                tbody.innerHTML = '';
+                if (data.items.length === 0) tbody.innerHTML = '<tr><td colspan="4" class="text-center p-4 italic text-gray-400">Inga artiklar i ordern.</td></tr>';
+
+                data.items.forEach(i => {
+                    tbody.innerHTML += `
+                        <tr class="border-b border-gray-100 hover:bg-blue-50">
+                            <td class="p-2 py-3">
+                                <span class="font-bold text-gray-800 block leading-tight truncate w-48" title="${i.name}">${i.name}</span>
+                                <input type="text" value="${i.assembly_comment || ''}" placeholder="Skriv kommentar..." onblur="saveItem(${i.id}, this.parentElement.parentElement)" class="w-full mt-1 border border-gray-300 rounded px-2 py-1 text-[10px] bg-white italic item-comment">
+                            </td>
+                            <td class="p-2 text-center"><input type="checkbox" class="w-4 h-4 item-del" ${i.is_delivered ? 'checked':''} onchange="saveItem(${i.id}, this.parentElement.parentElement)"></td>
+                            <td class="p-2 text-center"><input type="checkbox" class="w-4 h-4 item-pack" ${i.is_packed ? 'checked':''} onchange="saveItem(${i.id}, this.parentElement.parentElement)"></td>
+                            <td class="p-2 text-center"><input type="checkbox" class="w-4 h-4 item-ass" ${i.is_assembled ? 'checked':''} onchange="saveItem(${i.id}, this.parentElement.parentElement)"></td>
+                        </tr>
+                    `;
+                });
+            } catch (err) { console.error(err); }
+            document.getElementById('assemblyModal').classList.remove('hidden');
+        }
+
+        async function saveAssemblyStatus() {
+            const orderId = document.getElementById('manageOrderId').value;
+            const status = document.getElementById('statusSelect').value;
+            const payload = {
+                factory_date: document.getElementById('dateFactory').value || null,
+                assembly_start_date: document.getElementById('dateStart').value || null,
+                assembly_status: status,
+                assembly_completed_date: status.includes("Monterad") ? new Date().toISOString().split('T')[0] : null
+            };
+            const res = await fetch(`/api/orders/${orderId}/assembly/status`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+            if (res.ok) { alert("Sparat!"); loadOrdersAndCalendar(); }
+        }
+
+        function saveItem(itemId, rowElement) {
+            const payload = {
+                is_delivered: rowElement.querySelector('.item-del').checked,
+                is_packed: rowElement.querySelector('.item-pack').checked,
+                is_assembled: rowElement.querySelector('.item-ass').checked,
+                assembly_comment: rowElement.querySelector('.item-comment').value
+            };
+            fetch(`/api/orders/assembly/item/${itemId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+        }
+
+        function closeModal() { document.getElementById('assemblyModal').classList.add('hidden'); }
+    </script>
+</body>
+</html>

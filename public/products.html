@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Produkter - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <div id="sidebar-container" class="shrink-0"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto p-4 md:p-6 lg:p-8 w-full max-w-full relative">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <div>
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Produkthanterare</h2>
+                <p class="text-xs md:text-sm text-gray-500 mt-1">Hantera sortiment, priser och importera CSV</p>
+            </div>
+            <div class="flex w-full sm:w-auto gap-2">
+                <input type="file" id="csvFileInput" accept=".csv" class="hidden">
+                <button onclick="document.getElementById('csvFileInput').click()" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
+                    <i class="fas fa-file-csv mr-2 text-green-400"></i> Importera CSV
+                </button>
+                <button onclick="openProductModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
+                    <i class="fas fa-plus mr-2"></i> Ny Produkt
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden flex flex-col min-h-[50vh]">
+            <div class="p-4 border-b border-gray-100 flex gap-2 items-center bg-gray-50">
+                <div class="relative flex-1 max-w-sm">
+                    <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
+                    <input type="text" id="searchInput" placeholder="Sök artikel..." class="w-full pl-9 pr-4 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500">
+                </div>
+                <select id="catFilter" class="border border-gray-300 rounded px-3 py-1.5 text-sm outline-none bg-white">
+                    <option value="">Alla kategorier</option>
+                </select>
+            </div>
+            
+            <div class="overflow-x-auto flex-1">
+                <table class="w-full text-left border-collapse min-w-[800px]">
+                    <thead>
+                        <tr class="bg-gray-50 border-b border-gray-200 text-xs text-gray-600 uppercase">
+                            <th class="p-3">Bild</th>
+                            <th class="p-3">Artikel & SKU</th>
+                            <th class="p-3">Kategori</th>
+                            <th class="p-3 text-right">Pris (Material)</th>
+                            <th class="p-3 text-right">Pris (Montage)</th>
+                            <th class="p-3 text-right">Åtgärd</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productTableBody" class="text-sm"></tbody>
+                </table>
+            </div>
+            <div id="paginationControls" class="p-3 bg-gray-50 border-t border-gray-200 flex justify-between items-center text-sm text-gray-600"></div>
+        </div>
+    </main>
+
+    <div id="productModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 overflow-y-auto">
+        <div class="bg-white p-5 md:p-6 rounded-lg shadow-xl w-full max-w-4xl my-auto max-h-[95vh] flex flex-col">
+            <h3 class="text-lg font-bold mb-4 border-b pb-2 text-gray-700 shrink-0" id="modalTitle">Lägg till produkt</h3>
+            
+            <form id="productForm" class="space-y-4 overflow-y-auto flex-1 pr-2">
+                <input type="hidden" id="pId">
+                <input type="hidden" id="pRemoveMainImage" value="false">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-medium text-gray-700">Namn (Huvudprodukt) *</label>
+                        <input type="text" id="pName" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700">Kategori</label>
+                        <input type="text" id="pCategory" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm" list="catList">
+                        <datalist id="catList"></datalist>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700">Varumärke / Tillverkare</label>
+                        <input type="text" id="pBrand" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                    </div>
+
+                    <div class="md:col-span-2 bg-blue-50 border border-blue-200 rounded p-4 mt-2">
+                        <label class="flex items-center gap-2 cursor-pointer mb-3">
+                            <input type="checkbox" id="pHasVariations" onchange="toggleVariationsUI()" class="w-5 h-5 text-blue-600 rounded">
+                            <span class="font-bold text-blue-900">Denna produkt har varianter (t.ex. Storlek och Färg)</span>
+                        </label>
+
+                        <div id="standardProductUI" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="md:col-span-2 border-t border-blue-100 pt-3">
+                                <label class="block text-xs font-medium text-gray-700">Artikelnummer (SKU) *</label>
+                                <input type="text" id="pSku" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Försäljningspris Material (Inkl moms)</label>
+                                <input type="number" id="pPrice" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Försäljningspris Montage (Inkl moms)</label>
+                                <input type="number" id="pInstall" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Montörens del av montage</label>
+                                <input type="number" id="pInstallerShare" value="0" class="mt-1 w-full px-3 py-2 border border-purple-300 bg-purple-50 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Ert Inköpspris (Valfritt)</label>
+                                <input type="number" id="pPurchase" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Leverantör</label>
+                                <select id="pSupplier" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white">
+                                    <option value="">-- Ingen vald --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Tillhör dörrmodell</label>
+                                <p class="text-[10px] text-gray-400 mb-1">Endast för luckor/fronter som säljs som egen produkt. Filtreras fram i offertbyggaren när kunden valt denna modell.</p>
+                                <select id="pDoorModel" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white">
+                                    <option value="">-- Ingen (visas alltid) --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="variationsUI" class="hidden flex-col gap-3 border-t border-blue-200 pt-3">
+                            <div class="flex gap-4 mb-2">
+                                <div class="flex-1">
+                                    <label class="block text-[10px] uppercase font-bold text-gray-500">Variabel 1 (T.ex "Färg")</label>
+                                    <input type="text" id="varName1" placeholder="Namn på variabel 1..." oninput="updateVariationHeaders()" class="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="block text-[10px] uppercase font-bold text-gray-500">Variabel 2 (T.ex "Storlek")</label>
+                                    <input type="text" id="varName2" placeholder="Namn på variabel 2..." oninput="updateVariationHeaders()" class="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm">
+                                </div>
+                            </div>
+                            
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-xs border border-gray-200 bg-white">
+                                    <thead class="bg-gray-100 text-gray-600">
+                                        <tr>
+                                            <th class="p-2 border-b w-32">SKU</th>
+                                            <th class="p-2 border-b" id="varHead1">Variabel 1</th>
+                                            <th class="p-2 border-b" id="varHead2">Variabel 2</th>
+                                            <th class="p-2 border-b w-20">Pris (Mat)</th>
+                                            <th class="p-2 border-b w-20">Pris (Mont)</th>
+                                            <th class="p-2 border-b w-20">Montör Del</th>
+                                            <th class="p-2 border-b w-10 text-center"><i class="fas fa-cog"></i></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="variationsTableBody">
+                                        </tbody>
+                                </table>
+                            </div>
+                            <button type="button" onclick="addVariationRow()" class="self-start text-xs bg-gray-800 text-white px-3 py-1.5 rounded hover:bg-gray-900 mt-1">+ Lägg till variant</button>
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-2 border-t border-blue-200 pt-3 mt-1">
+                        <h4 class="text-xs font-bold text-gray-700 mb-2">STOMMENS MÅTT &amp; AUTOMATISK FRONTBERÄKNING</h4>
+                        <p class="text-[11px] text-gray-500 mb-3">Gäller skåpstommar. Om måtten och en frontkonfiguration anges här räknas lucka/lådfronter automatiskt ut och läggs till offerten när skåpet väljs. Har produkten varianter (t.ex. Legrabox/Basic per bredd) används höjden nedan tillsammans med breddvärdet från vald variant istället för "Stommens bredd" - fyll ändå i ett bredd-värde nedan som reserv om ingen variant matchar.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Stommens höjd (mm)</label>
+                                <input type="number" id="pStommeHeight" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Stommens bredd (mm)</label>
+                                <input type="number" id="pStommeWidth" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Stommens djup (mm)</label>
+                                <input type="number" id="pStommeDepth" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700">Frontkonfiguration</label>
+                            <select id="pFrontType" onchange="toggleFrontConfigUI()" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white">
+                                <option value="">Ingen (tomt skåp / hanteras manuellt)</option>
+                                <option value="door">Lucka (1 st, höjd stomme-6, bredd stomme-4)</option>
+                                <option value="drawers2">2 lådfronter (lika höga)</option>
+                                <option value="drawers3">3 lådfronter (135 / 273 / rest)</option>
+                                <option value="drawers4">4 lådfronter (135x3 / rest)</option>
+                                <option value="drawers5">5 lådfronter (135x4 / rest)</option>
+                                <option value="fixed135_1">1 fast lådfront (135mm)</option>
+                                <option value="fixed135_2">2 fasta lådfronter (135mm vardera)</option>
+                                <option value="custom">Anpassad (ange manuellt nedan)</option>
+                            </select>
+                        </div>
+                        <div id="customFrontWrap" class="hidden mt-2">
+                            <label class="block text-xs font-medium text-gray-700">Anpassade fronter (JSON-array)</label>
+                            <textarea id="pFrontCustomJson" rows="2" placeholder='[{&quot;height&quot;:379},{&quot;height&quot;:576}]' class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-xs font-mono"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-2 border-t pt-3 mt-1">
+                        <h4 class="text-xs font-bold text-gray-500 mb-2">BILDER</h4>
+                    </div>
+
+                    <div class="md:col-span-2 bg-gray-50 border border-gray-200 px-4 py-3 rounded">
+                        <h4 class="text-xs font-bold text-gray-700 mb-2">HUVUDBILD</h4>
+                        <div id="currentMainImageContainer" class="hidden mb-3 flex items-start gap-4">
+                            <img id="currentMainImagePreview" src="" class="w-16 h-16 object-contain bg-white border border-gray-300 rounded shadow-sm">
+                            <div>
+                                <button type="button" onclick="markMainImageForRemoval()" class="text-[10px] bg-red-100 text-red-600 px-2 py-1 rounded font-bold hover:bg-red-200 transition border border-red-200">
+                                    <i class="fas fa-trash mr-1"></i> Ta bort
+                                </button>
+                            </div>
+                        </div>
+                        <input type="file" id="pMainImage" accept=".jpg,.jpeg,.png,.webp" class="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-gray-800 file:text-white hover:file:bg-gray-900">
+                    </div>
+
+                    <div class="md:col-span-2 bg-gray-50 border border-gray-200 px-4 py-3 rounded">
+                        <h4 class="text-xs font-bold text-gray-700 mb-2">GALLERI</h4>
+                        <div id="currentGalleryContainer" class="mb-3 flex flex-wrap gap-3"></div>
+                        <input type="file" id="pGalleryImages" multiple accept=".jpg,.jpeg,.png,.webp" class="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-gray-800 file:text-white hover:file:bg-gray-900">
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-medium text-gray-700">Beskrivning</label>
+                        <textarea id="pDesc" rows="3" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm"></textarea>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-4 mt-4 border-t border-gray-100 pb-2">
+                    <button type="button" onclick="document.getElementById('productModal').classList.add('hidden')" class="px-4 py-2 bg-gray-200 rounded text-sm font-medium hover:bg-gray-300">Avbryt</button>
+                    <button type="submit" id="saveBtn" class="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700">Spara Produkt</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/menu.js"></script>
+    <script>
+        let allProducts = [];
+        let filteredProducts = [];
+        let currentPage = 1;
+        const rowsPerPage = 20;
+        let currentGalleryUrls = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchProducts();
+            fetchSuppliersForDropdown();
+            fetchDoorModelsForDropdown();
+            document.getElementById('searchInput').addEventListener('input', applyFilters);
+            document.getElementById('catFilter').addEventListener('change', applyFilters);
+            
+document.getElementById('csvFileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+        delimiter: ";", // Tvingar semikolon
+        header: true,
+        skipEmptyLines: true,
+        complete: async function(results) {
+            if(results.data && results.data.length > 0) {
+                
+                let rawData = results.data;
+                let formattedProducts = [];
+                let parentMap = {}; // Används för att para ihop varianter med sin huvudprodukt
+
+                // 1. Skapa alla huvudprodukter ("simple" och "variable")
+                rawData.forEach(row => {
+                    const type = (row['Type'] || row['Typ'] || '').toLowerCase().trim();
+                    
+                    if (type === 'simple' || type === 'variable' || type === '') {
+                        let p = {
+                            name: row['Name'] || row['Namn'] || 'Okänd',
+                            sku: row['SKU'] || row['Artikelnummer'] || '',
+                            description: row['Description'] || row['Beskrivning'] || '',
+                            category: row['Categories'] || row['Kategorier'] || '',
+                            brand: row['Varumärke'] || row['Brand'] || '',  // <-- LÄGG TILL DENNA RAD!
+                            standard_price: parseFloat(row['Regular price'] || row['Ordinarie pris'] || 0),
+                            image_url: row['Images'] || row['Bilder'] || '',
+                            has_variations: type === 'variable',
+                            variations: []
+                        };
+                        
+                        if (p.sku) parentMap[p.sku] = p; // Spara referens så vi hittar den
+                        formattedProducts.push(p);
+                    }
+                });
+
+                // 2. Skapa varianterna och baka in dem i rätt huvudprodukt
+                rawData.forEach(row => {
+                    const type = (row['Type'] || row['Typ'] || '').toLowerCase().trim();
+                    
+                    if (type === 'variation') {
+                        // WooCommerce anger förälderns SKU i kolumnen "Parent" eller "Förälder"
+                        const parentSku = row['Parent'] || row['Förälder'] || row['Parent SKU'] || ''; 
+                        let parent = parentMap[parentSku];
+
+                        if (parent) {
+                            parent.has_variations = true;
+                            parent.variations.push({
+                                sku: row['SKU'] || row['Artikelnummer'] || '',
+                                price: parseFloat(row['Regular price'] || row['Ordinarie pris'] || 0),
+                                install_price: 0,
+                                installer_share: 0,
+                                attr1_name: row['Attribute 1 name'] || row['Egenskap 1 namn'] || 'Alternativ 1',
+                                attr1_value: row['Attribute 1 value(s)'] || row['Egenskap 1 värde(n)'] || '',
+                                attr2_name: row['Attribute 2 name'] || row['Egenskap 2 namn'] || '',
+                                attr2_value: row['Attribute 2 value(s)'] || row['Egenskap 2 värde(n)'] || ''
+                            });
+                        }
+                    }
+                });
+
+                if(!confirm(`Strukturerade ihop filen till ${formattedProducts.length} unika huvudprodukter (inkl. deras varianter). Importera?`)) return;
+                
+                try {
+                    const res = await fetch('/api/products/bulk', {
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify(formattedProducts)
+                    });
+                    const data = await res.json();
+                    alert(data.message);
+                    fetchProducts();
+                } catch(err) { alert("Fel vid CSV-import."); }
+            }
+        }
+    });
+    e.target.value = '';
+});
+        });
+
+        async function fetchProducts() {
+            try {
+                const res = await fetch('/api/products');
+                allProducts = await res.json();
+                const cats = [...new Set(allProducts.map(p => p.category).filter(c => c))];
+                const catSelect = document.getElementById('catFilter');
+                const catList = document.getElementById('catList');
+                catSelect.innerHTML = '<option value="">Alla kategorier</option>';
+                catList.innerHTML = '';
+                cats.forEach(c => { catSelect.innerHTML += `<option value="${c}">${c}</option>`; catList.innerHTML += `<option value="${c}">`; });
+                applyFilters();
+            } catch (err) { console.error(err); }
+        }
+
+        function applyFilters() {
+            const term = document.getElementById('searchInput').value.toLowerCase();
+            const cat = document.getElementById('catFilter').value;
+            filteredProducts = allProducts.filter(p => (p.name.toLowerCase().includes(term) || (p.sku && p.sku.toLowerCase().includes(term))) && (cat === "" || p.category === cat));
+            currentPage = 1; renderTable();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('productTableBody');
+            const pagination = document.getElementById('paginationControls');
+            tbody.innerHTML = '';
+
+            const totalPages = Math.ceil(filteredProducts.length / rowsPerPage);
+            const start = (currentPage - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+            const paginated = filteredProducts.slice(start, end);
+
+            paginated.forEach(p => {
+                const img = p.image_url ? `<img src="${p.image_url}" class="w-10 h-10 object-contain rounded border bg-white">` : `<div class="w-10 h-10 bg-gray-100 rounded border flex items-center justify-center text-gray-400 text-xs"><i class="fas fa-image"></i></div>`;
+                const isVar = p.has_variations === 1;
+                let varText = isVar ? `<span class="bg-blue-100 text-blue-800 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ml-2">Variabel Produkt</span>` : '';
+                
+                tbody.innerHTML += `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
+                        <td class="p-3 w-14">${img}</td>
+                        <td class="p-3">
+                            <span class="font-bold text-gray-800 flex items-center">${p.name} ${varText}</span>
+                            <span class="text-xs text-gray-400 font-mono">${isVar ? 'Flera SKU:s' : p.sku}</span>
+                        </td>
+                        <td class="p-3 text-gray-600 text-sm">${p.category || '-'}</td>
+                        <td class="p-3 text-right font-medium">${isVar ? '-' : (parseFloat(p.standard_price)||0).toLocaleString() + ' kr'}</td>
+                        <td class="p-3 text-right font-medium text-purple-600">${isVar ? '-' : (parseFloat(p.installation_price)||0).toLocaleString() + ' kr'}</td>
+                        <td class="p-3 text-right whitespace-nowrap">
+                            <button onclick='openProductModal(${JSON.stringify(p).replace(/'/g, "&#39;")})' class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-medium transition mr-1"><i class="fas fa-edit"></i></button>
+                            <button onclick="deleteProduct(${p.id})" class="text-red-400 hover:text-red-600 px-2"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            pagination.innerHTML = `<span>Visar ${start + 1}-${Math.min(end, filteredProducts.length)} av ${filteredProducts.length}</span><div class="space-x-1"><button onclick="changePage(-1)" class="px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50" ${currentPage===1?'disabled':''}>Föregående</button><button onclick="changePage(1)" class="px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50" ${currentPage>=totalPages?'disabled':''}>Nästa</button></div>`;
+        }
+
+        function changePage(dir) { currentPage += dir; renderTable(); }
+
+        function markMainImageForRemoval() {
+            document.getElementById('currentMainImageContainer').classList.add('hidden');
+            document.getElementById('pRemoveMainImage').value = 'true';
+            document.getElementById('pMainImage').value = '';
+        }
+
+        function removeGalleryImage(index) { currentGalleryUrls.splice(index, 1); renderGalleryPreview(); }
+
+        function renderGalleryPreview() {
+            const container = document.getElementById('currentGalleryContainer'); container.innerHTML = '';
+            if (currentGalleryUrls.length === 0) { container.innerHTML = '<p class="text-[10px] text-gray-400 italic">Inga bilder i galleriet.</p>'; return; }
+            currentGalleryUrls.forEach((url, idx) => {
+                container.innerHTML += `<div class="relative inline-block border border-gray-200 rounded p-1 bg-white shadow-sm"><img src="${url}" class="w-12 h-12 object-contain"><button type="button" onclick="removeGalleryImage(${idx})" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] hover:bg-red-600 shadow-md"><i class="fas fa-times"></i></button></div>`;
+            });
+        }
+
+        function toggleVariationsUI() {
+            const hasVar = document.getElementById('pHasVariations').checked;
+            if (hasVar) {
+                document.getElementById('standardProductUI').classList.add('hidden');
+                document.getElementById('variationsUI').classList.remove('hidden');
+                document.getElementById('variationsUI').classList.add('flex');
+            } else {
+                document.getElementById('standardProductUI').classList.remove('hidden');
+                document.getElementById('variationsUI').classList.add('hidden');
+                document.getElementById('variationsUI').classList.remove('flex');
+            }
+        }
+
+        function toggleFrontConfigUI() {
+            const type = document.getElementById('pFrontType').value;
+            document.getElementById('customFrontWrap').classList.toggle('hidden', type !== 'custom');
+        }
+
+        function buildFrontLayoutJson() {
+            const type = document.getElementById('pFrontType').value;
+            if (!type) return '';
+            if (type === 'door') return JSON.stringify({ type: 'door' });
+            if (type === 'drawers2') return JSON.stringify({ type: 'drawers', count: 2 });
+            if (type === 'drawers3') return JSON.stringify({ type: 'drawers', count: 3 });
+            if (type === 'drawers4') return JSON.stringify({ type: 'drawers', count: 4 });
+            if (type === 'drawers5') return JSON.stringify({ type: 'drawers', count: 5 });
+            if (type === 'fixed135_1') return JSON.stringify({ type: 'fixed135', count: 1 });
+            if (type === 'fixed135_2') return JSON.stringify({ type: 'fixed135', count: 2 });
+            if (type === 'custom') {
+                try {
+                    const fronts = JSON.parse(document.getElementById('pFrontCustomJson').value || '[]');
+                    return JSON.stringify({ type: 'custom', fronts });
+                } catch (e) { alert('Ogiltig JSON i "Anpassade fronter" - kontrollera formatet.'); return null; }
+            }
+            return '';
+        }
+
+        function loadFrontLayoutIntoForm(frontLayoutRaw) {
+            document.getElementById('pFrontType').value = '';
+            document.getElementById('pFrontCustomJson').value = '';
+            if (!frontLayoutRaw) { toggleFrontConfigUI(); return; }
+            try {
+                const fl = JSON.parse(frontLayoutRaw);
+                if (fl.type === 'door') document.getElementById('pFrontType').value = 'door';
+                else if (fl.type === 'drawers') document.getElementById('pFrontType').value = 'drawers' + fl.count;
+                else if (fl.type === 'fixed135') document.getElementById('pFrontType').value = 'fixed135_' + fl.count;
+                else if (fl.type === 'custom') { document.getElementById('pFrontType').value = 'custom'; document.getElementById('pFrontCustomJson').value = JSON.stringify(fl.fronts || []); }
+            } catch (e) {}
+            toggleFrontConfigUI();
+        }
+
+        function updateVariationHeaders() {
+            const v1 = document.getElementById('varName1').value || 'Variabel 1';
+            const v2 = document.getElementById('varName2').value || 'Variabel 2';
+            document.getElementById('varHead1').innerText = v1;
+            document.getElementById('varHead2').innerText = v2;
+        }
+
+        function addVariationRow(v = {}) {
+            const tbody = document.getElementById('variationsTableBody');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="p-1 border-b"><input type="text" class="v-sku w-full px-1 py-1 border rounded" value="${v.sku || ''}"></td>
+                <td class="p-1 border-b"><input type="text" class="v-attr1 w-full px-1 py-1 border rounded" value="${v.attr1_value || ''}"></td>
+                <td class="p-1 border-b"><input type="text" class="v-attr2 w-full px-1 py-1 border rounded" value="${v.attr2_value || ''}"></td>
+                <td class="p-1 border-b"><input type="number" class="v-price w-full px-1 py-1 border rounded text-right" value="${v.price || 0}"></td>
+                <td class="p-1 border-b"><input type="number" class="v-install w-full px-1 py-1 border rounded text-right" value="${v.install_price || 0}"></td>
+                <td class="p-1 border-b"><input type="number" class="v-share w-full px-1 py-1 border border-purple-200 bg-purple-50 rounded text-right" value="${v.installer_share || 0}"></td>
+                <td class="p-1 border-b text-center"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600"><i class="fas fa-trash"></i></button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        function openProductModal(p = null) {
+            document.getElementById('productForm').reset();
+            document.getElementById('productModal').classList.remove('hidden');
+            document.getElementById('pRemoveMainImage').value = 'false';
+            document.getElementById('variationsTableBody').innerHTML = '';
+            
+            const mainContainer = document.getElementById('currentMainImageContainer');
+
+            if (p) {
+                document.getElementById('modalTitle').innerText = "Ändra produkt";
+                document.getElementById('pId').value = p.id;
+                document.getElementById('pName').value = p.name;
+                document.getElementById('pSku').value = p.sku || '';
+                document.getElementById('pCategory').value = p.category || '';
+                document.getElementById('pBrand').value = p.brand || '';
+                document.getElementById('pPrice').value = p.standard_price || 0;
+                document.getElementById('pInstall').value = p.installation_price || 0;
+                document.getElementById('pInstallerShare').value = p.installer_share || 0;
+                document.getElementById('pPurchase').value = p.purchase_price || 0;
+                document.getElementById('pSupplier').value = p.supplier_id || '';
+                document.getElementById('pDoorModel').value = p.door_model_id || '';
+                document.getElementById('pStommeHeight').value = p.height || 0;
+                document.getElementById('pStommeWidth').value = p.width || 0;
+                document.getElementById('pStommeDepth').value = p.length || 0;
+                loadFrontLayoutIntoForm(p.front_layout);
+                document.getElementById('pDesc').value = p.description || '';
+                
+                if (p.image_url) { document.getElementById('currentMainImagePreview').src = p.image_url; mainContainer.classList.remove('hidden'); } 
+                else { mainContainer.classList.add('hidden'); }
+
+                try { currentGalleryUrls = JSON.parse(p.gallery || '[]'); } catch(e) { currentGalleryUrls = []; }
+
+                // Ladda varianter om det finns
+                if (p.has_variations === 1) {
+                    document.getElementById('pHasVariations').checked = true;
+                    try {
+                        const vars = JSON.parse(p.variations || '[]');
+                        if(vars.length > 0) {
+                            document.getElementById('varName1').value = vars[0].attr1_name || '';
+                            document.getElementById('varName2').value = vars[0].attr2_name || '';
+                            updateVariationHeaders();
+                            vars.forEach(v => addVariationRow(v));
+                        } else {
+                            addVariationRow(); // Tom rad
+                        }
+                    } catch(e) { addVariationRow(); }
+                } else {
+                    document.getElementById('pHasVariations').checked = false;
+                    addVariationRow();
+                }
+
+            } else {
+                document.getElementById('modalTitle').innerText = "Lägg till produkt";
+                document.getElementById('pId').value = '';
+                document.getElementById('pSupplier').value = '';
+                document.getElementById('pDoorModel').value = '';
+                document.getElementById('pStommeHeight').value = 0;
+                document.getElementById('pStommeWidth').value = 0;
+                document.getElementById('pStommeDepth').value = 0;
+                loadFrontLayoutIntoForm(null);
+                mainContainer.classList.add('hidden');
+                currentGalleryUrls = [];
+                document.getElementById('pHasVariations').checked = false;
+                document.getElementById('varName1').value = '';
+                document.getElementById('varName2').value = '';
+                updateVariationHeaders();
+                addVariationRow();
+            }
+            
+            toggleVariationsUI();
+            renderGalleryPreview();
+        }
+
+        document.getElementById('productForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('id', document.getElementById('pId').value);
+            formData.append('name', document.getElementById('pName').value);
+            formData.append('category', document.getElementById('pCategory').value);
+            formData.append('brand', document.getElementById('pBrand').value);
+            formData.append('description', document.getElementById('pDesc').value);
+            formData.append('remove_main_image', document.getElementById('pRemoveMainImage').value);
+            formData.append('retained_gallery', JSON.stringify(currentGalleryUrls));
+            formData.append('height', document.getElementById('pStommeHeight').value || 0);
+            formData.append('width', document.getElementById('pStommeWidth').value || 0);
+            formData.append('length', document.getElementById('pStommeDepth').value || 0);
+            const frontLayoutJson = buildFrontLayoutJson();
+            if (frontLayoutJson === null) return; // ogiltig anpassad JSON, avbryt sparning
+            formData.append('front_layout', frontLayoutJson);
+            formData.append('supplier_id', document.getElementById('pSupplier').value);
+            formData.append('door_model_id', document.getElementById('pDoorModel').value);
+
+            const hasVar = document.getElementById('pHasVariations').checked;
+            formData.append('has_variations', hasVar);
+
+            if (hasVar) {
+                // Bygg ihop varianterna till en JSON-array
+                const attr1Name = document.getElementById('varName1').value || 'Variabel 1';
+                const attr2Name = document.getElementById('varName2').value || 'Variabel 2';
+                const rows = document.querySelectorAll('#variationsTableBody tr');
+                let variationsArray = [];
+                
+                rows.forEach(row => {
+                    const sku = row.querySelector('.v-sku').value;
+                    if(sku) { // Sparar bara om det finns ett SKU
+                        variationsArray.push({
+                            sku: sku,
+                            attr1_name: attr1Name,
+                            attr1_value: row.querySelector('.v-attr1').value,
+                            attr2_name: attr2Name,
+                            attr2_value: row.querySelector('.v-attr2').value,
+                            price: parseFloat(row.querySelector('.v-price').value) || 0,
+                            install_price: parseFloat(row.querySelector('.v-install').value) || 0,
+                            installer_share: parseFloat(row.querySelector('.v-share').value) || 0
+                        });
+                    }
+                });
+                
+                formData.append('variations', JSON.stringify(variationsArray));
+                
+                // Nollställ bas-priserna
+                formData.append('sku', '');
+                formData.append('standard_price', 0);
+                formData.append('installation_price', 0);
+                formData.append('installer_share', 0);
+                formData.append('purchase_price', 0);
+            } else {
+                // Vanlig produkt
+                formData.append('sku', document.getElementById('pSku').value);
+                formData.append('standard_price', document.getElementById('pPrice').value);
+                formData.append('installation_price', document.getElementById('pInstall').value);
+                formData.append('installer_share', document.getElementById('pInstallerShare').value);
+                formData.append('purchase_price', document.getElementById('pPurchase').value);
+                formData.append('variations', '[]');
+            }
+
+            const mainFile = document.getElementById('pMainImage').files[0];
+            if (mainFile) formData.append('mainImage', mainFile);
+
+            const galFiles = document.getElementById('pGalleryImages').files;
+            for(let i=0; i<galFiles.length; i++) { formData.append('galleryImages', galFiles[i]); }
+
+            try {
+                const res = await fetch('/api/products', { method: 'POST', body: formData });
+                if(res.ok) { document.getElementById('productModal').classList.add('hidden'); fetchProducts(); } 
+                else alert("Kunde inte spara.");
+            } catch(e) { console.error(e); }
+        });
+
+        async function fetchSuppliersForDropdown() {
+            try {
+                const res = await fetch('/api/suppliers');
+                const suppliers = await res.json();
+                const sel = document.getElementById('pSupplier');
+                sel.innerHTML = '<option value="">-- Ingen vald --</option>';
+                suppliers.forEach(s => { sel.innerHTML += `<option value="${s.id}">${s.name} (${s.markup_percent}%)</option>`; });
+            } catch (e) { console.error(e); }
+        }
+
+        async function fetchDoorModelsForDropdown() {
+            try {
+                const res = await fetch('/api/door-models');
+                const models = await res.json();
+                const sel = document.getElementById('pDoorModel');
+                sel.innerHTML = '<option value="">-- Ingen (visas alltid) --</option>';
+                models.forEach(m => { sel.innerHTML += `<option value="${m.id}">${m.name}</option>`; });
+            } catch (e) { console.error(e); }
+        }
+
+        async function deleteProduct(id) {
+            if(!confirm("Vill du ta bort produkten?")) return;
+            try { const res = await fetch(`/api/products/${id}`, { method: 'DELETE' }); if(res.ok) fetchProducts(); } catch(e) {}
+        }
+    </script>
+</body>
+</html>

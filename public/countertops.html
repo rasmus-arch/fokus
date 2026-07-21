@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bänkskivor - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <div id="sidebar-container" class="shrink-0"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden w-full relative">
+        <header class="bg-white p-4 md:p-6 border-b border-gray-200 shrink-0">
+            <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Hantera Bänkskivor</h2>
+            <p class="text-xs md:text-sm text-gray-500 mt-1">Ställ in material, tjocklekar, kanter och tjänster</p>
+            
+            <div class="flex space-x-4 mt-6 border-b border-gray-200">
+                <button id="tabMat" onclick="switchTab('materials')" class="py-2 border-b-2 border-blue-600 font-bold text-blue-600 outline-none transition">Material & Priser</button>
+                <button id="tabEdge" onclick="switchTab('edges')" class="py-2 font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent outline-none transition">Kantprofiler</button>
+                <button id="tabSrv" onclick="switchTab('services')" class="py-2 font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent outline-none transition">Fabrikstjänster</button>
+            </div>
+        </header>
+
+        <div id="viewMaterials" class="flex-1 flex flex-col md:flex-row overflow-hidden">
+            <div class="w-full md:w-1/3 flex flex-col border-r border-gray-200 bg-white h-full">
+                <div class="p-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center shrink-0">
+                    <h3 class="font-bold text-gray-700 text-sm">1. Material</h3>
+                    <button onclick="openModal('material')" class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"><i class="fas fa-plus"></i> Lägg till</button>
+                </div>
+                <div id="listMaterials" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
+            </div>
+
+            <div class="w-full md:w-1/3 flex flex-col border-r border-gray-200 bg-white h-full">
+                <div class="p-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center shrink-0">
+                    <h3 class="font-bold text-gray-700 text-sm">2. Färger / Dekorer</h3>
+                    <button id="btnAddColor" onclick="openModal('color')" class="hidden text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"><i class="fas fa-plus"></i> Lägg till</button>
+                </div>
+                <div id="listColors" class="flex-1 overflow-y-auto p-2 space-y-1">
+                    <p class="text-xs text-gray-400 p-2 italic">Välj ett material till vänster först.</p>
+                </div>
+            </div>
+
+            <div class="w-full md:w-1/3 flex flex-col bg-white h-full">
+                <div class="p-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center shrink-0">
+                    <h3 class="font-bold text-gray-700 text-sm">3. Pris (Tjocklek & Djup)</h3>
+                    <button id="btnAddPrice" onclick="openModal('price')" class="hidden text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"><i class="fas fa-plus"></i> Lägg till</button>
+                </div>
+                <div id="listPrices" class="flex-1 overflow-y-auto p-2 space-y-2">
+                    <p class="text-xs text-gray-400 p-2 italic">Välj en färg till vänster först.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="viewEdges" class="hidden flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">
+            <div class="bg-white rounded border border-gray-200 shadow-sm max-w-4xl mx-auto flex flex-col md:flex-row h-[60vh]">
+                <div class="w-full md:w-1/3 border-r border-gray-200 flex flex-col">
+                    <div class="p-3 bg-gray-50 border-b border-gray-200"><h3 class="font-bold text-gray-700 text-sm">Välj Material</h3></div>
+                    <div id="listEdgeMaterials" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
+                </div>
+                <div class="w-full md:w-2/3 flex flex-col">
+                    <div class="p-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                        <h3 class="font-bold text-gray-700 text-sm">Kantprofiler</h3>
+                        <button id="btnAddEdge" onclick="openModal('edge')" class="hidden text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"><i class="fas fa-plus"></i> Ny Kant</button>
+                    </div>
+                    <div id="listEdges" class="flex-1 overflow-y-auto p-2 space-y-2">
+                        <p class="text-xs text-gray-400 p-2 italic">Välj ett material till vänster först.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="viewServices" class="hidden flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">
+            <div class="bg-white rounded border border-gray-200 shadow-sm max-w-4xl mx-auto">
+                <div class="p-4 border-b border-gray-100 flex justify-between items-center">
+                    <h3 class="font-bold text-gray-700">Fabrikstjänster (Håltagningar, underlimning mm)</h3>
+                    <button onclick="openModal('service')" class="text-sm bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700"><i class="fas fa-plus mr-1"></i> Ny Tjänst</button>
+                </div>
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-500 border-b border-gray-200">
+                            <th class="p-3 font-semibold">Tjänst</th>
+                            <th class="p-3 font-semibold">Kopplat till Material</th>
+                            <th class="p-3 font-semibold">Pristyp</th>
+                            <th class="p-3 font-semibold text-right">Pris (ink moms)</th>
+                            <th class="p-3 font-semibold text-right w-16">Åtgärd</th>
+                        </tr>
+                    </thead>
+                    <tbody id="listServices"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <div id="dynamicModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+        <div class="bg-white p-5 rounded-lg shadow-xl w-full max-w-sm relative">
+            <h3 class="font-bold text-gray-800 mb-4 border-b pb-2" id="modalTitle">Lägg till</h3>
+            <form id="dynamicForm" class="space-y-3 text-sm">
+                </form>
+            <div class="flex justify-end gap-2 mt-5 pt-3 border-t border-gray-100">
+                <button type="button" onclick="closeModal()" class="px-3 py-1.5 bg-gray-200 rounded font-medium hover:bg-gray-300">Avbryt</button>
+                <button type="button" onclick="saveData()" class="px-4 py-1.5 bg-blue-600 text-white rounded font-medium hover:bg-blue-700">Spara</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/menu.js"></script>
+    <script>
+        let dbData = { materials: [], colors: [], prices: [], services: [], edges: [] };
+        let activeMaterialId = null;
+        let activeColorId = null;
+        let activeEdgeMaterialId = null;
+        let currentModalType = '';
+        let currentEditId = null;
+
+        function switchTab(tabId) {
+            const tabs = [
+                { id: 'materials', btn: 'tabMat', view: 'viewMaterials', isFlex: true },
+                { id: 'edges', btn: 'tabEdge', view: 'viewEdges', isFlex: false },
+                { id: 'services', btn: 'tabSrv', view: 'viewServices', isFlex: false }
+            ];
+
+            tabs.forEach(t => {
+                const btn = document.getElementById(t.btn);
+                const view = document.getElementById(t.view);
+                
+                if(tabId === t.id) {
+                    btn.className = "py-2 border-b-2 border-blue-600 font-bold text-blue-600 outline-none transition";
+                    view.classList.remove('hidden');
+                    if (t.isFlex) view.classList.add('flex');
+                } else {
+                    btn.className = "py-2 font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent outline-none transition";
+                    view.classList.add('hidden');
+                    if (t.isFlex) view.classList.remove('flex');
+                }
+            });
+        }
+
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/countertops/config');
+                if (res.ok) dbData = await res.json();
+                renderMaterials();
+                renderEdgeMaterials();
+                renderServices();
+            } catch(e) { console.error("Kunde inte hämta data", e); }
+        }
+
+        // ================= FLIK 1: MATERIAL & PRISER =================
+        function renderMaterials() {
+            const list = document.getElementById('listMaterials');
+            list.innerHTML = '';
+            dbData.materials.forEach(m => {
+                const isActive = activeMaterialId === m.id;
+                list.innerHTML += `
+                    <div onclick="selectMaterial(${m.id})" class="p-2.5 rounded border cursor-pointer flex justify-between items-center group ${isActive ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'}">
+                        <p class="font-bold text-xs ${isActive ? 'text-blue-800' : 'text-gray-700'}">${m.name}</p>
+                        <div class="flex gap-2">
+                            <button onclick="event.stopPropagation(); openModal('material', ${m.id})" class="text-gray-400 hover:text-blue-600 hidden group-hover:block"><i class="fas fa-edit"></i></button>
+                            <button onclick="event.stopPropagation(); deleteData('materials', ${m.id})" class="text-gray-400 hover:text-red-600 hidden group-hover:block"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+            if(activeMaterialId) renderColors();
+        }
+
+        function selectMaterial(id) {
+            activeMaterialId = id;
+            activeColorId = null;
+            document.getElementById('btnAddColor').classList.remove('hidden');
+            document.getElementById('btnAddPrice').classList.add('hidden');
+            renderMaterials();
+        }
+
+        function renderColors() {
+            const list = document.getElementById('listColors');
+            list.innerHTML = '';
+            const colors = dbData.colors.filter(c => c.material_id === activeMaterialId);
+            if(colors.length === 0) list.innerHTML = '<p class="text-xs text-gray-400 p-2 italic">Inga färger inlagda ännu.</p>';
+            
+            colors.forEach(c => {
+                const isActive = activeColorId === c.id;
+                list.innerHTML += `
+                    <div onclick="selectColor(${c.id})" class="p-2 rounded border cursor-pointer flex justify-between items-center group ${isActive ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'}">
+                        <p class="font-semibold text-xs ${isActive ? 'text-blue-800' : 'text-gray-700'}">${c.name}</p>
+                        <div class="flex gap-2">
+                            <button onclick="event.stopPropagation(); openModal('color', ${c.id})" class="text-gray-400 hover:text-blue-600 hidden group-hover:block"><i class="fas fa-edit"></i></button>
+                            <button onclick="event.stopPropagation(); deleteData('colors', ${c.id})" class="text-gray-400 hover:text-red-600 hidden group-hover:block"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+            renderPrices();
+        }
+
+        function selectColor(id) {
+            activeColorId = id;
+            document.getElementById('btnAddPrice').classList.remove('hidden');
+            renderColors();
+        }
+
+        function renderPrices() {
+            const list = document.getElementById('listPrices');
+            list.innerHTML = '';
+            if(!activeColorId) { list.innerHTML = '<p class="text-xs text-gray-400 p-2 italic">Välj en färg till vänster först.</p>'; return; }
+
+            const prices = dbData.prices.filter(p => p.color_id === activeColorId);
+            prices.sort((a,b) => a.thickness - b.thickness || a.depth_min - b.depth_min);
+
+            if(prices.length === 0) list.innerHTML = '<p class="text-xs text-gray-400 p-2 italic">Inga prisintervaller inlagda.</p>';
+
+            prices.forEach(p => {
+                list.innerHTML += `
+                    <div class="p-3 rounded border border-gray-200 bg-white flex flex-col gap-1 relative group hover:border-blue-300">
+                        <div class="flex justify-between items-center">
+                            <span class="text-[10px] uppercase font-bold text-gray-400">Tjocklek</span>
+                            <span class="font-mono text-xs font-bold text-gray-700">${p.thickness} mm</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-[10px] uppercase font-bold text-gray-400">Djupintervall</span>
+                            <span class="font-mono text-xs font-bold text-gray-700">${p.depth_min} - ${p.depth_max} mm</span>
+                        </div>
+                        <div class="flex justify-between items-center border-t border-gray-100 pt-1 mt-1">
+                            <span class="text-[10px] uppercase font-bold text-gray-400">Pris / Lpm</span>
+                            <span class="text-sm font-bold text-blue-700">${parseFloat(p.price_per_lm).toLocaleString('sv-SE')} kr</span>
+                        </div>
+                        <div class="absolute top-2 right-2 hidden group-hover:flex gap-2 bg-white px-1 shadow-sm rounded">
+                            <button onclick="openModal('price', ${p.id})" class="text-gray-400 hover:text-blue-600"><i class="fas fa-edit"></i></button>
+                            <button onclick="deleteData('prices', ${p.id})" class="text-gray-400 hover:text-red-600"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // ================= FLIK 2: KANTPROFILER =================
+        function renderEdgeMaterials() {
+            const list = document.getElementById('listEdgeMaterials');
+            list.innerHTML = '';
+            dbData.materials.forEach(m => {
+                const isActive = activeEdgeMaterialId === m.id;
+                list.innerHTML += `
+                    <div onclick="selectEdgeMaterial(${m.id})" class="p-2 rounded border cursor-pointer ${isActive ? 'bg-blue-50 border-blue-300 font-bold text-blue-800' : 'bg-white border-gray-200 text-gray-700 hover:border-blue-300'} text-xs">
+                        ${m.name}
+                    </div>
+                `;
+            });
+            if(activeEdgeMaterialId) renderEdges();
+        }
+
+        function selectEdgeMaterial(id) {
+            activeEdgeMaterialId = id;
+            document.getElementById('btnAddEdge').classList.remove('hidden');
+            renderEdgeMaterials();
+        }
+
+        function renderEdges() {
+            const list = document.getElementById('listEdges');
+            list.innerHTML = '';
+            if(!activeEdgeMaterialId) { list.innerHTML = '<p class="text-xs text-gray-400 p-2 italic">Välj ett material till vänster först.</p>'; return; }
+
+            const edges = dbData.edges.filter(e => e.material_id === activeEdgeMaterialId);
+            edges.sort((a,b) => a.thickness - b.thickness);
+
+            if(edges.length === 0) list.innerHTML = '<p class="text-xs text-gray-400 p-2 italic">Inga kantprofiler inlagda för detta material.</p>';
+
+            edges.forEach(e => {
+                list.innerHTML += `
+                    <div class="p-3 rounded border border-gray-200 bg-white flex justify-between items-center group hover:border-blue-300">
+                        <div>
+                            <p class="font-bold text-sm text-gray-800">${e.name}</p>
+                            <p class="text-xs text-gray-500">Tjocklek: <span class="font-mono text-gray-700">${e.thickness} mm</span></p>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="text-sm font-bold text-blue-700">${parseFloat(e.price_per_lm).toLocaleString('sv-SE')} kr / m</span>
+                            <div class="flex gap-2">
+                                <button onclick="openModal('edge', ${e.id})" class="text-gray-400 hover:text-blue-600 hidden group-hover:block"><i class="fas fa-edit"></i></button>
+                                <button onclick="deleteData('edges', ${e.id})" class="text-gray-400 hover:text-red-600 hidden group-hover:block"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // ================= FLIK 3: TJÄNSTER =================
+        function renderServices() {
+            const tbody = document.getElementById('listServices');
+            tbody.innerHTML = '';
+            
+            dbData.services.forEach(s => {
+                const isLm = s.price_type === 'per_lm';
+                const matName = s.material_id ? (dbData.materials.find(m => m.id === s.material_id)?.name || 'Okänt') : 'Alla material';
+                
+                tbody.innerHTML += `
+                    <tr class="border-b border-gray-100 bg-white group hover:bg-gray-50">
+                        <td class="p-3 font-semibold text-gray-800">${s.name}</td>
+                        <td class="p-3 text-gray-600 text-xs">${matName}</td>
+                        <td class="p-3"><span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">${isLm ? 'Per löpmeter' : 'Fast Pris'}</span></td>
+                        <td class="p-3 text-right font-bold text-blue-700">${parseFloat(s.price).toLocaleString('sv-SE')} kr</td>
+                        <td class="p-3 text-right">
+                            <button onclick="openModal('service', ${s.id})" class="text-gray-400 hover:text-blue-600 px-1"><i class="fas fa-edit"></i></button>
+                            <button onclick="deleteData('services', ${s.id})" class="text-gray-400 hover:text-red-600 px-1"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        // NYTT: Funktion för att markera/avmarkera alla färg-rutor
+        window.toggleAllColors = function(source) {
+            const checkboxes = document.querySelectorAll('input[name="colorCb"]');
+            checkboxes.forEach(cb => cb.checked = source.checked);
+        }
+
+        // ================= MODALER & API =================
+        function openModal(type, id = null) {
+            currentModalType = type;
+            currentEditId = id;
+            const form = document.getElementById('dynamicForm');
+            const title = document.getElementById('modalTitle');
+            form.innerHTML = '';
+            let item = null;
+
+            if (type === 'material') {
+                title.innerText = id ? 'Ändra Material' : 'Nytt Material';
+                if(id) item = dbData.materials.find(m => m.id === id);
+                form.innerHTML = `<div><label class="block text-xs font-semibold text-gray-600 mb-1">Namn på Materialet</label><input type="text" id="mName" value="${item ? item.name : ''}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>`;
+            } 
+            else if (type === 'color') {
+                title.innerText = id ? 'Ändra Färg/Dekor' : 'Ny Färg/Dekor';
+                if(id) item = dbData.colors.find(c => c.id === id);
+                form.innerHTML = `<div><label class="block text-xs font-semibold text-gray-600 mb-1">Namn på Färg/Dekor</label><input type="text" id="cName" value="${item ? item.name : ''}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>`;
+            }
+            else if (type === 'price') {
+                title.innerText = id ? 'Ändra Prisintervall' : 'Nytt Prisintervall';
+                if(id) item = dbData.prices.find(p => p.id === id);
+                
+                let colorHtml = '';
+                if (!id) {
+                    const colors = dbData.colors.filter(c => c.material_id === activeMaterialId);
+                    colorHtml = `
+                        <div class="mb-3">
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">Gäller för färg/dekor:</label>
+                            <div class="max-h-32 overflow-y-auto border border-gray-300 rounded bg-gray-50 p-2 space-y-1.5">
+                                <label class="flex items-center gap-2 pb-1 border-b border-gray-200 cursor-pointer">
+                                    <input type="checkbox" onchange="toggleAllColors(this)" checked class="w-4 h-4 text-blue-600 rounded border-gray-300"> 
+                                    <span class="font-bold text-xs text-gray-700">Markera alla i materialet</span>
+                                </label>
+                    `;
+                    colors.forEach(c => {
+                        colorHtml += `
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" name="colorCb" value="${c.id}" checked class="w-4 h-4 text-blue-600 rounded border-gray-300"> 
+                                    <span class="text-xs text-gray-700">${c.name}</span>
+                                </label>
+                        `;
+                    });
+                    colorHtml += `</div></div>`;
+                }
+
+                form.innerHTML = `
+                    ${colorHtml}
+                    <div><label class="block text-xs font-semibold text-gray-600 mb-1">Tjocklek (mm)</label><input type="number" id="pThick" value="${item ? item.thickness : '20'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                    <div class="grid grid-cols-2 gap-3 mt-2">
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Minsta Djup (mm)</label><input type="number" id="pMin" value="${item ? item.depth_min : '0'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Max Djup (mm)</label><input type="number" id="pMax" value="${item ? item.depth_max : '600'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                    </div>
+                    <div class="mt-2"><label class="block text-xs font-semibold text-gray-600 mb-1">Pris (Inkl. moms / Lpm)</label><input type="number" id="pLpm" value="${item ? item.price_per_lm : '0'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                `;
+            }
+            else if (type === 'edge') {
+                title.innerText = id ? 'Ändra Kantprofil' : 'Ny Kantprofil';
+                if(id) item = dbData.edges.find(e => e.id === id);
+                form.innerHTML = `
+                    <div><label class="block text-xs font-semibold text-gray-600 mb-1">Namn på Profil (T.ex. Rak fasad, Rundad)</label><input type="text" id="eName" value="${item ? item.name : ''}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                    <div class="grid grid-cols-2 gap-3 mt-2">
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Tjocklek (mm)</label><input type="number" id="eThick" value="${item ? item.thickness : '20'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Pris / Lpm (Ink moms)</label><input type="number" id="ePrice" value="${item ? item.price_per_lm : '0'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                    </div>
+                `;
+            }
+            else if (type === 'service') {
+                title.innerText = id ? 'Ändra Tjänst' : 'Ny Tjänst';
+                if(id) item = dbData.services.find(s => s.id === id);
+                
+                let matOptions = `<option value="">-- Gäller alla material --</option>`;
+                dbData.materials.forEach(m => {
+                    const sel = (item && item.material_id === m.id) ? 'selected' : '';
+                    matOptions += `<option value="${m.id}" ${sel}>Endast för ${m.name}</option>`;
+                });
+
+                form.innerHTML = `
+                    <div><label class="block text-xs font-semibold text-gray-600 mb-1">Koppla till Material</label>
+                        <select id="sMat" class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500 bg-white">${matOptions}</select>
+                    </div>
+                    <div class="mt-2"><label class="block text-xs font-semibold text-gray-600 mb-1">Namn (T.ex. Håltagning Spis)</label><input type="text" id="sName" value="${item ? item.name : ''}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                    <div class="grid grid-cols-2 gap-3 mt-2">
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Pris (Inkl. moms)</label><input type="number" id="sPrice" value="${item ? item.price : '0'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Pristyp</label>
+                        <select id="sType" class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500 bg-white">
+                            <option value="fixed" ${item && item.price_type==='fixed' ? 'selected':''}>Fast pris (Styck)</option>
+                            <option value="per_lm" ${item && item.price_type==='per_lm' ? 'selected':''}>Per Löpmeter</option>
+                        </select></div>
+                    </div>
+                `;
+            }
+
+            document.getElementById('dynamicModal').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('dynamicModal').classList.add('hidden'); }
+
+        async function saveData() {
+            let endpoint = ''; let payload = {};
+
+            if (currentModalType === 'material') {
+                endpoint = 'materials'; payload = { name: document.getElementById('mName').value };
+            } 
+            else if (currentModalType === 'color') {
+                endpoint = 'colors'; payload = { name: document.getElementById('cName').value, material_id: activeMaterialId };
+            }
+            else if (currentModalType === 'price') {
+                endpoint = 'prices'; 
+                if (currentEditId) {
+                    payload = { thickness: document.getElementById('pThick').value, depth_min: document.getElementById('pMin').value, depth_max: document.getElementById('pMax').value, price_per_lm: document.getElementById('pLpm').value, color_id: activeColorId };
+                } else {
+                    const checkedBoxes = Array.from(document.querySelectorAll('input[name="colorCb"]:checked')).map(cb => parseInt(cb.value));
+                    if(checkedBoxes.length === 0) return alert("Du måste välja minst en färg!");
+                    payload = { thickness: document.getElementById('pThick').value, depth_min: document.getElementById('pMin').value, depth_max: document.getElementById('pMax').value, price_per_lm: document.getElementById('pLpm').value, color_ids: checkedBoxes };
+                }
+            }
+            else if (currentModalType === 'edge') {
+                endpoint = 'edges'; payload = { name: document.getElementById('eName').value, thickness: document.getElementById('eThick').value, price_per_lm: document.getElementById('ePrice').value, material_id: activeEdgeMaterialId };
+            }
+            else if (currentModalType === 'service') {
+                endpoint = 'services'; 
+                const matVal = document.getElementById('sMat').value;
+                payload = { name: document.getElementById('sName').value, price: document.getElementById('sPrice').value, price_type: document.getElementById('sType').value, material_id: matVal ? parseInt(matVal) : null };
+            }
+
+            const method = currentEditId ? 'PUT' : 'POST';
+            const url = currentEditId ? `/api/countertops/${endpoint}/${currentEditId}` : `/api/countertops/${endpoint}`;
+
+            try {
+                const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+                if(res.ok) { closeModal(); await fetchData(); }
+            } catch(e) { console.error(e); }
+        }
+
+        async function deleteData(endpoint, id) {
+            if(!confirm("Vill du verkligen radera detta? Allt kopplat till det kommer också försvinna!")) return;
+            try {
+                const res = await fetch(`/api/countertops/${endpoint}/${id}`, { method: 'DELETE' });
+                if(res.ok) {
+                    if(endpoint === 'materials') { if(id === activeMaterialId) { activeMaterialId = null; activeColorId = null; } if(id === activeEdgeMaterialId) activeEdgeMaterialId = null; }
+                    if(endpoint === 'colors' && id === activeColorId) activeColorId = null;
+                    await fetchData();
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        fetchData();
+    </script>
+</body>
+</html>

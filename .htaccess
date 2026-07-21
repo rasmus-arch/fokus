@@ -1,0 +1,18 @@
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+PassengerAppRoot "/home/klaralvskok/klaro2.klaralvskok.se"
+PassengerBaseURI "/"
+PassengerNodejs "/home/klaralvskok/nodevenv/klaro2.klaralvskok.se/24/bin/node"
+PassengerAppType node
+PassengerStartupFile server.js
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
+RewriteEngine on
+RewriteOptions inherit
+<Files 403.shtml>
+order allow,deny
+allow from all
+</Files>
+deny from 2a00:0801:0285:ec93:8bd5:7eb5:3024:178b
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION BEGIN
+<IfModule Litespeed>
+</IfModule>
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION END

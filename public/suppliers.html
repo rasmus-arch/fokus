@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leverantörer - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <div id="sidebar-container"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto p-6">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h2 class="text-2xl font-semibold text-gray-800">Leverantörer & Prispåslag</h2>
+                <p class="text-sm text-gray-500 mt-1">Sätt standardpåslag per leverantör och räkna om priser i produktkatalogen</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="bg-white p-6 rounded-lg shadow-sm h-fit">
+                <h3 class="text-lg font-medium text-gray-700 mb-4" id="formTitle">Lägg till leverantör</h3>
+                <form id="supplierForm" class="space-y-4">
+                    <input type="hidden" id="sId">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Namn</label>
+                        <input type="text" id="sName" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Prispåslag (%)</label>
+                        <p class="text-xs text-gray-400 mb-1">Används för att räkna ut försäljningspris från inköpspris: pris = inköpspris × (1 + påslag/100)</p>
+                        <input type="number" step="0.01" id="sMarkup" value="0" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Kontaktinfo</label>
+                        <textarea id="sContact" rows="3" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></textarea>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="submit" class="flex-1 bg-blue-600 text-white py-2 rounded-md font-medium hover:bg-blue-700">Spara</button>
+                        <button type="button" onclick="resetForm()" class="px-4 bg-gray-100 text-gray-600 py-2 rounded-md font-medium hover:bg-gray-200">Avbryt</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-sm lg:col-span-2 overflow-x-auto">
+                <h3 class="text-lg font-medium text-gray-700 mb-4">Befintliga leverantörer</h3>
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-gray-200 bg-gray-50 text-gray-600 text-sm font-medium">
+                            <th class="p-3">Namn</th>
+                            <th class="p-3">Påslag</th>
+                            <th class="p-3">Kontakt</th>
+                            <th class="p-3 text-right">Åtgärd</th>
+                        </tr>
+                    </thead>
+                    <tbody id="supplierTableBody" class="text-gray-700 text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let allSuppliers = [];
+
+        async function fetchSuppliers() {
+            const res = await fetch('/api/suppliers');
+            allSuppliers = await res.json();
+            const tbody = document.getElementById('supplierTableBody');
+            tbody.innerHTML = '';
+
+            if (allSuppliers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-400 italic">Inga leverantörer tillagda ännu.</td></tr>';
+                return;
+            }
+
+            allSuppliers.forEach(s => {
+                tbody.innerHTML += `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="p-3 font-medium">${s.name}</td>
+                        <td class="p-3"><span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 font-semibold">${s.markup_percent}%</span></td>
+                        <td class="p-3 text-xs text-gray-500 whitespace-pre-line max-w-xs truncate">${s.contact_info || '-'}</td>
+                        <td class="p-3 text-right space-x-3 whitespace-nowrap">
+                            <button onclick="recalculate(${s.id}, '${s.name.replace(/'/g, "\\'")}')" class="text-blue-600 hover:text-blue-900" title="Räkna om priser för alla produkter från denna leverantör"><i class="fas fa-calculator"></i> Räkna om priser</button>
+                            <button onclick="editSupplier(${s.id})" class="text-gray-500 hover:text-gray-800"><i class="fas fa-edit"></i></button>
+                            <button onclick="deleteSupplier(${s.id})" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        document.getElementById('supplierForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('sId').value;
+            const payload = {
+                name: document.getElementById('sName').value,
+                markup_percent: document.getElementById('sMarkup').value,
+                contact_info: document.getElementById('sContact').value
+            };
+
+            const url = id ? `/api/suppliers/${id}` : '/api/suppliers';
+            const method = id ? 'PUT' : 'POST';
+
+            const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            alert(data.message);
+            if (res.ok) { resetForm(); fetchSuppliers(); }
+        });
+
+        function editSupplier(id) {
+            const s = allSuppliers.find(x => x.id === id);
+            if (!s) return;
+            document.getElementById('formTitle').innerText = 'Redigera leverantör';
+            document.getElementById('sId').value = s.id;
+            document.getElementById('sName').value = s.name;
+            document.getElementById('sMarkup').value = s.markup_percent;
+            document.getElementById('sContact').value = s.contact_info || '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function resetForm() {
+            document.getElementById('formTitle').innerText = 'Lägg till leverantör';
+            document.getElementById('supplierForm').reset();
+            document.getElementById('sId').value = '';
+        }
+
+        async function deleteSupplier(id) {
+            if (!confirm('Ta bort leverantören? Produkter kopplade till den påverkas inte, men kopplingen tas bort.')) return;
+            const res = await fetch(`/api/suppliers/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            alert(data.message);
+            fetchSuppliers();
+        }
+
+        async function recalculate(id, name) {
+            if (!confirm(`Räkna om försäljningspris för alla produkter från "${name}" utifrån inköpspris × påslag? Detta skriver över nuvarande försäljningspriser (gäller bara produkter utan varianter).`)) return;
+            const res = await fetch(`/api/suppliers/${id}/recalculate`, { method: 'POST' });
+            const data = await res.json();
+            alert(data.message);
+        }
+
+        fetchSuppliers();
+    </script>
+    <script src="/menu.js"></script>
+</body>
+</html>

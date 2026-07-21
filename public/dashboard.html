@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Översikt - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <div id="sidebar-container" class="shrink-0"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto p-4 md:p-6 lg:p-8 w-full max-w-full">
+        
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <div>
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Översikt (Dashboard)</h2>
+                <p class="text-xs md:text-sm text-gray-500 mt-1">Snabbkoll på nyckeltal och systemstatus</p>
+            </div>
+            <button onclick="window.location.reload()" class="w-full sm:w-auto bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md font-medium text-sm hover:bg-gray-50 transition shadow-sm flex items-center justify-center">
+                <i class="fas fa-sync-alt mr-2"></i> Uppdatera data
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-6">
+            
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 flex items-center">
+                <div class="bg-blue-100 text-blue-600 w-12 h-12 rounded-full flex items-center justify-center text-xl shrink-0">
+                    <i class="fas fa-boxes"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Katalog</p>
+                    <h3 id="statTotalProducts" class="text-2xl font-bold text-gray-800">...</h3>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 flex items-center cursor-pointer hover:border-blue-300 transition" onclick="window.location.href='/leads.html'">
+                <div class="bg-green-100 text-green-600 w-12 h-12 rounded-full flex items-center justify-center text-xl shrink-0">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Kundregister</p>
+                    <h3 class="text-base font-bold text-blue-600 mt-1">Öppna CRM <i class="fas fa-arrow-right text-xs ml-1"></i></h3>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 flex items-center cursor-pointer hover:border-blue-300 transition sm:col-span-2 lg:col-span-1" onclick="window.location.href='/quotes.html'">
+                <div class="bg-purple-100 text-purple-600 w-12 h-12 rounded-full flex items-center justify-center text-xl shrink-0">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Offerter & Ordrar</p>
+                    <h3 class="text-base font-bold text-blue-600 mt-1">Hantera flöde <i class="fas fa-arrow-right text-xs ml-1"></i></h3>
+                </div>
+            </div>
+            
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+            
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                    <h3 class="font-semibold text-gray-700 text-sm"><i class="fas fa-chart-pie text-gray-400 mr-2"></i> Produkter per kategori</h3>
+                </div>
+                <div class="p-4 flex-1">
+                    <ul id="categoryList" class="space-y-3">
+                        <li class="text-xs text-gray-400 italic">Laddar statistik...</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg shadow-sm border border-gray-700 overflow-hidden text-white flex flex-col justify-center p-6 md:p-8 relative">
+                <i class="fas fa-tools absolute -bottom-6 -right-6 text-9xl text-gray-700 opacity-30"></i>
+                <h3 class="text-xl md:text-2xl font-bold mb-2 relative z-10">Välkommen till Klaro 2.0</h3>
+                <p class="text-gray-300 text-sm md:text-base mb-6 relative z-10 max-w-md">
+                    Detta är ledningscentralen för Klarälvskök. Härifrån bygger du offerter, hanterar dina kunder och distribuerar arbetsordrar till montörerna ute på fältet.
+                </p>
+                <div class="relative z-10">
+                    <span class="inline-block bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">System Online</span>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script src="/menu.js"></script>
+    
+    <script>
+        async function fetchDashboardStats() {
+            try {
+                const res = await fetch('/api/statistics');
+                const data = await res.json();
+                
+                const catList = document.getElementById('categoryList');
+                catList.innerHTML = '';
+                
+                let totalProducts = 0;
+
+                if (data.categories && data.categories.length > 0) {
+                    data.categories.forEach(cat => {
+                        const count = parseInt(cat.count) || 0;
+                        totalProducts += count;
+                        
+                        // Bygg en enkel visuell mätare för varje kategori
+                        const maxExpected = 50; // Skalvärde för bredden på mätaren
+                        const widthPercent = Math.min(100, (count / maxExpected) * 100);
+
+                        catList.innerHTML += `
+                            <li>
+                                <div class="flex justify-between items-center text-xs md:text-sm mb-1">
+                                    <span class="font-medium text-gray-700">${cat.category}</span>
+                                    <span class="text-gray-500 font-bold">${count} st</span>
+                                </div>
+                                <div class="w-full bg-gray-100 rounded-full h-2 md:h-2.5">
+                                    <div class="bg-blue-500 h-2 md:h-2.5 rounded-full" style="width: ${widthPercent}%"></div>
+                                </div>
+                            </li>
+                        `;
+                    });
+                } else {
+                    catList.innerHTML = '<li class="text-xs text-gray-400">Ingen data hittades.</li>';
+                }
+
+                document.getElementById('statTotalProducts').innerText = totalProducts;
+
+            } catch (err) {
+                console.error("Kunde inte ladda statistik", err);
+                document.getElementById('categoryList').innerHTML = '<li class="text-xs text-red-500">Ett fel uppstod vid laddning av data.</li>';
+            }
+        }
+
+        // Initiera
+        fetchDashboardStats();
+    </script>
+</body>
+</html>

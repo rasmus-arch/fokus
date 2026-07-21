@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dörrmodeller & Prisgrupper - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <div id="sidebar-container"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto p-6">
+        <div class="mb-6">
+            <h2 class="text-2xl font-semibold text-gray-800">Dörrmodeller & Prisgrupper</h2>
+            <p class="text-sm text-gray-500 mt-1">Hantera luckmodeller och deras prislistor för luckor, lådfronter och grytfronter</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div class="bg-white p-5 rounded-lg shadow-sm h-fit">
+                <h3 class="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wide">Modeller</h3>
+                <div class="flex gap-2 mb-4">
+                    <input type="text" id="newModelName" placeholder="Ny modell, t.ex. MDF16mm Prisgrupp B" class="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm">
+                    <button onclick="addModel()" class="bg-blue-600 text-white px-3 rounded text-sm hover:bg-blue-700"><i class="fas fa-plus"></i></button>
+                </div>
+                <div id="modelList" class="space-y-1"></div>
+            </div>
+
+            <div class="lg:col-span-3 bg-white p-5 rounded-lg shadow-sm">
+                <div id="noModelSelected" class="text-gray-400 italic text-sm py-10 text-center">Välj eller skapa en modell till vänster för att hantera dess prislista.</div>
+
+                <div id="modelDetail" class="hidden">
+                    <div class="flex justify-between items-center mb-4 border-b pb-3">
+                        <h3 class="text-lg font-bold text-gray-800" id="modelDetailName">-</h3>
+                        <button onclick="deleteModel()" class="text-red-600 hover:text-red-900 text-sm"><i class="fas fa-trash mr-1"></i> Ta bort modell</button>
+                    </div>
+
+                    <div class="bg-blue-50 border border-blue-200 rounded p-4 mb-4">
+                        <h4 class="text-xs font-bold text-gray-700 mb-3 uppercase" id="rowFormTitle">Lägg till prisrad</h4>
+                        <input type="hidden" id="editingPriceId">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Typ</label>
+                                <select id="rowType" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                                    <option value="lucka">Lucka</option>
+                                    <option value="ladfront">Lådfront</option>
+                                    <option value="grytfront">Grytfront</option>
+                                    <option value="ovrigt">Övrigt</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Höjd min (mm)</label>
+                                <input type="number" id="rowHeightMin" value="0" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Höjd max (mm)</label>
+                                <input type="number" id="rowHeightMax" value="100000" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Bredd min (mm)</label>
+                                <input type="number" id="rowWidthMin" value="0" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Bredd max (mm)</label>
+                                <input type="number" id="rowWidthMax" value="100000" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Inköpspris ex moms</label>
+                                <input type="number" step="0.01" id="rowPurchase" value="0" oninput="recalcRowPrice()" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Faktor</label>
+                                <input type="number" step="0.01" id="rowFactor" placeholder="t.ex. 2" oninput="recalcRowPrice()" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Försäljningspris ink moms</label>
+                                <input type="number" step="0.01" id="rowPrice" value="0" class="mt-1 w-full px-2 py-1.5 border border-blue-300 bg-white rounded text-sm font-semibold">
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-gray-500 mb-3">Ange antingen inköpspris + faktor (försäljningspris räknas då fram automatiskt som inköpspris × faktor × 1,25 för moms), eller skriv in försäljningspriset direkt och lämna faktor tomt.</p>
+                        <div class="flex gap-2">
+                            <button onclick="savePriceRow()" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700">Spara rad</button>
+                            <button onclick="resetRowForm()" class="bg-gray-100 text-gray-600 px-4 py-1.5 rounded text-sm font-medium hover:bg-gray-200">Rensa</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 border border-gray-200 rounded p-4 mb-4">
+                        <h4 class="text-xs font-bold text-gray-700 mb-2 uppercase">Importera prislista (CSV) - alternativ till manuell inmatning</h4>
+                        <p class="text-[11px] text-gray-500 mb-2">
+                            Kolumner (semikolon-separerat, med rubrikrad): <code>Typ;HöjdMin;HöjdMax;BreddMin;BreddMax;InköpsPris;Faktor;Pris</code><br>
+                            Typ ska vara <code>lucka</code>, <code>ladfront</code>, <code>grytfront</code> eller <code>ovrigt</code>. Lämna InköpsPris/Faktor tomma om du bara vill ange Pris direkt.
+                        </p>
+                        <input type="file" id="csvInput" accept=".csv" class="text-sm">
+                    </div>
+
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="text-xs font-bold text-gray-700 uppercase">Prisrader (<span id="priceCount">0</span>)</h4>
+                        <div class="space-x-3">
+                            <button onclick="recalculateAllPrices()" class="text-xs text-blue-600 hover:text-blue-800" title="Räkna om priser för alla rader som har både inköpspris och faktor angivet"><i class="fas fa-calculator mr-1"></i>Räkna om priser (faktor)</button>
+                            <button onclick="clearAllPrices()" class="text-xs text-red-500 hover:text-red-700">Rensa alla rader</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto max-h-[45vh] overflow-y-auto border border-gray-200 rounded">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="bg-gray-50 text-gray-600 sticky top-0">
+                                <tr>
+                                    <th class="p-2 border-b">Typ</th>
+                                    <th class="p-2 border-b text-right">Höjd</th>
+                                    <th class="p-2 border-b text-right">Bredd</th>
+                                    <th class="p-2 border-b text-right">Inköp</th>
+                                    <th class="p-2 border-b text-right">Faktor</th>
+                                    <th class="p-2 border-b text-right">Pris</th>
+                                    <th class="p-2 border-b"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="priceTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let allModels = [];
+        let currentModelId = null;
+        let currentPrices = [];
+        const VAT_FACTOR = 1.25;
+
+        async function fetchModels() {
+            const res = await fetch('/api/door-models');
+            allModels = await res.json();
+            renderModelList();
+        }
+
+        function renderModelList() {
+            const div = document.getElementById('modelList');
+            div.innerHTML = '';
+            if (allModels.length === 0) { div.innerHTML = '<p class="text-xs text-gray-400 italic">Inga modeller ännu.</p>'; return; }
+            allModels.forEach(m => {
+                const active = m.id === currentModelId;
+                div.innerHTML += `<button onclick="selectModel(${m.id})" class="w-full text-left px-3 py-2 rounded text-sm ${active ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-gray-100 text-gray-700'}">${m.name}</button>`;
+            });
+        }
+
+        async function addModel() {
+            const name = document.getElementById('newModelName').value.trim();
+            if (!name) return;
+            const res = await fetch('/api/door-models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+            const data = await res.json();
+            document.getElementById('newModelName').value = '';
+            await fetchModels();
+            if (data.id) selectModel(data.id);
+        }
+
+        async function selectModel(id) {
+            currentModelId = id;
+            renderModelList();
+            document.getElementById('noModelSelected').classList.add('hidden');
+            document.getElementById('modelDetail').classList.remove('hidden');
+            const model = allModels.find(m => m.id === id);
+            document.getElementById('modelDetailName').innerText = model ? model.name : '-';
+            resetRowForm();
+            await fetchPrices();
+        }
+
+        async function deleteModel() {
+            if (!currentModelId) return;
+            if (!confirm('Ta bort hela modellen och dess prislista? Detta går inte att ångra.')) return;
+            await fetch(`/api/door-models/${currentModelId}`, { method: 'DELETE' });
+            currentModelId = null;
+            document.getElementById('modelDetail').classList.add('hidden');
+            document.getElementById('noModelSelected').classList.remove('hidden');
+            fetchModels();
+        }
+
+        async function fetchPrices() {
+            const res = await fetch(`/api/door-models/${currentModelId}/prices`);
+            currentPrices = await res.json();
+            renderPrices();
+        }
+
+        function renderPrices() {
+            const tbody = document.getElementById('priceTableBody');
+            tbody.innerHTML = '';
+            document.getElementById('priceCount').innerText = currentPrices.length;
+            if (currentPrices.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-gray-400 italic">Inga prisrader ännu.</td></tr>';
+                return;
+            }
+            currentPrices.forEach(p => {
+                const heightRange = `${p.height_min}-${p.height_max}`;
+                const widthRange = `${p.width_min}-${p.width_max}`;
+                tbody.innerHTML += `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="p-2 font-medium">${p.component_type}</td>
+                        <td class="p-2 text-right">${heightRange}</td>
+                        <td class="p-2 text-right">${widthRange}</td>
+                        <td class="p-2 text-right">${p.purchase_price ? parseFloat(p.purchase_price).toLocaleString() + ' kr' : '-'}</td>
+                        <td class="p-2 text-right">${p.markup_factor !== null && p.markup_factor !== undefined ? 'x' + p.markup_factor : '-'}</td>
+                        <td class="p-2 text-right font-semibold">${parseFloat(p.price).toLocaleString()} kr</td>
+                        <td class="p-2 text-right whitespace-nowrap">
+                            <button onclick="editPriceRow(${p.id})" class="text-gray-500 hover:text-gray-800 mr-2"><i class="fas fa-edit"></i></button>
+                            <button onclick="deletePrice(${p.id})" class="text-red-400 hover:text-red-600"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>`;
+            });
+        }
+
+        function recalcRowPrice() {
+            const purchase = parseFloat(document.getElementById('rowPurchase').value) || 0;
+            const factorRaw = document.getElementById('rowFactor').value;
+            if (factorRaw === '') return; // manuellt pris, rör inte fältet
+            const factor = parseFloat(factorRaw) || 0;
+            document.getElementById('rowPrice').value = Math.round(purchase * factor * VAT_FACTOR * 100) / 100;
+        }
+
+        function resetRowForm() {
+            document.getElementById('rowFormTitle').innerText = 'Lägg till prisrad';
+            document.getElementById('editingPriceId').value = '';
+            document.getElementById('rowType').value = 'lucka';
+            document.getElementById('rowHeightMin').value = 0;
+            document.getElementById('rowHeightMax').value = 100000;
+            document.getElementById('rowWidthMin').value = 0;
+            document.getElementById('rowWidthMax').value = 100000;
+            document.getElementById('rowPurchase').value = 0;
+            document.getElementById('rowFactor').value = '';
+            document.getElementById('rowPrice').value = 0;
+        }
+
+        function editPriceRow(id) {
+            const p = currentPrices.find(x => x.id === id);
+            if (!p) return;
+            document.getElementById('rowFormTitle').innerText = 'Redigera prisrad';
+            document.getElementById('editingPriceId').value = p.id;
+            document.getElementById('rowType').value = p.component_type;
+            document.getElementById('rowHeightMin').value = p.height_min;
+            document.getElementById('rowHeightMax').value = p.height_max;
+            document.getElementById('rowWidthMin').value = p.width_min;
+            document.getElementById('rowWidthMax').value = p.width_max;
+            document.getElementById('rowPurchase').value = p.purchase_price || 0;
+            document.getElementById('rowFactor').value = (p.markup_factor === null || p.markup_factor === undefined) ? '' : p.markup_factor;
+            document.getElementById('rowPrice').value = p.price;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function savePriceRow() {
+            const editingId = document.getElementById('editingPriceId').value;
+            const payload = {
+                component_type: document.getElementById('rowType').value,
+                height_min: parseInt(document.getElementById('rowHeightMin').value) || 0,
+                height_max: parseInt(document.getElementById('rowHeightMax').value) || 100000,
+                width_min: parseInt(document.getElementById('rowWidthMin').value) || 0,
+                width_max: parseInt(document.getElementById('rowWidthMax').value) || 100000,
+                purchase_price: document.getElementById('rowPurchase').value,
+                markup_factor: document.getElementById('rowFactor').value,
+                price: document.getElementById('rowPrice').value
+            };
+            const url = editingId ? `/api/door-models/${currentModelId}/prices/${editingId}` : `/api/door-models/${currentModelId}/prices`;
+            const method = editingId ? 'PUT' : 'POST';
+            const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            if (!res.ok) { alert(data.message || 'Kunde inte spara raden.'); return; }
+            resetRowForm();
+            fetchPrices();
+        }
+
+        async function deletePrice(id) {
+            await fetch(`/api/door-models/${currentModelId}/prices/${id}`, { method: 'DELETE' });
+            fetchPrices();
+        }
+
+        async function clearAllPrices() {
+            if (!confirm('Rensa alla prisrader för denna modell?')) return;
+            await fetch(`/api/door-models/${currentModelId}/prices`, { method: 'DELETE' });
+            fetchPrices();
+        }
+
+        async function recalculateAllPrices() {
+            if (!confirm('Räkna om försäljningspris för alla rader som har både inköpspris och faktor ifyllt (inköpspris × faktor × 1,25)? Rader utan faktor påverkas inte.')) return;
+            const res = await fetch(`/api/door-models/${currentModelId}/recalculate`, { method: 'POST' });
+            const data = await res.json();
+            alert(data.message);
+            fetchPrices();
+        }
+
+        document.getElementById('csvInput').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (!file || !currentModelId) return;
+            Papa.parse(file, {
+                delimiter: ';',
+                header: true,
+                skipEmptyLines: true,
+                complete: async function (results) {
+                    const rows = results.data.map(r => ({
+                        component_type: (r['Typ'] || '').toLowerCase().trim(),
+                        height_min: parseInt(r['HöjdMin']) || 0,
+                        height_max: parseInt(r['HöjdMax']) || 100000,
+                        width_min: parseInt(r['BreddMin']) || 0,
+                        width_max: parseInt(r['BreddMax']) || 100000,
+                        purchase_price: r['InköpsPris'] || 0,
+                        markup_factor: r['Faktor'] || '',
+                        price: r['Pris'] || ''
+                    })).filter(r => r.component_type);
+
+                    if (rows.length === 0) return alert('Hittade inga giltiga rader i filen.');
+                    if (!confirm(`Importera ${rows.length} prisrader till denna modell?`)) return;
+
+                    const res = await fetch(`/api/door-models/${currentModelId}/prices/bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rows) });
+                    const data = await res.json();
+                    alert(data.message);
+                    fetchPrices();
+                    e.target.value = '';
+                }
+            });
+        });
+
+        fetchModels();
+    </script>
+    <script src="/menu.js"></script>
+</body>
+</html>
