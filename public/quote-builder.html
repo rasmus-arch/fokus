@@ -1153,16 +1153,16 @@
                 const existing = quoteCart.find(item => item.cartId === cartId);
                 if(existing) { existing.qty += 1; } else {
                     quoteCart.push({ cartId: cartId, id: currentModalProduct.id, sku: selectedVariation.sku, name: currentModalProduct.name + nameSuffix, priceIncVat: parseFloat(selectedVariation.price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0 });
-                    const variantWidth = getVariantWidth(selectedVariation, currentModalProduct);
-                    addAutoFrontsForProduct({ ...currentModalProduct, width: variantWidth });
                 }
+                const variantWidth = getVariantWidth(selectedVariation, currentModalProduct);
+                addAutoFrontsForProduct({ ...currentModalProduct, width: variantWidth });
             } else {
                 const cartId = currentModalProduct.id + '_base'; const existing = quoteCart.find(item => item.cartId === cartId);
                 if(existing) { existing.qty += 1; } else {
                     const installTot = parseFloat(currentModalProduct.installation_price) || 0; const instShare = parseFloat(currentModalProduct.installer_share) || 0;
                     quoteCart.push({ cartId: cartId, id: currentModalProduct.id, sku: currentModalProduct.sku, name: currentModalProduct.name, priceIncVat: parseFloat(currentModalProduct.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0 });
-                    addAutoFrontsForProduct(currentModalProduct);
                 }
+                addAutoFrontsForProduct(currentModalProduct);
             }
             renderCart(); closeProductModal();
         }
@@ -1246,20 +1246,19 @@
             return pieces;
         }
 
-        // Slår upp priset för en front-bit mot den valda dörrmodellens prislista.
-        function lookupFrontPrice(piece) {
-            const match = doorModelPriceItems.find(p =>
+        // Slår upp hela prisraden för en front-bit mot den valda dörrmodellens prislista (pris + ev. montagepris/montörsandel).
+        function lookupFrontPriceRow(piece) {
+            return doorModelPriceItems.find(p =>
                 p.component_type === piece.component_type &&
                 piece.height >= p.height_min && piece.height <= p.height_max &&
                 piece.width >= p.width_min && piece.width <= p.width_max
-            );
-            return match ? parseFloat(match.price) : null;
+            ) || null;
         }
 
         function addAutoFrontsForProduct(product) {
-            if (!product.front_layout) return;
+            if (!product.effective_front_layout) return;
             let frontLayout;
-            try { frontLayout = JSON.parse(product.front_layout); } catch (e) { return; }
+            try { frontLayout = JSON.parse(product.effective_front_layout); } catch (e) { return; }
             const stommeWidth = product.width; const stommeHeight = product.height;
             if (!stommeWidth || !stommeHeight) return;
 
@@ -1272,13 +1271,14 @@
             }
 
             pieces.forEach((piece, idx) => {
-                const price = lookupFrontPrice(piece);
+                const matchRow = lookupFrontPriceRow(piece);
                 const roundedH = Math.round(piece.height); const roundedW = Math.round(piece.width);
                 const label = `${piece.label} till ${product.name} (${roundedW}x${roundedH}mm)`;
-                if (price === null) {
+                if (!matchRow) {
                     quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'PRIS SAKNAS', name: `${label} - INGET PRIS HITTAT, kontrollera prislistan`, priceIncVat: 0, installIncVat: 0, companyShare: 0, installerShare: 0, qty: 1, discount: 0, isFreeText: true });
                 } else {
-                    quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'AUTO-' + piece.component_type.toUpperCase(), name: label, priceIncVat: price, installIncVat: 0, companyShare: 0, installerShare: 0, qty: 1, discount: 0, isFreeText: true });
+                    const installTot = parseFloat(matchRow.installation_price) || 0; const instShare = parseFloat(matchRow.installer_share) || 0;
+                    quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'AUTO-' + piece.component_type.toUpperCase(), name: label, priceIncVat: parseFloat(matchRow.price), installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, isFreeText: true });
                 }
             });
         }
@@ -1327,12 +1327,13 @@
             if (!type) { preview.innerText = 'Prisgruppen saknar prisrader.'; return; }
             if (!height || !width) { preview.innerText = 'Fyll i höjd och bredd för att se pris.'; return; }
 
-            const price = lookupFrontPrice({ component_type: type, height, width });
-            if (price === null) {
+            const matchRow = lookupFrontPriceRow({ component_type: type, height, width });
+            if (!matchRow) {
                 preview.innerText = 'Inget pris hittades för dessa mått i vald prisgrupp.';
                 preview.classList.add('text-red-500'); preview.classList.remove('text-gray-500', 'text-gray-700', 'font-semibold');
             } else {
-                preview.innerText = `Pris: ${price.toLocaleString()} kr`;
+                const installTot = parseFloat(matchRow.installation_price) || 0;
+                preview.innerText = `Pris: ${parseFloat(matchRow.price).toLocaleString()} kr` + (installTot > 0 ? ` (+ ${installTot.toLocaleString()} kr montage)` : '');
                 preview.classList.remove('text-red-500', 'text-gray-500'); preview.classList.add('text-gray-700', 'font-semibold');
             }
         }
@@ -1352,13 +1353,14 @@
             if (!type) return alert('Vald prisgrupp saknar prisrader att lägga till.');
             if (!height || !width) return alert('Ange höjd och bredd.');
 
-            const price = lookupFrontPrice({ component_type: type, height, width });
+            const matchRow = lookupFrontPriceRow({ component_type: type, height, width });
             const label = `${typeLabels[type] || type} - ${model ? model.name : ''} (${width}x${height}mm)`;
 
-            if (price === null) {
+            if (!matchRow) {
                 quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'PRIS SAKNAS', name: `${label} - INGET PRIS HITTAT, kontrollera prislistan`, priceIncVat: 0, installIncVat: 0, companyShare: 0, installerShare: 0, qty, discount: 0, isFreeText: true });
             } else {
-                quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'MANUELL-' + type.toUpperCase(), name: label, priceIncVat: price, installIncVat: 0, companyShare: 0, installerShare: 0, qty, discount: 0, isFreeText: true });
+                const installTot = parseFloat(matchRow.installation_price) || 0; const instShare = parseFloat(matchRow.installer_share) || 0;
+                quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'MANUELL-' + type.toUpperCase(), name: label, priceIncVat: parseFloat(matchRow.price), installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty, discount: 0, isFreeText: true });
             }
             document.getElementById('manualFrontModal').classList.add('hidden');
             renderCart();
@@ -1379,7 +1381,7 @@
                         if (qd.selectedConditions) { for (const key in qd.selectedConditions) { if(selectedConditions[key]) { selectedConditions[key].responsibility = qd.selectedConditions[key].responsibility || ''; selectedConditions[key].qty = qd.selectedConditions[key].qty || 1; selectedConditions[key].customPrice = qd.selectedConditions[key].customPrice || 0; } } }
                         if (qd.useRot !== undefined) document.getElementById('useRotCheckbox').checked = qd.useRot;
                         if (qd.kitchenSpecs) { document.getElementById('qsMaterial').value = qd.kitchenSpecs.material || ''; document.getElementById('qsColor').value = qd.kitchenSpecs.color || ''; document.getElementById('qsDoor').value = qd.kitchenSpecs.door || ''; if (qd.kitchenSpecs.doorModelId) { document.getElementById('qsDoorModelId').value = qd.kitchenSpecs.doorModelId; onDoorModelChange(); } }
-                        if (qd.extraFees) { document.getElementById('startFeeProduct').value = qd.extraFees.startFeeProduct || 0; document.getElementById('startFeeNonRot').value = qd.extraFees.startFeeNonRot || 1800; document.getElementById('startFeeRotComp').value = qd.extraFees.startFeeRotComp || 0; document.getElementById('startFeeRotInst').value = qd.extraFees.startFeeRotInst || 0; document.getElementById('colorSelect').value = qd.extraFees.colorSelect || ''; document.getElementById('colorCustom').value = qd.extraFees.colorCustom || ''; document.getElementById('feeColor').value = qd.extraFees.feeColor || 0; toggleCustomColor(); }
+                        if (qd.extraFees) { const sfnr = qd.extraFees.startFeeNonRot; document.getElementById('startFeeProduct').value = qd.extraFees.startFeeProduct || 0; document.getElementById('startFeeNonRot').value = (sfnr !== undefined && sfnr !== null && sfnr !== '') ? sfnr : 1800; document.getElementById('startFeeRotComp').value = qd.extraFees.startFeeRotComp || 0; document.getElementById('startFeeRotInst').value = qd.extraFees.startFeeRotInst || 0; document.getElementById('colorSelect').value = qd.extraFees.colorSelect || ''; document.getElementById('colorCustom').value = qd.extraFees.colorCustom || ''; document.getElementById('feeColor').value = qd.extraFees.feeColor || 0; toggleCustomColor(); }
                     }
                     const pdfBtn = document.getElementById('btnQuotePdf'); pdfBtn.href = `/api/quotes/${quoteId}/pdf`; pdfBtn.classList.remove('hidden');
                 }
@@ -1476,6 +1478,10 @@
             document.getElementById('sumCompanyCut').innerText = totalCompanyCut.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
             document.getElementById('sumInstallerCut').innerText = totalInstallerCut.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
         }
+
+        document.getElementById('searchInput').addEventListener('input', applyFilters);
+        document.getElementById('catFilter').addEventListener('change', applyFilters);
+        document.getElementById('sortFilter').addEventListener('change', applyFilters);
 
         fetchCountertopConfig();
         fetchDoorModels();

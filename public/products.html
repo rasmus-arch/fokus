@@ -143,6 +143,8 @@
                                             <th class="p-2 border-b w-32">SKU</th>
                                             <th class="p-2 border-b" id="varHead1">Variabel 1</th>
                                             <th class="p-2 border-b" id="varHead2">Variabel 2</th>
+                                            <th class="p-2 border-b w-20">Inköp</th>
+                                            <th class="p-2 border-b w-16">Faktor</th>
                                             <th class="p-2 border-b w-20">Pris (Mat)</th>
                                             <th class="p-2 border-b w-20">Pris (Mont)</th>
                                             <th class="p-2 border-b w-20">Montör Del</th>
@@ -175,22 +177,11 @@
                             </div>
                         </div>
                         <div>
-                            <label class="block text-xs font-medium text-gray-700">Frontkonfiguration</label>
-                            <select id="pFrontType" onchange="toggleFrontConfigUI()" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white">
+                            <label class="block text-xs font-medium text-gray-700">Stomtyp (frontberäkning)</label>
+                            <select id="pFrameTypeId" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white">
                                 <option value="">Ingen (tomt skåp / hanteras manuellt)</option>
-                                <option value="door">Lucka (1 st, höjd stomme-6, bredd stomme-4)</option>
-                                <option value="drawers2">2 lådfronter (lika höga)</option>
-                                <option value="drawers3">3 lådfronter (135 / 273 / rest)</option>
-                                <option value="drawers4">4 lådfronter (135x3 / rest)</option>
-                                <option value="drawers5">5 lådfronter (135x4 / rest)</option>
-                                <option value="fixed135_1">1 fast lådfront (135mm)</option>
-                                <option value="fixed135_2">2 fasta lådfronter (135mm vardera)</option>
-                                <option value="custom">Anpassad (ange manuellt nedan)</option>
                             </select>
-                        </div>
-                        <div id="customFrontWrap" class="hidden mt-2">
-                            <label class="block text-xs font-medium text-gray-700">Anpassade fronter (JSON-array)</label>
-                            <textarea id="pFrontCustomJson" rows="2" placeholder='[{&quot;height&quot;:379},{&quot;height&quot;:576}]' class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-xs font-mono"></textarea>
+                            <p class="text-[10px] text-gray-400 mt-1">Stomtyper hanteras under Administration &gt; Stomtyper. Redigerar du en stomtyp där slår det igenom på alla produkter som använder den.</p>
                         </div>
                     </div>
 
@@ -243,6 +234,7 @@
             fetchProducts();
             fetchSuppliersForDropdown();
             fetchDoorModelsForDropdown();
+            fetchFrameTypesForDropdown();
             document.getElementById('searchInput').addEventListener('input', applyFilters);
             document.getElementById('catFilter').addEventListener('change', applyFilters);
             
@@ -415,42 +407,14 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
             }
         }
 
-        function toggleFrontConfigUI() {
-            const type = document.getElementById('pFrontType').value;
-            document.getElementById('customFrontWrap').classList.toggle('hidden', type !== 'custom');
-        }
-
-        function buildFrontLayoutJson() {
-            const type = document.getElementById('pFrontType').value;
-            if (!type) return '';
-            if (type === 'door') return JSON.stringify({ type: 'door' });
-            if (type === 'drawers2') return JSON.stringify({ type: 'drawers', count: 2 });
-            if (type === 'drawers3') return JSON.stringify({ type: 'drawers', count: 3 });
-            if (type === 'drawers4') return JSON.stringify({ type: 'drawers', count: 4 });
-            if (type === 'drawers5') return JSON.stringify({ type: 'drawers', count: 5 });
-            if (type === 'fixed135_1') return JSON.stringify({ type: 'fixed135', count: 1 });
-            if (type === 'fixed135_2') return JSON.stringify({ type: 'fixed135', count: 2 });
-            if (type === 'custom') {
-                try {
-                    const fronts = JSON.parse(document.getElementById('pFrontCustomJson').value || '[]');
-                    return JSON.stringify({ type: 'custom', fronts });
-                } catch (e) { alert('Ogiltig JSON i "Anpassade fronter" - kontrollera formatet.'); return null; }
-            }
-            return '';
-        }
-
-        function loadFrontLayoutIntoForm(frontLayoutRaw) {
-            document.getElementById('pFrontType').value = '';
-            document.getElementById('pFrontCustomJson').value = '';
-            if (!frontLayoutRaw) { toggleFrontConfigUI(); return; }
+        async function fetchFrameTypesForDropdown() {
             try {
-                const fl = JSON.parse(frontLayoutRaw);
-                if (fl.type === 'door') document.getElementById('pFrontType').value = 'door';
-                else if (fl.type === 'drawers') document.getElementById('pFrontType').value = 'drawers' + fl.count;
-                else if (fl.type === 'fixed135') document.getElementById('pFrontType').value = 'fixed135_' + fl.count;
-                else if (fl.type === 'custom') { document.getElementById('pFrontType').value = 'custom'; document.getElementById('pFrontCustomJson').value = JSON.stringify(fl.fronts || []); }
-            } catch (e) {}
-            toggleFrontConfigUI();
+                const res = await fetch('/api/frame-types');
+                const types = await res.json();
+                const sel = document.getElementById('pFrameTypeId');
+                sel.innerHTML = '<option value="">Ingen (tomt skåp / hanteras manuellt)</option>';
+                types.forEach(t => { sel.innerHTML += `<option value="${t.id}">${t.name}</option>`; });
+            } catch (e) { console.error(e); }
         }
 
         function updateVariationHeaders() {
@@ -460,6 +424,17 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
             document.getElementById('varHead2').innerText = v2;
         }
 
+        // Räknar fram försäljningspris = inköpspris x faktor x 1,25 (moms), samma konvention som lucka/lådfront-prisrader i door-models.html.
+        // Rör inte priset om faktor lämnas tomt (då är priset manuellt satt).
+        function recalcVariantRowPrice(inputEl) {
+            const row = inputEl.closest('tr');
+            const purchase = parseFloat(row.querySelector('.v-purchase').value) || 0;
+            const factorRaw = row.querySelector('.v-factor').value;
+            if (factorRaw === '') return;
+            const factor = parseFloat(factorRaw) || 0;
+            row.querySelector('.v-price').value = Math.round(purchase * factor * 1.25 * 100) / 100;
+        }
+
         function addVariationRow(v = {}) {
             const tbody = document.getElementById('variationsTableBody');
             const tr = document.createElement('tr');
@@ -467,6 +442,8 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                 <td class="p-1 border-b"><input type="text" class="v-sku w-full px-1 py-1 border rounded" value="${v.sku || ''}"></td>
                 <td class="p-1 border-b"><input type="text" class="v-attr1 w-full px-1 py-1 border rounded" value="${v.attr1_value || ''}"></td>
                 <td class="p-1 border-b"><input type="text" class="v-attr2 w-full px-1 py-1 border rounded" value="${v.attr2_value || ''}"></td>
+                <td class="p-1 border-b"><input type="number" class="v-purchase w-full px-1 py-1 border rounded text-right" value="${v.purchase_price || 0}" oninput="recalcVariantRowPrice(this)"></td>
+                <td class="p-1 border-b"><input type="number" step="0.01" class="v-factor w-full px-1 py-1 border rounded text-right" placeholder="t.ex. 2" value="${v.factor ?? ''}" oninput="recalcVariantRowPrice(this)"></td>
                 <td class="p-1 border-b"><input type="number" class="v-price w-full px-1 py-1 border rounded text-right" value="${v.price || 0}"></td>
                 <td class="p-1 border-b"><input type="number" class="v-install w-full px-1 py-1 border rounded text-right" value="${v.install_price || 0}"></td>
                 <td class="p-1 border-b"><input type="number" class="v-share w-full px-1 py-1 border border-purple-200 bg-purple-50 rounded text-right" value="${v.installer_share || 0}"></td>
@@ -499,7 +476,7 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                 document.getElementById('pStommeHeight').value = p.height || 0;
                 document.getElementById('pStommeWidth').value = p.width || 0;
                 document.getElementById('pStommeDepth').value = p.length || 0;
-                loadFrontLayoutIntoForm(p.front_layout);
+                document.getElementById('pFrameTypeId').value = p.frame_type_id || '';
                 document.getElementById('pDesc').value = p.description || '';
                 
                 if (p.image_url) { document.getElementById('currentMainImagePreview').src = p.image_url; mainContainer.classList.remove('hidden'); } 
@@ -534,7 +511,7 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                 document.getElementById('pStommeHeight').value = 0;
                 document.getElementById('pStommeWidth').value = 0;
                 document.getElementById('pStommeDepth').value = 0;
-                loadFrontLayoutIntoForm(null);
+                document.getElementById('pFrameTypeId').value = '';
                 mainContainer.classList.add('hidden');
                 currentGalleryUrls = [];
                 document.getElementById('pHasVariations').checked = false;
@@ -561,9 +538,7 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
             formData.append('height', document.getElementById('pStommeHeight').value || 0);
             formData.append('width', document.getElementById('pStommeWidth').value || 0);
             formData.append('length', document.getElementById('pStommeDepth').value || 0);
-            const frontLayoutJson = buildFrontLayoutJson();
-            if (frontLayoutJson === null) return; // ogiltig anpassad JSON, avbryt sparning
-            formData.append('front_layout', frontLayoutJson);
+            formData.append('frame_type_id', document.getElementById('pFrameTypeId').value);
             formData.append('supplier_id', document.getElementById('pSupplier').value);
             formData.append('door_model_id', document.getElementById('pDoorModel').value);
 
@@ -586,6 +561,8 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                             attr1_value: row.querySelector('.v-attr1').value,
                             attr2_name: attr2Name,
                             attr2_value: row.querySelector('.v-attr2').value,
+                            purchase_price: parseFloat(row.querySelector('.v-purchase').value) || 0,
+                            factor: row.querySelector('.v-factor').value === '' ? null : parseFloat(row.querySelector('.v-factor').value),
                             price: parseFloat(row.querySelector('.v-price').value) || 0,
                             install_price: parseFloat(row.querySelector('.v-install').value) || 0,
                             installer_share: parseFloat(row.querySelector('.v-share').value) || 0

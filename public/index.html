@@ -11,7 +11,7 @@
 
     <div class="bg-white p-6 md:p-8 rounded-lg shadow-lg w-full max-w-sm border border-gray-200">
         <div class="text-center mb-6">
-     <img src="https://klaro2.klaralvskok.se/public/uploads/Klaralvskok-logga-1.jpg" alt="Klarälvskök Logotyp" class="h-16 mx-auto mb-3 object-contain" onerror="this.outerHTML='<h1 class=\\'text-3xl font-bold text-gray-800 tracking-tight\\'>Klarälvskök</h1>'">
+     <img id="loginLogo" src="/uploads/Klaralvskok-logga-1.jpg" alt="Klarälvskök Logotyp" class="h-16 mx-auto mb-3 object-contain" onerror="this.outerHTML='<h1 class=\\'text-3xl font-bold text-gray-800 tracking-tight\\'>Klarälvskök</h1>'">
             <p class="text-xs md:text-sm text-gray-400 mt-1">Internt affärs- och offertverktyg</p>
         </div>
 
@@ -41,6 +41,14 @@
     </div>
 
     <script>
+        (async function loadLoginLogo() {
+            try {
+                const res = await fetch('/api/settings');
+                const s = await res.json();
+                if (s && s.logo_url) document.getElementById('loginLogo').src = s.logo_url;
+            } catch (e) {}
+        })();
+
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('email').value;

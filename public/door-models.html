@@ -78,6 +78,14 @@
                                 <label class="block text-[10px] font-medium text-gray-600 uppercase">Försäljningspris ink moms</label>
                                 <input type="number" step="0.01" id="rowPrice" value="0" class="mt-1 w-full px-2 py-1.5 border border-blue-300 bg-white rounded text-sm font-semibold">
                             </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Montagepris</label>
+                                <input type="number" step="0.01" id="rowInstallPrice" value="0" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Montörens del</label>
+                                <input type="number" step="0.01" id="rowInstallerShare" value="0" class="mt-1 w-full px-2 py-1.5 border border-purple-300 bg-purple-50 rounded text-sm">
+                            </div>
                         </div>
                         <p class="text-[11px] text-gray-500 mb-3">Ange antingen inköpspris + faktor (försäljningspris räknas då fram automatiskt som inköpspris × faktor × 1,25 för moms), eller skriv in försäljningspriset direkt och lämna faktor tomt.</p>
                         <div class="flex gap-2">
@@ -89,8 +97,8 @@
                     <div class="bg-gray-50 border border-gray-200 rounded p-4 mb-4">
                         <h4 class="text-xs font-bold text-gray-700 mb-2 uppercase">Importera prislista (CSV) - alternativ till manuell inmatning</h4>
                         <p class="text-[11px] text-gray-500 mb-2">
-                            Kolumner (semikolon-separerat, med rubrikrad): <code>Typ;HöjdMin;HöjdMax;BreddMin;BreddMax;InköpsPris;Faktor;Pris</code><br>
-                            Typ ska vara <code>lucka</code>, <code>ladfront</code>, <code>grytfront</code> eller <code>ovrigt</code>. Lämna InköpsPris/Faktor tomma om du bara vill ange Pris direkt.
+                            Kolumner (semikolon-separerat, med rubrikrad): <code>Typ;HöjdMin;HöjdMax;BreddMin;BreddMax;InköpsPris;Faktor;Pris;MontagePris;MontörDel</code><br>
+                            Typ ska vara <code>lucka</code>, <code>ladfront</code>, <code>grytfront</code> eller <code>ovrigt</code>. Lämna InköpsPris/Faktor tomma om du bara vill ange Pris direkt. MontagePris/MontörDel är valfria (0 om de saknas).
                         </p>
                         <input type="file" id="csvInput" accept=".csv" class="text-sm">
                     </div>
@@ -112,6 +120,8 @@
                                     <th class="p-2 border-b text-right">Inköp</th>
                                     <th class="p-2 border-b text-right">Faktor</th>
                                     <th class="p-2 border-b text-right">Pris</th>
+                                    <th class="p-2 border-b text-right">Montage</th>
+                                    <th class="p-2 border-b text-right">Montör</th>
                                     <th class="p-2 border-b"></th>
                                 </tr>
                             </thead>
@@ -187,7 +197,7 @@
             tbody.innerHTML = '';
             document.getElementById('priceCount').innerText = currentPrices.length;
             if (currentPrices.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-gray-400 italic">Inga prisrader ännu.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-gray-400 italic">Inga prisrader ännu.</td></tr>';
                 return;
             }
             currentPrices.forEach(p => {
@@ -201,6 +211,8 @@
                         <td class="p-2 text-right">${p.purchase_price ? parseFloat(p.purchase_price).toLocaleString() + ' kr' : '-'}</td>
                         <td class="p-2 text-right">${p.markup_factor !== null && p.markup_factor !== undefined ? 'x' + p.markup_factor : '-'}</td>
                         <td class="p-2 text-right font-semibold">${parseFloat(p.price).toLocaleString()} kr</td>
+                        <td class="p-2 text-right">${p.installation_price ? parseFloat(p.installation_price).toLocaleString() + ' kr' : '-'}</td>
+                        <td class="p-2 text-right">${p.installer_share ? parseFloat(p.installer_share).toLocaleString() + ' kr' : '-'}</td>
                         <td class="p-2 text-right whitespace-nowrap">
                             <button onclick="editPriceRow(${p.id})" class="text-gray-500 hover:text-gray-800 mr-2"><i class="fas fa-edit"></i></button>
                             <button onclick="deletePrice(${p.id})" class="text-red-400 hover:text-red-600"><i class="fas fa-trash"></i></button>
@@ -228,6 +240,8 @@
             document.getElementById('rowPurchase').value = 0;
             document.getElementById('rowFactor').value = '';
             document.getElementById('rowPrice').value = 0;
+            document.getElementById('rowInstallPrice').value = 0;
+            document.getElementById('rowInstallerShare').value = 0;
         }
 
         function editPriceRow(id) {
@@ -243,6 +257,8 @@
             document.getElementById('rowPurchase').value = p.purchase_price || 0;
             document.getElementById('rowFactor').value = (p.markup_factor === null || p.markup_factor === undefined) ? '' : p.markup_factor;
             document.getElementById('rowPrice').value = p.price;
+            document.getElementById('rowInstallPrice').value = p.installation_price || 0;
+            document.getElementById('rowInstallerShare').value = p.installer_share || 0;
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
@@ -256,7 +272,9 @@
                 width_max: parseInt(document.getElementById('rowWidthMax').value) || 100000,
                 purchase_price: document.getElementById('rowPurchase').value,
                 markup_factor: document.getElementById('rowFactor').value,
-                price: document.getElementById('rowPrice').value
+                price: document.getElementById('rowPrice').value,
+                installation_price: document.getElementById('rowInstallPrice').value,
+                installer_share: document.getElementById('rowInstallerShare').value
             };
             const url = editingId ? `/api/door-models/${currentModelId}/prices/${editingId}` : `/api/door-models/${currentModelId}/prices`;
             const method = editingId ? 'PUT' : 'POST';
@@ -302,7 +320,9 @@
                         width_max: parseInt(r['BreddMax']) || 100000,
                         purchase_price: r['InköpsPris'] || 0,
                         markup_factor: r['Faktor'] || '',
-                        price: r['Pris'] || ''
+                        price: r['Pris'] || '',
+                        installation_price: r['MontagePris'] || 0,
+                        installer_share: r['MontörDel'] || 0
                     })).filter(r => r.component_type);
 
                     if (rows.length === 0) return alert('Hittade inga giltiga rader i filen.');

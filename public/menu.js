@@ -1,4 +1,4 @@
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
     const role = localStorage.getItem('userRole');
     if(!role) {
         window.location.href = '/index.html';
@@ -14,9 +14,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const activeClass = "bg-blue-900 bg-opacity-40 border border-blue-700 text-blue-300 font-medium";
     const inactiveClass = "hover:bg-gray-800 text-gray-300";
 
+    let logoHtml = 'KLARO 2.0';
+    try {
+        const res = await fetch('/api/settings');
+        const s = await res.json();
+        if (s && s.logo_url) logoHtml = `<img src="${s.logo_url}" alt="${s.company_name || 'Logotyp'}" class="h-10 mx-auto object-contain" onerror="this.outerHTML='KLARO 2.0'">`;
+    } catch (e) {}
+
     let menuHtml = `
         <div class="bg-gray-900 text-white w-64 min-h-screen flex flex-col transition-all duration-300">
-            <div class="p-5 bg-gray-800 text-xl font-bold tracking-widest text-center border-b border-gray-700">KLARO 2.0</div>
+            <div class="p-5 bg-gray-800 text-xl font-bold tracking-widest text-center border-b border-gray-700">${logoHtml}</div>
             <nav class="flex-1 p-4 space-y-2">
     `;
 
@@ -35,6 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
         menuHtml += `<div class="pt-3 mt-3 border-t border-gray-800 text-[10px] uppercase text-gray-500 px-4 mb-1">Administration</div>`;
         menuHtml += `<a href="/suppliers.html" class="${baseClass} ${isActive('suppliers') ? activeClass : inactiveClass}"><i class="fas fa-truck w-6"></i> Leverantörer</a>`;
         menuHtml += `<a href="/door-models.html" class="${baseClass} ${isActive('door-models') ? activeClass : inactiveClass}"><i class="fas fa-swatchbook w-6"></i> Dörrmodeller</a>`;
+        menuHtml += `<a href="/frame-types.html" class="${baseClass} ${isActive('frame-types') ? activeClass : inactiveClass}"><i class="fas fa-cubes w-6"></i> Stomtyper</a>`;
         menuHtml += `<a href="/users.html" class="${baseClass} ${isActive('users') ? activeClass : inactiveClass}"><i class="fas fa-user-shield w-6"></i> Användare</a>`;
         menuHtml += `<a href="/settings.html" class="${baseClass} ${isActive('settings') ? activeClass : inactiveClass}"><i class="fas fa-cog w-6"></i> Företagsinfo</a>`;
     }

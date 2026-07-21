@@ -15,6 +15,84 @@ try {
     console.warn("Varning: 'pdfmake' saknas! Kör 'npm install pdfmake' i cPanel.");
 }
 
+// ==========================================
+// HTML -> pdfmake-konverterare för fri text (t.ex. köpeavtal/kommentarer) som
+// numera kan innehålla enkel HTML från en contenteditable-editor (se settings.html).
+// Ingen DOM/jsdom - en enkel regex/tokenizer anpassad efter vad vår egen editor
+// faktiskt producerar (platta p/div/h1-h3/ul/ol-block, ej djupt nästlade element).
+// ==========================================
+function decodeHtmlEntities(str) {
+    return str.replace(/&nbsp;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;/g, "'").replace(/&amp;/gi, '&');
+}
+
+// Plockar isär <b>/<strong>, <i>/<em>, <u> till en array av pdfmake-textruns.
+// Övrig okänd markup i textsegmenten städas bort som en sista säkerhetsåtgärd.
+function parseInlineHtml(html) {
+    const tokens = html.split(/(<\/?(?:b|strong|i|em|u)[^>]*>)/gi);
+    const runs = [];
+    let bold = false, italics = false, underline = false;
+    tokens.forEach(tok => {
+        if (!tok) return;
+        const tagMatch = tok.match(/^<(\/?)(\w+)[^>]*>$/);
+        if (tagMatch) {
+            const closing = tagMatch[1] === '/';
+            const tagName = tagMatch[2].toLowerCase();
+            if (tagName === 'b' || tagName === 'strong') bold = !closing;
+            else if (tagName === 'i' || tagName === 'em') italics = !closing;
+            else if (tagName === 'u') underline = !closing;
+            return;
+        }
+        const text = decodeHtmlEntities(tok.replace(/<[^>]+>/g, ''));
+        if (text === '') return;
+        const run = { text };
+        if (bold) run.bold = true;
+        if (italics) run.italics = true;
+        if (underline) run.decoration = 'underline';
+        runs.push(run);
+    });
+    return runs;
+}
+
+function htmlBlockToNodes(tag, inner) {
+    if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
+        const fontSize = tag === 'h1' ? 20 : (tag === 'h2' ? 15 : 12);
+        const runs = parseInlineHtml(inner);
+        return [{ text: runs.length ? runs : '', fontSize, bold: true, margin: [0, 8, 0, 4] }];
+    }
+    if (tag === 'ul' || tag === 'ol') {
+        const items = [];
+        const liRegex = /<li(?:\s[^>]*)?>([\s\S]*?)<\/li>/gi;
+        let m;
+        while ((m = liRegex.exec(inner)) !== null) {
+            const runs = parseInlineHtml(m[1]);
+            items.push({ text: runs.length ? runs : '' });
+        }
+        return items.length ? [{ [tag]: items, margin: [0, 2, 0, 6] }] : [];
+    }
+    // p / div: dela på <br> till rader inom samma stycke.
+    const lines = inner.split(/<br\s*\/?>/gi);
+    const textNode = [];
+    lines.forEach((line, idx) => {
+        if (idx > 0) textNode.push('\n');
+        textNode.push(...parseInlineHtml(line));
+    });
+    return [{ text: textNode.length ? textNode : '', margin: [0, 0, 0, 6] }];
+}
+
+// Returnerar en array av pdfmake content-noder från en HTML-sträng (eller ren klartext).
+function htmlToPdfmakeNodes(html) {
+    if (!html) return [];
+    const nodes = [];
+    const blockRegex = /<(p|div|h1|h2|h3|ul|ol)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi;
+    let match; let matchedAny = false;
+    while ((match = blockRegex.exec(html)) !== null) {
+        matchedAny = true;
+        nodes.push(...htmlBlockToNodes(match[1].toLowerCase(), match[2]));
+    }
+    if (!matchedAny) nodes.push(...htmlBlockToNodes('p', html)); // ren klartext/enstaka rad utan blocktaggar
+    return nodes;
+}
+
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -162,14 +240,20 @@ app.get('/api/customers/:id/quotes', (req, res) => db.query('SELECT * FROM quote
 // ==========================================
 // PRODUKTER (NU MED VARIANT-STÖD!)
 // ==========================================
-app.get('/api/products', (req, res) => db.query('SELECT * FROM products ORDER BY id DESC', (err, results) => res.json(results || [])));
+app.get('/api/products', (req, res) => db.query(
+    `SELECT p.*, COALESCE(ft.front_layout, p.front_layout) AS effective_front_layout
+     FROM products p
+     LEFT JOIN frame_types ft ON p.frame_type_id = ft.id AND ft.active = 1
+     ORDER BY p.id DESC`,
+    (err, results) => res.json(results || [])
+));
 
 const uploadMiddleware = upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 10 }]);
 
 app.post('/api/products', (req, res) => {
     uploadMiddleware(req, res, async function (err) {
         if (err) return res.status(400).json({ message: 'Uppladdningsfel' });
-        const { id, name, description, sku, cc_measurement, height, length, width, brand, category, installation_price, installer_share, standard_price, purchase_price, supplier_id, front_layout, door_model_id, remove_main_image, retained_gallery, has_variations, variations } = req.body;
+        const { id, name, description, sku, cc_measurement, height, length, width, brand, category, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, remove_main_image, retained_gallery, has_variations, variations } = req.body;
         // Tomt SKU sparas som NULL istället för '' - annars krockar flera produkter utan eget SKU
         // (t.ex. variantprodukter) mot den unika SKU-kolumnen.
         const skuValue = (sku && sku.trim() !== '') ? sku.trim() : null;
@@ -187,10 +271,13 @@ app.post('/api/products', (req, res) => {
             try { finalGallery = JSON.parse(retained_gallery || '[]'); } catch(e) {}
             galleryFiles.forEach(f => finalGallery.push('/uploads/' + f.filename));
 
-            let sql = `UPDATE products SET name=?, description=?, sku=?, cc_measurement=?, height=?, length=?, width=?, brand=?, category=?, installation_price=?, installer_share=?, standard_price=?, purchase_price=?, supplier_id=?, front_layout=?, door_model_id=?, gallery=?, has_variations=?, variations=?`;
-            let params = [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, front_layout || null, door_model_id || null, JSON.stringify(finalGallery), has_variations === 'true' ? 1 : 0, finalVariations];
+            // OBS: front_layout skrivs medvetet inte över här längre - stomtyper (frame_types) har
+            // ersatt inline-konfiguration för nya/redigerade produkter. Gamla produkters front_layout
+            // lämnas orört som legacy-fallback (se COALESCE i GET /api/products).
+            let sql = `UPDATE products SET name=?, description=?, sku=?, cc_measurement=?, height=?, length=?, width=?, brand=?, category=?, installation_price=?, installer_share=?, standard_price=?, purchase_price=?, supplier_id=?, frame_type_id=?, door_model_id=?, gallery=?, has_variations=?, variations=?`;
+            let params = [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, JSON.stringify(finalGallery), has_variations === 'true' ? 1 : 0, finalVariations];
 
-            if (remove_main_image === 'true') { sql += `, image_url=''`; } 
+            if (remove_main_image === 'true') { sql += `, image_url=''`; }
             else if (mainFile) { sql += `, image_url=?`; params.push('/uploads/' + mainFile.filename); }
 
             sql += ` WHERE id=?`;
@@ -202,14 +289,28 @@ app.post('/api/products', (req, res) => {
         } else {
             const finalMain = mainFile ? '/uploads/' + mainFile.filename : '';
             const finalGallery = galleryFiles.map(f => '/uploads/' + f.filename);
-            const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, supplier_id, front_layout, door_model_id, has_variations, variations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-            db.query(sql, [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, finalMain, JSON.stringify(finalGallery), installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, front_layout || null, door_model_id || null, has_variations === 'true' ? 1 : 0, finalVariations], (err) => {
+            const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, has_variations, variations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            db.query(sql, [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, finalMain, JSON.stringify(finalGallery), installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, has_variations === 'true' ? 1 : 0, finalVariations], (err) => {
                 if (err) return res.status(500).json({ message: 'Kunde inte spara produkten: ' + err.message });
                 res.json({ message: 'Sparad!' });
             });
         }
     });
 });
+
+// ==========================================
+// STOMTYPER (frame_types) - återanvändbara frontkonfigurationer
+// ==========================================
+app.get('/api/frame-types', (req, res) => db.query('SELECT * FROM frame_types WHERE active = 1 ORDER BY name ASC', (err, results) => res.json(results || [])));
+app.post('/api/frame-types', (req, res) => {
+    const { name, front_layout } = req.body;
+    db.query('INSERT INTO frame_types (name, front_layout) VALUES (?, ?)', [name, front_layout], (err, result) => res.json(err ? { message: err.message } : { message: 'Stomtyp skapad!', id: result.insertId }));
+});
+app.put('/api/frame-types/:id', (req, res) => {
+    const { name, front_layout, active } = req.body;
+    db.query('UPDATE frame_types SET name=?, front_layout=?, active=? WHERE id=?', [name, front_layout, active === false || active === 'false' ? 0 : 1, req.params.id], (err) => res.json(err ? { message: err.message } : { message: 'Stomtyp uppdaterad!' }));
+});
+app.delete('/api/frame-types/:id', (req, res) => db.query('UPDATE frame_types SET active = 0 WHERE id = ?', [req.params.id], (err) => res.json(err ? { message: err.message } : { message: 'Stomtyp inaktiverad!' })));
 
 app.post('/api/products/bulk', async (req, res) => {
     const products = req.body;
@@ -398,7 +499,10 @@ app.get('/api/quotes/:id/pdf', (req, res) => {
                 }
             });
 
-            const startFeeProduct = parseFloat(extraFees.startFeeProduct) || 0; const startFeeNonRot = parseFloat(extraFees.startFeeNonRot) || 1800; const startFeeRotComp = parseFloat(extraFees.startFeeRotComp) || 0; const startFeeRotInst = parseFloat(extraFees.startFeeRotInst) || 0; const colorFee = parseFloat(extraFees.feeColor) || 0;
+            const startFeeProduct = parseFloat(extraFees.startFeeProduct) || 0;
+            const startFeeNonRotRaw = extraFees.startFeeNonRot;
+            const startFeeNonRot = (startFeeNonRotRaw !== undefined && startFeeNonRotRaw !== null && startFeeNonRotRaw !== '') ? (parseFloat(startFeeNonRotRaw) || 0) : 1800;
+            const startFeeRotComp = parseFloat(extraFees.startFeeRotComp) || 0; const startFeeRotInst = parseFloat(extraFees.startFeeRotInst) || 0; const colorFee = parseFloat(extraFees.feeColor) || 0;
             totalMaterialBeforeGlobalDiscount += startFeeProduct + colorFee; totalNonRotInstallIncVat += startFeeNonRot; totalRotInstallIncVat += (startFeeRotComp + startFeeRotInst);
             const globalDiscountVal = parseFloat(order.global_discount) || 0; const globalDiscountType = order.discount_type || '%';
             let globalDiscountAmount = globalDiscountType === '%' ? totalMaterialBeforeGlobalDiscount * (globalDiscountVal / 100) : globalDiscountVal;
@@ -418,7 +522,7 @@ app.get('/api/quotes/:id/pdf', (req, res) => {
             };
 
             const termsText = order.public_comment || company.agreement_text || '';
-            if (termsText) docDefinition.content.push({ text: 'KOMMENTAR / ÖVRIGA VILLKOR', bold: true, color: '#000000', margin: [0, 30, 0, 8] }, { text: termsText, color: '#000000', fontSize: 10, margin: [0, 0, 0, 20] });
+            if (termsText) docDefinition.content.push({ text: 'KOMMENTAR / ÖVRIGA VILLKOR', bold: true, color: '#000000', margin: [0, 30, 0, 8] }, ...htmlToPdfmakeNodes(termsText));
             if (isOrder) docDefinition.content.push({ text: 'SIGNATUR', bold: true, color: '#000000', margin: [0, 40, 0, 20] }, { columns: [ { width: '*', text: 'Ort och Datum\n\n__________________________________', alignment: 'left', color: '#000000' }, { width: '*', text: 'Köparens Underskrift\n\n__________________________________', alignment: 'left', color: '#000000' } ] });
             const pdfDoc = printer.createPdfKitDocument(docDefinition); res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `inline; filename="${docTitle}_${order.customer_name}.pdf"`); pdfDoc.pipe(res); pdfDoc.end();
         });
@@ -452,7 +556,7 @@ app.get('/api/orders/:id/assembly/pdf', (req, res) => {
                     { table: { headerRows: 1, widths: ['*', 35, 35, 35], body: tableBody }, layout: 'lightHorizontalLines' }
                 ], styles: { th: { bold: true, fillColor: '#000000', color: 'white', padding: 5 } }
             };
-            if (order.public_comment) docDefinition.content.push( { text: 'KOMMENTAR / ÖVRIGA VILLKOR', bold: true, color: '#000000', margin: [0, 30, 0, 8] }, { text: order.public_comment, color: '#000000', fontSize: 10, margin: [0, 0, 0, 20] } );
+            if (order.public_comment) docDefinition.content.push( { text: 'KOMMENTAR / ÖVRIGA VILLKOR', bold: true, color: '#000000', margin: [0, 30, 0, 8] }, ...htmlToPdfmakeNodes(order.public_comment) );
             const pdfDoc = printer.createPdfKitDocument(docDefinition); res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `inline; filename="Monteringsspec_${order.id}.pdf"`); pdfDoc.pipe(res); pdfDoc.end();
           });
         });
@@ -517,23 +621,23 @@ app.delete('/api/door-models/:id', (req, res) => db.query('DELETE FROM door_mode
 app.get('/api/door-models/:id/prices', (req, res) => db.query('SELECT * FROM door_price_items WHERE model_id = ? ORDER BY component_type, height_min, width_min', [req.params.id], (err, results) => res.json(results || [])));
 
 app.post('/api/door-models/:id/prices', (req, res) => {
-    const { component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price } = req.body;
+    const { component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share } = req.body;
     const purchase = parseFloat(purchase_price) || 0;
     const factor = (markup_factor === '' || markup_factor === undefined || markup_factor === null) ? null : parseFloat(markup_factor);
     // Om faktor angetts och inget pris skickats med, räkna fram försäljningspriset serverside som facit.
     const finalPrice = (price !== undefined && price !== '' && price !== null) ? parseFloat(price) : (factor !== null ? Math.round(purchase * factor * DOOR_VAT_FACTOR * 100) / 100 : 0);
-    db.query('INSERT INTO door_price_items (model_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price) VALUES (?,?,?,?,?,?,?,?,?)',
-        [req.params.id, component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice],
+    db.query('INSERT INTO door_price_items (model_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        [req.params.id, component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice, parseFloat(installation_price) || 0, parseFloat(installer_share) || 0],
         (err, result) => res.json(err ? { message: err.message } : { message: 'Rad tillagd!', id: result.insertId }));
 });
 
 app.put('/api/door-models/:modelId/prices/:id', (req, res) => {
-    const { component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price } = req.body;
+    const { component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share } = req.body;
     const purchase = parseFloat(purchase_price) || 0;
     const factor = (markup_factor === '' || markup_factor === undefined || markup_factor === null) ? null : parseFloat(markup_factor);
     const finalPrice = (price !== undefined && price !== '' && price !== null) ? parseFloat(price) : (factor !== null ? Math.round(purchase * factor * DOOR_VAT_FACTOR * 100) / 100 : 0);
-    db.query('UPDATE door_price_items SET component_type=?, height_min=?, height_max=?, width_min=?, width_max=?, purchase_price=?, markup_factor=?, price=? WHERE id=? AND model_id=?',
-        [component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice, req.params.id, req.params.modelId],
+    db.query('UPDATE door_price_items SET component_type=?, height_min=?, height_max=?, width_min=?, width_max=?, purchase_price=?, markup_factor=?, price=?, installation_price=?, installer_share=? WHERE id=? AND model_id=?',
+        [component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice, parseFloat(installation_price) || 0, parseFloat(installer_share) || 0, req.params.id, req.params.modelId],
         (err) => res.json(err ? { message: err.message } : { message: 'Rad uppdaterad!' }));
 });
 
@@ -544,9 +648,9 @@ app.post('/api/door-models/:id/prices/bulk', (req, res) => {
         const purchase = parseFloat(r.purchase_price) || 0;
         const factor = (r.markup_factor === '' || r.markup_factor === undefined || r.markup_factor === null) ? null : parseFloat(r.markup_factor);
         const finalPrice = (r.price !== undefined && r.price !== '' && r.price !== null) ? parseFloat(r.price) : (factor !== null ? Math.round(purchase * factor * DOOR_VAT_FACTOR * 100) / 100 : 0);
-        return [req.params.id, r.component_type, r.height_min || 0, r.height_max || 100000, r.width_min || 0, r.width_max || 100000, purchase, factor, finalPrice];
+        return [req.params.id, r.component_type, r.height_min || 0, r.height_max || 100000, r.width_min || 0, r.width_max || 100000, purchase, factor, finalPrice, parseFloat(r.installation_price) || 0, parseFloat(r.installer_share) || 0];
     });
-    db.query('INSERT INTO door_price_items (model_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price) VALUES ?', [values], (err, result) => {
+    db.query('INSERT INTO door_price_items (model_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share) VALUES ?', [values], (err, result) => {
         if (err) return res.status(500).json({ message: err.message });
         res.json({ message: `${result.affectedRows} rader importerade!` });
     });

@@ -1,6 +1,6 @@
 {
   "name": "koksfokus",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "description": "Offert och CRM-system",
   "main": "server.js",
   "scripts": {

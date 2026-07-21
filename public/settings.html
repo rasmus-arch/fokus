@@ -6,6 +6,14 @@
     <title>Företagsinfo - Klarälvskök</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .agreement-editor h1 { font-size: 2em; font-weight: bold; margin: 0.6em 0 0.3em; }
+        .agreement-editor h2 { font-size: 1.5em; font-weight: bold; margin: 0.5em 0 0.3em; }
+        .agreement-editor h3 { font-size: 1.2em; font-weight: bold; margin: 0.4em 0 0.2em; }
+        .agreement-editor ul { list-style: disc; padding-left: 1.5em; margin: 0.3em 0; }
+        .agreement-editor ol { list-style: decimal; padding-left: 1.5em; margin: 0.3em 0; }
+        .agreement-editor p { margin: 0.3em 0; }
+    </style>
 </head>
 <body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
 
@@ -56,7 +64,27 @@
             <div class="bg-white p-6 rounded-lg shadow-sm lg:col-span-3 space-y-2">
                 <h3 class="text-lg font-medium text-gray-700 border-b pb-2 mb-2">Köpeavtal / avtalstext</h3>
                 <p class="text-xs text-gray-400">Fri text som kan återanvändas i köpeavtal och offerter, t.ex. villkor, garantier och betalningsvillkor.</p>
-                <textarea id="sAgreementText" rows="10" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"></textarea>
+                <div class="mt-1 border border-gray-300 rounded-md overflow-hidden">
+                    <div class="flex flex-wrap gap-1 bg-gray-50 border-b border-gray-300 p-1.5">
+                        <button type="button" onmousedown="event.preventDefault()" onclick="agreementCmd('bold')" title="Fet" class="w-8 h-8 rounded hover:bg-gray-200 font-bold text-sm">B</button>
+                        <button type="button" onmousedown="event.preventDefault()" onclick="agreementCmd('italic')" title="Kursiv" class="w-8 h-8 rounded hover:bg-gray-200 italic text-sm">I</button>
+                        <button type="button" onmousedown="event.preventDefault()" onclick="agreementCmd('underline')" title="Understruken" class="w-8 h-8 rounded hover:bg-gray-200 underline text-sm">U</button>
+                        <span class="w-px bg-gray-300 mx-1"></span>
+                        <button type="button" onmousedown="event.preventDefault()" onclick="agreementCmd('formatBlock', 'H1')" title="Rubrik 1" class="w-8 h-8 rounded hover:bg-gray-200 text-xs font-bold">H1</button>
+                        <button type="button" onmousedown="event.preventDefault()" onclick="agreementCmd('formatBlock', 'H2')" title="Rubrik 2" class="w-8 h-8 rounded hover:bg-gray-200 text-xs font-bold">H2</button>
+                        <button type="button" onmousedown="event.preventDefault()" onclick="agreementCmd('formatBlock', 'H3')" title="Rubrik 3" class="w-8 h-8 rounded hover:bg-gray-200 text-xs font-bold">H3</button>
+                        <button type="button" onmousedown="event.preventDefault()" onclick="agreementCmd('formatBlock', 'P')" title="Normal text" class="w-8 h-8 rounded hover:bg-gray-200 text-xs">P</button>
+                        <span class="w-px bg-gray-300 mx-1"></span>
+                        <button type="button" onmousedown="event.preventDefault()" onclick="agreementCmd('insertUnorderedList')" title="Punktlista" class="w-8 h-8 rounded hover:bg-gray-200 text-sm"><i class="fas fa-list-ul"></i></button>
+                        <button type="button" onmousedown="event.preventDefault()" onclick="agreementCmd('insertOrderedList')" title="Numrerad lista" class="w-8 h-8 rounded hover:bg-gray-200 text-sm"><i class="fas fa-list-ol"></i></button>
+                        <span class="w-px bg-gray-300 mx-1"></span>
+                        <button type="button" onmousedown="event.preventDefault()" onclick="agreementCmd('removeFormat')" title="Rensa formatering" class="w-8 h-8 rounded hover:bg-gray-200 text-sm"><i class="fas fa-eraser"></i></button>
+                        <span class="w-px bg-gray-300 mx-1"></span>
+                        <button type="button" onmousedown="event.preventDefault()" onclick="toggleAgreementSourceMode()" title="Redigera HTML-källkod" class="h-8 px-2 rounded hover:bg-gray-200 text-xs font-mono font-bold">&lt;/&gt;</button>
+                    </div>
+                    <div id="sAgreementText" contenteditable="true" class="agreement-editor min-h-[250px] px-3 py-2 text-sm outline-none"></div>
+                    <textarea id="sAgreementHtmlSource" class="hidden min-h-[250px] w-full px-3 py-2 text-xs font-mono outline-none border-0" spellcheck="false"></textarea>
+                </div>
             </div>
 
             <div class="lg:col-span-3">
@@ -68,6 +96,33 @@
     </main>
 
     <script>
+        // Minska webbläsarskillnader i den HTML som contenteditable genererar
+        // (annars använder t.ex. Chrome bara <div> + inline style= istället för <b>/<p>).
+        document.execCommand('defaultParagraphSeparator', false, 'p');
+        try { document.execCommand('styleWithCSS', false, false); } catch (e) {}
+
+        function agreementCmd(cmd, value) {
+            document.getElementById('sAgreementText').focus();
+            document.execCommand(cmd, false, value || null);
+        }
+
+        let agreementSourceMode = false;
+        function toggleAgreementSourceMode() {
+            const editable = document.getElementById('sAgreementText');
+            const source = document.getElementById('sAgreementHtmlSource');
+            if (!agreementSourceMode) { source.value = editable.innerHTML; }
+            else { editable.innerHTML = source.value; }
+            agreementSourceMode = !agreementSourceMode;
+            editable.classList.toggle('hidden', agreementSourceMode);
+            source.classList.toggle('hidden', !agreementSourceMode);
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.innerText = str;
+            return div.innerHTML;
+        }
+
         async function loadSettings() {
             try {
                 const res = await fetch('/api/settings');
@@ -77,7 +132,9 @@
                 document.getElementById('sPhone').value = s.phone || '';
                 document.getElementById('sEmail').value = s.email || '';
                 document.getElementById('sAddress').value = s.address || '';
-                document.getElementById('sAgreementText').value = s.agreement_text || '';
+                const rawAgreement = s.agreement_text || '';
+                // Gammal ren klartext (inga taggar) - bevara radbrytningar när den visas i editorn.
+                document.getElementById('sAgreementText').innerHTML = rawAgreement.includes('<') ? rawAgreement : escapeHtml(rawAgreement).replace(/\n/g, '<br>');
                 if (s.logo_url) {
                     document.getElementById('logoPreview').src = s.logo_url;
                     document.getElementById('logoPreviewWrap').classList.remove('hidden');
@@ -87,13 +144,16 @@
 
         document.getElementById('settingsForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            // Om HTML-källkodsläget är öppet, synka in det till editorn innan vi läser innerHTML
+            // - annars skulle ändringar gjorda i källkodsläget tappas bort vid sparning.
+            if (agreementSourceMode) document.getElementById('sAgreementText').innerHTML = document.getElementById('sAgreementHtmlSource').value;
             const formData = new FormData();
             formData.append('company_name', document.getElementById('sCompanyName').value);
             formData.append('org_number', document.getElementById('sOrgNumber').value);
             formData.append('phone', document.getElementById('sPhone').value);
             formData.append('email', document.getElementById('sEmail').value);
             formData.append('address', document.getElementById('sAddress').value);
-            formData.append('agreement_text', document.getElementById('sAgreementText').value);
+            formData.append('agreement_text', document.getElementById('sAgreementText').innerHTML);
 
             const logoFile = document.getElementById('sLogo').files[0];
             if (logoFile) formData.append('logo', logoFile);
