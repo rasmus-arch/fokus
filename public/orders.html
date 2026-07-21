@@ -106,6 +106,7 @@
         </div>
     </main>
 
+    <script src="/common.js"></script>
     <script src="/menu.js"></script>
     <script>
         const userRole = localStorage.getItem('userRole');
@@ -186,7 +187,7 @@
             document.getElementById('omInternalComment').value = order.internal_comment || '';
             document.getElementById('omPublicComment').value = order.public_comment || '';
 
-            document.getElementById('btnOrderContractPdf').href = `/api/quotes/${order.id}/pdf`;
+            document.getElementById('btnOrderContractPdf').href = apiLinkWithToken(`/api/quotes/${order.id}/pdf`);
 
             const revertBtn = document.getElementById('adminRevertBtn');
             const editBtn = document.getElementById('adminEditBtn');
@@ -341,16 +342,8 @@
             } catch(e) {}
         }
 
-        async function deleteFile(fileId, orderId) {
-            if(!confirm("Är du säker på att du vill radera filen? Den försvinner permanent.")) return;
-            try {
-                const res = await fetch(`/api/orders/files/${fileId}`, { method: 'DELETE' });
-                if(res.ok) {
-                    loadOrderFiles(orderId);
-                } else {
-                    alert("Kunde inte radera filen.");
-                }
-            } catch(e) { console.error("Fel vid radering:", e); }
+        function deleteFile(fileId, orderId) {
+            confirmAndDelete("Är du säker på att du vill radera filen? Den försvinner permanent.", `/api/orders/files/${fileId}`, () => loadOrderFiles(orderId));
         }
 
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {

@@ -50,8 +50,25 @@
                             <option value="custom">Anpassad (ange manuellt nedan)</option>
                         </select>
                         <div id="customFrontWrap" class="hidden mt-2">
-                            <label class="block text-xs font-medium text-gray-700">Anpassade fronter (JSON-array)</label>
-                            <textarea id="tFrontCustomJson" rows="2" placeholder='[{&quot;height&quot;:379},{&quot;height&quot;:576}]' class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-xs font-mono"></textarea>
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="block text-xs font-medium text-gray-700">Anpassade fronter</label>
+                                <button type="button" onclick="toggleFrontJsonSourceMode()" title="Redigera som JSON (avancerat)" class="text-[10px] font-mono font-bold text-gray-500 hover:text-gray-800 px-1.5 py-0.5 rounded hover:bg-gray-200">&lt;/&gt; JSON</button>
+                            </div>
+                            <div id="customFrontsRowsWrap">
+                                <table class="w-full text-left text-xs border border-gray-200 bg-white mb-2">
+                                    <thead class="bg-gray-100 text-gray-600">
+                                        <tr>
+                                            <th class="p-2 border-b w-24">Höjd (mm) *</th>
+                                            <th class="p-2 border-b w-32">Bredd (mm, valfri)</th>
+                                            <th class="p-2 border-b">Typ</th>
+                                            <th class="p-2 border-b w-10 text-center"><i class="fas fa-cog"></i></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="customFrontsTableBody"></tbody>
+                                </table>
+                                <button type="button" onclick="addCustomFrontRow()" class="text-xs bg-gray-800 text-white px-3 py-1.5 rounded hover:bg-gray-900">+ Lägg till front</button>
+                            </div>
+                            <textarea id="tFrontCustomJson" rows="2" placeholder='[{&quot;height&quot;:379},{&quot;height&quot;:576}]' class="hidden mt-1 w-full px-3 py-2 border border-gray-300 rounded text-xs font-mono"></textarea>
                         </div>
                         <div class="flex gap-2 mt-4">
                             <button onclick="saveFrameType()" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700">Spara ändringar</button>
@@ -62,6 +79,8 @@
         </div>
     </main>
 
+    <script src="/common.js"></script>
+    <script src="/menu.js"></script>
     <script>
         let allTypes = [];
         let currentTypeId = null;
@@ -102,19 +121,75 @@
             loadFrontLayoutIntoForm(t ? t.front_layout : null);
         }
 
-        async function deleteFrameType() {
+        function deleteFrameType() {
             if (!currentTypeId) return;
-            if (!confirm('Inaktivera denna stomtyp? Produkter som använder den behåller sin senaste beräkning men typen visas inte längre i listorna. Detta går att återställa manuellt i databasen om det behövs.')) return;
-            await fetch(`/api/frame-types/${currentTypeId}`, { method: 'DELETE' });
-            currentTypeId = null;
-            document.getElementById('typeDetail').classList.add('hidden');
-            document.getElementById('noTypeSelected').classList.remove('hidden');
-            fetchFrameTypes();
+            confirmAndDelete('Inaktivera denna stomtyp? Produkter som använder den behåller sin senaste beräkning men typen visas inte längre i listorna. Detta går att återställa manuellt i databasen om det behövs.', `/api/frame-types/${currentTypeId}`, () => {
+                currentTypeId = null;
+                document.getElementById('typeDetail').classList.add('hidden');
+                document.getElementById('noTypeSelected').classList.remove('hidden');
+                fetchFrameTypes();
+            });
         }
 
         function toggleCustomFrontUI() {
             const type = document.getElementById('tFrontType').value;
             document.getElementById('customFrontWrap').classList.toggle('hidden', type !== 'custom');
+        }
+
+        const frontTypeLabels = { lucka: 'Lucka', ladfront: 'Lådfront', grytfront: 'Grytfront', ovrigt: 'Övrigt' };
+
+        function addCustomFrontRow(f = {}) {
+            const tbody = document.getElementById('customFrontsTableBody');
+            const tr = document.createElement('tr');
+            const typeOptions = Object.keys(frontTypeLabels).map(t => `<option value="${t}" ${((f.component_type || 'ladfront') === t) ? 'selected' : ''}>${frontTypeLabels[t]}</option>`).join('');
+            tr.innerHTML = `
+                <td class="p-1 border-b"><input type="number" class="cf-height w-full px-1 py-1 border rounded text-right" value="${f.height || ''}"></td>
+                <td class="p-1 border-b"><input type="number" class="cf-width w-full px-1 py-1 border rounded text-right" placeholder="auto" value="${f.width || ''}"></td>
+                <td class="p-1 border-b"><select class="cf-type w-full px-1 py-1 border rounded bg-white">${typeOptions}</select></td>
+                <td class="p-1 border-b text-center"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600"><i class="fas fa-trash"></i></button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        // Läser radbyggaren till samma JSON-form som fronts-arrayen alltid haft: {height, width?, component_type}.
+        // Returnerar null (+ alert) om en rad saknar höjd, så anropande kod kan avbryta sparningen.
+        function rowsToFrontsArray() {
+            const rows = document.querySelectorAll('#customFrontsTableBody tr');
+            const fronts = [];
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const height = parseFloat(row.querySelector('.cf-height').value);
+                if (!height) { alert(`Front ${i + 1} saknar en höjd - fyll i eller ta bort raden.`); return null; }
+                const front = { height, component_type: row.querySelector('.cf-type').value };
+                const width = parseFloat(row.querySelector('.cf-width').value);
+                if (width) front.width = width;
+                fronts.push(front);
+            }
+            return fronts;
+        }
+
+        function frontsArrayToRows(fronts) {
+            document.getElementById('customFrontsTableBody').innerHTML = '';
+            (fronts || []).forEach(f => addCustomFrontRow(f));
+        }
+
+        let frontJsonSourceMode = false;
+        function toggleFrontJsonSourceMode() {
+            const rowsWrap = document.getElementById('customFrontsRowsWrap');
+            const source = document.getElementById('tFrontCustomJson');
+            if (!frontJsonSourceMode) {
+                const fronts = rowsToFrontsArray();
+                if (fronts === null) return; // ogiltig rad, stanna kvar i radvyn tills det är fixat
+                source.value = JSON.stringify(fronts, null, 2);
+            } else {
+                try {
+                    const fronts = JSON.parse(source.value || '[]');
+                    frontsArrayToRows(fronts);
+                } catch (e) { alert('Ogiltig JSON - kontrollera formatet innan du växlar tillbaka.'); return; }
+            }
+            frontJsonSourceMode = !frontJsonSourceMode;
+            rowsWrap.classList.toggle('hidden', frontJsonSourceMode);
+            source.classList.toggle('hidden', !frontJsonSourceMode);
         }
 
         function buildFrontLayoutJson() {
@@ -128,10 +203,15 @@
             if (type === 'fixed135_1') return JSON.stringify({ type: 'fixed135', count: 1 });
             if (type === 'fixed135_2') return JSON.stringify({ type: 'fixed135', count: 2 });
             if (type === 'custom') {
-                try {
-                    const fronts = JSON.parse(document.getElementById('tFrontCustomJson').value || '[]');
-                    return JSON.stringify({ type: 'custom', fronts });
-                } catch (e) { alert('Ogiltig JSON i "Anpassade fronter" - kontrollera formatet.'); return null; }
+                if (frontJsonSourceMode) {
+                    try {
+                        const fronts = JSON.parse(document.getElementById('tFrontCustomJson').value || '[]');
+                        return JSON.stringify({ type: 'custom', fronts });
+                    } catch (e) { alert('Ogiltig JSON i "Anpassade fronter" - kontrollera formatet.'); return null; }
+                }
+                const fronts = rowsToFrontsArray();
+                if (fronts === null) return null;
+                return JSON.stringify({ type: 'custom', fronts });
             }
             return JSON.stringify({ type: '' });
         }
@@ -139,13 +219,21 @@
         function loadFrontLayoutIntoForm(frontLayoutRaw) {
             document.getElementById('tFrontType').value = '';
             document.getElementById('tFrontCustomJson').value = '';
+            document.getElementById('customFrontsTableBody').innerHTML = '';
+            frontJsonSourceMode = false;
+            document.getElementById('customFrontsRowsWrap').classList.remove('hidden');
+            document.getElementById('tFrontCustomJson').classList.add('hidden');
             if (!frontLayoutRaw) { toggleCustomFrontUI(); return; }
             try {
                 const fl = JSON.parse(frontLayoutRaw);
                 if (fl.type === 'door') document.getElementById('tFrontType').value = 'door';
                 else if (fl.type === 'drawers') document.getElementById('tFrontType').value = 'drawers' + fl.count;
                 else if (fl.type === 'fixed135') document.getElementById('tFrontType').value = 'fixed135_' + fl.count;
-                else if (fl.type === 'custom') { document.getElementById('tFrontType').value = 'custom'; document.getElementById('tFrontCustomJson').value = JSON.stringify(fl.fronts || []); }
+                else if (fl.type === 'custom') {
+                    document.getElementById('tFrontType').value = 'custom';
+                    document.getElementById('tFrontCustomJson').value = JSON.stringify(fl.fronts || []);
+                    frontsArrayToRows(fl.fronts || []);
+                }
             } catch (e) {}
             toggleCustomFrontUI();
         }
@@ -167,6 +255,5 @@
 
         fetchFrameTypes();
     </script>
-    <script src="/menu.js"></script>
 </body>
 </html>

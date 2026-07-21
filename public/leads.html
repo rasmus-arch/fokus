@@ -108,6 +108,7 @@
 
     </main>
 
+    <script src="/common.js"></script>
     <script src="/menu.js"></script>
     <script>
         let currentCustomer = null;
@@ -203,13 +204,7 @@
                 `;
             });
 
-            pagination.innerHTML = `
-                <span class="text-xs text-gray-500">Visar ${start + 1}-${Math.min(end, allLeads.length)} av ${allLeads.length}</span>
-                <div class="flex gap-2">
-                    <button type="button" onclick="changePageLeads(-1)" class="px-3 py-1 border rounded text-xs font-medium ${currentPageLeads === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}" ${currentPageLeads === 1 ? 'disabled' : ''}>Föregående</button>
-                    <button type="button" onclick="changePageLeads(1)" class="px-3 py-1 border rounded text-xs font-medium ${currentPageLeads >= totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}" ${currentPageLeads >= totalPages ? 'disabled' : ''}>Nästa</button>
-                </div>
-            `;
+            renderPagination(pagination, currentPageLeads, allLeads.length, rowsPerPage, 'changePageLeads');
         }
 
         function changePageLeads(dir) { currentPageLeads += dir; renderLeads(); }
@@ -226,12 +221,8 @@
             } catch(e) { console.error(e); }
         }
 
-        async function deleteLead(leadId) {
-            if(!confirm("Vill du ta bort denna lead?")) return;
-            try {
-                const res = await fetch(`/api/leads/${leadId}`, { method: 'DELETE' });
-                if(res.ok) fetchLeads();
-            } catch(e) { console.error(e); }
+        function deleteLead(leadId) {
+            confirmAndDelete("Vill du ta bort denna lead?", `/api/leads/${leadId}`, fetchLeads);
         }
 
         // ==========================================
@@ -278,13 +269,7 @@
                 `;
             });
 
-            pagination.innerHTML = `
-                <span class="text-xs text-gray-500">Visar ${start + 1}-${Math.min(end, allCustomers.length)} av ${allCustomers.length}</span>
-                <div class="flex gap-2">
-                    <button type="button" onclick="changePageCust(-1)" class="px-3 py-1 border rounded text-xs font-medium ${currentPageCust === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}" ${currentPageCust === 1 ? 'disabled' : ''}>Föregående</button>
-                    <button type="button" onclick="changePageCust(1)" class="px-3 py-1 border rounded text-xs font-medium ${currentPageCust >= totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}" ${currentPageCust >= totalPages ? 'disabled' : ''}>Nästa</button>
-                </div>
-            `;
+            renderPagination(pagination, currentPageCust, allCustomers.length, rowsPerPage, 'changePageCust');
         }
 
         function changePageCust(dir) { currentPageCust += dir; renderCustomers(); }

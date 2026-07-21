@@ -133,11 +133,21 @@
         </div>
     </main>
 
+    <script src="/common.js"></script>
+    <script src="/menu.js"></script>
     <script>
         let allModels = [];
         let currentModelId = null;
         let currentPrices = [];
-        const VAT_FACTOR = 1.25;
+        let VAT_FACTOR = 1.25;
+
+        async function fetchVatRate() {
+            try {
+                const res = await fetch('/api/settings');
+                const s = await res.json();
+                VAT_FACTOR = 1 + (parseFloat(s.vat_rate ?? 25) / 100);
+            } catch (e) { console.error(e); }
+        }
 
         async function fetchModels() {
             const res = await fetch('/api/door-models');
@@ -176,14 +186,14 @@
             await fetchPrices();
         }
 
-        async function deleteModel() {
+        function deleteModel() {
             if (!currentModelId) return;
-            if (!confirm('Ta bort hela modellen och dess prislista? Detta går inte att ångra.')) return;
-            await fetch(`/api/door-models/${currentModelId}`, { method: 'DELETE' });
-            currentModelId = null;
-            document.getElementById('modelDetail').classList.add('hidden');
-            document.getElementById('noModelSelected').classList.remove('hidden');
-            fetchModels();
+            confirmAndDelete('Ta bort hela modellen och dess prislista? Detta går inte att ångra.', `/api/door-models/${currentModelId}`, () => {
+                currentModelId = null;
+                document.getElementById('modelDetail').classList.add('hidden');
+                document.getElementById('noModelSelected').classList.remove('hidden');
+                fetchModels();
+            });
         }
 
         async function fetchPrices() {
@@ -290,10 +300,8 @@
             fetchPrices();
         }
 
-        async function clearAllPrices() {
-            if (!confirm('Rensa alla prisrader för denna modell?')) return;
-            await fetch(`/api/door-models/${currentModelId}/prices`, { method: 'DELETE' });
-            fetchPrices();
+        function clearAllPrices() {
+            confirmAndDelete('Rensa alla prisrader för denna modell?', `/api/door-models/${currentModelId}/prices`, fetchPrices);
         }
 
         async function recalculateAllPrices() {
@@ -337,8 +345,8 @@
             });
         });
 
+        fetchVatRate();
         fetchModels();
     </script>
-    <script src="/menu.js"></script>
 </body>
 </html>

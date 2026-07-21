@@ -89,6 +89,7 @@
         </div>
     </main>
 
+    <script src="/common.js"></script>
     <script src="/menu.js"></script>
     <script>
         const userRole = localStorage.getItem('userRole');
@@ -150,7 +151,7 @@
             document.getElementById('manageOrderId').value = orderId;
             
             // Koppla PDF-knappen direkt till serverns nya generator
-            document.getElementById('btnPdf').href = `/api/orders/${orderId}/assembly/pdf`;
+            document.getElementById('btnPdf').href = apiLinkWithToken(`/api/orders/${orderId}/assembly/pdf`);
 
             try {
                 const res = await fetch(`/api/orders/${orderId}/assembly`);

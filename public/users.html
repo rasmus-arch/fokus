@@ -30,7 +30,8 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Lösenord</label>
-                        <input type="password" id="userPassword" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                        <input type="password" id="userPassword" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                        <p id="passwordHint" class="text-xs text-gray-400 mt-1 hidden">Lämna tomt för att behålla nuvarande lösenord.</p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Roll</label>
@@ -41,7 +42,18 @@
                             <option value="Montör">Montör</option>
                         </select>
                     </div>
-                    <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-md font-medium hover:bg-blue-700">Spara användare</button>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Ordernummer-serie (valfritt)</label>
+                        <div class="flex gap-2 mt-1">
+                            <input type="number" id="userRangeStart" placeholder="Från" class="block w-full px-3 py-2 border border-gray-300 rounded-md">
+                            <input type="number" id="userRangeEnd" placeholder="Till" class="block w-full px-3 py-2 border border-gray-300 rounded-md">
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1">Tomt = använder nästa lediga nummer totalt.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="submit" id="userFormSubmitBtn" class="w-full bg-blue-600 text-white py-2 rounded-md font-medium hover:bg-blue-700">Spara användare</button>
+                        <button type="button" id="userFormCancelBtn" onclick="resetUserForm()" class="hidden px-4 py-2 border border-gray-300 rounded-md font-medium text-gray-600 hover:bg-gray-50">Avbryt</button>
+                    </div>
                 </form>
             </div>
 
@@ -53,6 +65,7 @@
                             <th class="p-3">Namn</th>
                             <th class="p-3">E-post</th>
                             <th class="p-3">Roll</th>
+                            <th class="p-3">Ordernummer-serie</th>
                             <th class="p-3">Åtgärd</th>
                         </tr>
                     </thead>
@@ -63,21 +76,31 @@
         </div>
     </main>
 
+    <script src="/common.js"></script>
+    <script src="/menu.js"></script>
     <script>
+        let allUsers = [];
+        let editingUserId = null;
+
         // Hämta och visa alla användare när sidan laddas
         async function fetchUsers() {
             const res = await fetch('/api/users');
-            const users = await res.json();
+            allUsers = await res.json();
             const tbody = document.getElementById('userTableBody');
             tbody.innerHTML = '';
 
-            users.forEach(user => {
+            allUsers.forEach(user => {
+                const range = (user.order_range_start != null && user.order_range_end != null)
+                    ? `${user.order_range_start}–${user.order_range_end}`
+                    : '<span class="text-gray-400 italic">Ingen (global)</span>';
                 tbody.innerHTML += `
                     <tr class="border-b border-gray-100 hover:bg-gray-50">
                         <td class="p-3 font-medium">${user.name}</td>
                         <td class="p-3">${user.email}</td>
                         <td class="p-3"><span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 font-semibold">${user.role}</span></td>
-                        <td class="p-3">
+                        <td class="p-3">${range}</td>
+                        <td class="p-3 space-x-2">
+                            <button onclick="editUser(${user.id})" class="text-blue-600 hover:text-blue-900"><i class="fas fa-pen"></i> Redigera</button>
                             <button onclick="deleteUser(${user.id})" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i> Ta bort</button>
                         </td>
                     </tr>
@@ -85,41 +108,65 @@
             });
         }
 
-        // Skapa ny användare
+        function editUser(id) {
+            const user = allUsers.find(u => u.id === id);
+            if (!user) return;
+            editingUserId = id;
+            document.getElementById('userName').value = user.name;
+            document.getElementById('userEmail').value = user.email;
+            document.getElementById('userPassword').value = '';
+            document.getElementById('userRole').value = user.role;
+            document.getElementById('userRangeStart').value = user.order_range_start ?? '';
+            document.getElementById('userRangeEnd').value = user.order_range_end ?? '';
+            document.getElementById('passwordHint').classList.remove('hidden');
+            document.getElementById('userFormSubmitBtn').textContent = 'Spara ändringar';
+            document.getElementById('userFormCancelBtn').classList.remove('hidden');
+        }
+
+        function resetUserForm() {
+            editingUserId = null;
+            document.getElementById('userForm').reset();
+            document.getElementById('passwordHint').classList.add('hidden');
+            document.getElementById('userFormSubmitBtn').textContent = 'Spara användare';
+            document.getElementById('userFormCancelBtn').classList.add('hidden');
+        }
+
+        // Skapa eller uppdatera användare
         document.getElementById('userForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const name = document.getElementById('userName').value;
             const email = document.getElementById('userEmail').value;
             const password = document.getElementById('userPassword').value;
             const role = document.getElementById('userRole').value;
+            const startVal = document.getElementById('userRangeStart').value;
+            const endVal = document.getElementById('userRangeEnd').value;
+            const order_range_start = startVal ? parseInt(startVal, 10) : null;
+            const order_range_end = endVal ? parseInt(endVal, 10) : null;
 
-            const res = await fetch('/api/users', {
-                method: 'POST',
+            const isEdit = editingUserId !== null;
+            if (!isEdit && !password) { alert('Lösenord krävs för nya användare.'); return; }
+
+            const res = await fetch(isEdit ? `/api/users/${editingUserId}` : '/api/users', {
+                method: isEdit ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, email, password, role })
+                body: JSON.stringify({ name, email, password, role, order_range_start, order_range_end })
             });
 
             const data = await res.json();
             alert(data.message);
             if (res.ok) {
-                document.getElementById('userForm').reset();
+                resetUserForm();
                 fetchUsers();
             }
         });
 
         // Ta bort användare
-        async function deleteUser(id) {
-            if (confirm('Är du säker på att du vill ta bort denna användare?')) {
-                const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
-                const data = await res.json();
-                alert(data.message);
-                fetchUsers();
-            }
+        function deleteUser(id) {
+            confirmAndDelete('Är du säker på att du vill ta bort denna användare?', `/api/users/${id}`, fetchUsers);
         }
 
         // Kör vid sidladdning
         fetchUsers();
     </script>
-    <script src="/menu.js"></script>
 </body>
 </html>

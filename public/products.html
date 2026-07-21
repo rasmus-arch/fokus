@@ -222,6 +222,7 @@
         </div>
     </div>
 
+    <script src="/common.js"></script>
     <script src="/menu.js"></script>
     <script>
         let allProducts = [];
@@ -231,6 +232,7 @@
         let currentGalleryUrls = [];
 
         document.addEventListener('DOMContentLoaded', () => {
+            fetchVatRate();
             fetchProducts();
             fetchSuppliersForDropdown();
             fetchDoorModelsForDropdown();
@@ -373,7 +375,7 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                 `;
             });
 
-            pagination.innerHTML = `<span>Visar ${start + 1}-${Math.min(end, filteredProducts.length)} av ${filteredProducts.length}</span><div class="space-x-1"><button onclick="changePage(-1)" class="px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50" ${currentPage===1?'disabled':''}>Föregående</button><button onclick="changePage(1)" class="px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50" ${currentPage>=totalPages?'disabled':''}>Nästa</button></div>`;
+            renderPagination(pagination, currentPage, filteredProducts.length, rowsPerPage, 'changePage');
         }
 
         function changePage(dir) { currentPage += dir; renderTable(); }
@@ -424,15 +426,23 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
             document.getElementById('varHead2').innerText = v2;
         }
 
-        // Räknar fram försäljningspris = inköpspris x faktor x 1,25 (moms), samma konvention som lucka/lådfront-prisrader i door-models.html.
+        // Räknar fram försäljningspris = inköpspris x faktor x momsfaktor, samma konvention som lucka/lådfront-prisrader i door-models.html.
         // Rör inte priset om faktor lämnas tomt (då är priset manuellt satt).
+        let VAT_FACTOR = 1.25;
+        async function fetchVatRate() {
+            try {
+                const res = await fetch('/api/settings');
+                const s = await res.json();
+                VAT_FACTOR = 1 + (parseFloat(s.vat_rate ?? 25) / 100);
+            } catch (e) { console.error(e); }
+        }
         function recalcVariantRowPrice(inputEl) {
             const row = inputEl.closest('tr');
             const purchase = parseFloat(row.querySelector('.v-purchase').value) || 0;
             const factorRaw = row.querySelector('.v-factor').value;
             if (factorRaw === '') return;
             const factor = parseFloat(factorRaw) || 0;
-            row.querySelector('.v-price').value = Math.round(purchase * factor * 1.25 * 100) / 100;
+            row.querySelector('.v-price').value = Math.round(purchase * factor * VAT_FACTOR * 100) / 100;
         }
 
         function addVariationRow(v = {}) {
@@ -621,9 +631,8 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
             } catch (e) { console.error(e); }
         }
 
-        async function deleteProduct(id) {
-            if(!confirm("Vill du ta bort produkten?")) return;
-            try { const res = await fetch(`/api/products/${id}`, { method: 'DELETE' }); if(res.ok) fetchProducts(); } catch(e) {}
+        function deleteProduct(id) {
+            confirmAndDelete("Vill du ta bort produkten?", `/api/products/${id}`, fetchProducts);
         }
     </script>
 </body>

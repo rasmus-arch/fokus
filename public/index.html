@@ -40,6 +40,7 @@
         </form>
     </div>
 
+    <script src="/common.js"></script>
     <script>
         (async function loadLoginLogo() {
             try {
@@ -70,7 +71,9 @@
                     // Spara rollen i webbläsaren för att veta vad menyn ska visa
                     localStorage.setItem('userRole', data.role);
                     localStorage.setItem('userId', data.id);
-                    
+                    localStorage.setItem('userName', data.name);
+                    localStorage.setItem('userToken', data.token);
+
                     // Skicka administratörer och säljare till CRM-systemet direkt
                     if (data.role === 'Montör') {
                         alert("Välkommen! Montage-vyn är redo att öppnas.");

@@ -17,30 +17,48 @@
                 <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Offerter</h2>
                 <p class="text-xs md:text-sm text-gray-500 mt-1">Hantera, bygg och gör om offerter till skarpa ordrar</p>
             </div>
-            <div class="relative w-full sm:w-64 shrink-0">
-                <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
-                <input type="text" id="searchInput" placeholder="Sök på offert eller kund..." class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-md text-sm outline-none focus:border-blue-500 shadow-sm">
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+                <div class="relative w-full sm:w-64 shrink-0">
+                    <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
+                    <input type="text" id="searchInput" placeholder="Sök på offert eller kund..." class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-md text-sm outline-none focus:border-blue-500 shadow-sm">
+                </div>
+                <button id="trashToggleBtn" onclick="toggleTrashView()" class="shrink-0 bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-2 rounded-md text-sm font-medium shadow-sm whitespace-nowrap">
+                    <i class="fas fa-trash mr-1"></i> Papperskorg
+                </button>
             </div>
         </div>
+        <p class="text-xs text-gray-400 -mt-3 mb-4">Borttagna offerter ligger kvar i papperskorgen i 10 dagar innan de raderas permanent.</p>
 
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6" id="quotesGrid">
             </div>
 
     </main>
 
+    <script src="/common.js"></script>
     <script src="/menu.js"></script>
     <script>
         let allQuotes = [];
+        let viewingTrash = false;
+        const TRASH_RETENTION_DAYS = 10;
 
         document.addEventListener("DOMContentLoaded", () => {
             fetchQuotes();
             document.getElementById('searchInput').addEventListener('input', renderQuotes);
         });
 
-        // Hämta alla offerter från servern (exklusive ordrar)
+        function toggleTrashView() {
+            viewingTrash = !viewingTrash;
+            const btn = document.getElementById('trashToggleBtn');
+            btn.innerHTML = viewingTrash ? '<i class="fas fa-arrow-left mr-1"></i> Tillbaka till offerter' : '<i class="fas fa-trash mr-1"></i> Papperskorg';
+            btn.classList.toggle('bg-gray-800', viewingTrash);
+            btn.classList.toggle('text-white', viewingTrash);
+            fetchQuotes();
+        }
+
+        // Hämta offerter (eller papperskorgens innehåll) från servern
         async function fetchQuotes() {
             try {
-                const res = await fetch('/api/quotes');
+                const res = await fetch(viewingTrash ? '/api/quotes/trash' : '/api/quotes');
                 allQuotes = await res.json();
                 renderQuotes();
             } catch (err) {
@@ -48,29 +66,29 @@
             }
         }
 
-        // Rita upp offerterna på skärmen
+        // Rita upp offerterna (eller papperskorgen) på skärmen
         function renderQuotes() {
             const grid = document.getElementById('quotesGrid');
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            
+
             grid.innerHTML = '';
 
-            const filteredQuotes = allQuotes.filter(q => 
-                (q.quote_name && q.quote_name.toLowerCase().includes(searchTerm)) || 
+            const filteredQuotes = allQuotes.filter(q =>
+                (q.quote_name && q.quote_name.toLowerCase().includes(searchTerm)) ||
                 (q.customer_name && q.customer_name.toLowerCase().includes(searchTerm))
             );
 
             if (filteredQuotes.length === 0) {
-                grid.innerHTML = '<p class="text-gray-500 col-span-full mt-4">Inga offerter hittades.</p>';
+                grid.innerHTML = `<p class="text-gray-500 col-span-full mt-4">${viewingTrash ? 'Papperskorgen är tom.' : 'Inga offerter hittades.'}</p>`;
                 return;
             }
 
             filteredQuotes.forEach(q => {
+                if (viewingTrash) { grid.innerHTML += renderTrashCard(q); return; }
                 // Skapa en snygg status-etikett
                 let statusColor = 'bg-gray-100 text-gray-800';
                 if (q.status === 'Utkast') statusColor = 'bg-yellow-100 text-yellow-800';
-                else if (q.status === 'Skickad') statusColor = 'bg-blue-100 text-blue-800';
-                else if (q.status === 'Accepterad') statusColor = 'bg-green-100 text-green-800';
+                else if (q.status === 'Offert') statusColor = 'bg-blue-100 text-blue-800';
 
                 // Formatera datumet
                 const dateObj = new Date(q.created_at);
@@ -78,11 +96,12 @@
 
                 grid.innerHTML += `
                     <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 hover:shadow-md transition flex flex-col justify-between h-full relative">
+                        <button onclick="deleteQuote(${q.id}, '${(q.quote_name || '').replace(/'/g, "\\'")}')" title="Ta bort" class="absolute top-3 right-3 text-gray-300 hover:text-red-500 transition"><i class="fas fa-trash"></i></button>
                         <div>
                             <div class="flex justify-between items-start mb-3 border-b border-gray-100 pb-3">
                                 <div>
                                     <span class="${statusColor} text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide border border-opacity-20">${q.status}</span>
-                                    <h3 class="font-bold text-gray-800 text-lg mt-2 leading-tight">${q.quote_name}</h3>
+                                    <h3 class="font-bold text-gray-800 text-lg mt-2 leading-tight pr-6">${q.quote_name}</h3>
                                 </div>
                             </div>
                             <div class="text-sm text-gray-600 space-y-2 mb-6">
@@ -90,7 +109,7 @@
                                 <p class="flex items-center text-xs"><i class="far fa-calendar-alt text-gray-400 w-5 text-center mr-1"></i> ${dateString}</p>
                             </div>
                         </div>
-                        
+
                         <div class="grid grid-cols-2 gap-2 mt-auto">
                             <button onclick="window.location.href='/quote-builder.html?id=${q.id}'" class="bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-center">
                                 <i class="fas fa-hammer mr-2"></i> Byggare
@@ -107,6 +126,52 @@
             });
         }
 
+        function renderTrashCard(q) {
+            const deletedAt = new Date(q.deleted_at);
+            const purgeAt = new Date(deletedAt.getTime() + TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+            const daysLeft = Math.max(0, Math.ceil((purgeAt - new Date()) / (24 * 60 * 60 * 1000)));
+            return `
+                <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 flex flex-col justify-between h-full opacity-90">
+                    <div>
+                        <div class="flex justify-between items-start mb-3 border-b border-gray-100 pb-3">
+                            <h3 class="font-bold text-gray-800 text-lg leading-tight">${q.quote_name}</h3>
+                            <span class="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide whitespace-nowrap ml-2">${daysLeft} dag${daysLeft === 1 ? '' : 'ar'} kvar</span>
+                        </div>
+                        <div class="text-sm text-gray-600 space-y-2 mb-6">
+                            <p class="flex items-center"><i class="fas fa-user text-gray-400 w-5 text-center mr-1"></i> <span class="font-medium text-gray-700">${q.customer_name || 'Okänd kund'}</span></p>
+                            <p class="flex items-center text-xs"><i class="fas fa-trash text-gray-400 w-5 text-center mr-1"></i> Borttagen ${deletedAt.toLocaleDateString('sv-SE')}</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 mt-auto">
+                        <button onclick="restoreQuote(${q.id})" class="bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-center">
+                            <i class="fas fa-undo mr-2"></i> Återställ
+                        </button>
+                        <button onclick="permanentlyDeleteQuote(${q.id}, '${(q.quote_name || '').replace(/'/g, "\\'")}')" class="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-center">
+                            <i class="fas fa-times mr-2"></i> Radera permanent
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==========================================
+        // TA BORT / ÅTERSTÄLL OFFERT (papperskorg)
+        // ==========================================
+        function deleteQuote(quoteId, quoteName) {
+            confirmAndDelete(`Flytta offerten "${quoteName}" till papperskorgen? Den raderas automatiskt permanent efter ${TRASH_RETENTION_DAYS} dagar om den inte återställs innan dess.`, `/api/quotes/${quoteId}`, fetchQuotes);
+        }
+
+        async function restoreQuote(quoteId) {
+            try {
+                await fetch(`/api/quotes/${quoteId}/restore`, { method: 'PUT' });
+                fetchQuotes();
+            } catch (err) { console.error(err); alert("Kunde inte återställa offerten."); }
+        }
+
+        function permanentlyDeleteQuote(quoteId, quoteName) {
+            confirmAndDelete(`Radera offerten "${quoteName}" permanent? Det här går INTE att ångra.`, `/api/quotes/${quoteId}/permanent`, fetchQuotes);
+        }
+
         // ==========================================
         // GÖR TILL ORDER (Den nya funktionen!)
         // ==========================================
@@ -115,14 +180,7 @@
                 return;
             }
 
-            // Hämta namnet på den som är inloggad
-            const currentUserName = localStorage.getItem('userName') || 'Okänd';
-
-            // Skapa paketet som skickas till servern, inklusive säljarens namn!
-            const payload = {
-                status: 'Order',
-                user_name: currentUserName
-            };
+            const payload = { status: 'Order' };
 
             try {
                 const res = await fetch(`/api/quotes/${quoteId}/status`, {

@@ -495,6 +495,7 @@
         </div>
     </div>
 
+    <script src="/common.js"></script>
     <script src="/menu.js"></script>
     <script>
         let products = []; let quoteCart = []; const quoteId = new URLSearchParams(window.location.search).get('id');
@@ -880,6 +881,7 @@
 
             const matName = matSelect.options[matSelect.selectedIndex].text;
             const colName = colSelect.options[colSelect.selectedIndex].text;
+            const colorId = colSelect.value ? parseInt(colSelect.value) : null;
             const thk = thkSelect.value;
 
             let hoActive = document.getElementById('ctHoActive').checked;
@@ -930,12 +932,12 @@
                     if (count >= 3 && joint3 === 'vertical') extraInfo += ' (Ansluter till höger om Del 3)';
                 }
 
-                quoteCart.push({ 
-                    cartId: 'ct_' + Date.now() + part.id, id: null, sku: 'BÄNKSKIVA', 
-                    name: `Bänkskiva ${matName} - ${colName} (${thk}mm) | Del ${part.id} (Kapsnitt: ${part.calcL}x${part.d}mm | Ryggmått: ${part.rawL}mm)${extraInfo}`, 
-                    priceIncVat: materialPrice, installIncVat: installIncVat, companyShare: companyShare, installerShare: installerShare, 
+                quoteCart.push({
+                    cartId: 'ct_' + Date.now() + part.id, id: null, sku: 'BÄNKSKIVA', colorId: colorId,
+                    name: `Bänkskiva ${matName} - ${colName} (${thk}mm) | Del ${part.id} (Kapsnitt: ${part.calcL}x${part.d}mm | Ryggmått: ${part.rawL}mm)${extraInfo}`,
+                    priceIncVat: materialPrice, installIncVat: installIncVat, companyShare: companyShare, installerShare: installerShare,
                     qty: 1, discount: 0, isFreeText: true,
-                    drawingSvg: !addedDrawing ? window.currentCountertopSvg : null 
+                    drawingSvg: !addedDrawing ? window.currentCountertopSvg : null
                 });
                 addedDrawing = true;
 
@@ -1383,7 +1385,7 @@
                         if (qd.kitchenSpecs) { document.getElementById('qsMaterial').value = qd.kitchenSpecs.material || ''; document.getElementById('qsColor').value = qd.kitchenSpecs.color || ''; document.getElementById('qsDoor').value = qd.kitchenSpecs.door || ''; if (qd.kitchenSpecs.doorModelId) { document.getElementById('qsDoorModelId').value = qd.kitchenSpecs.doorModelId; onDoorModelChange(); } }
                         if (qd.extraFees) { const sfnr = qd.extraFees.startFeeNonRot; document.getElementById('startFeeProduct').value = qd.extraFees.startFeeProduct || 0; document.getElementById('startFeeNonRot').value = (sfnr !== undefined && sfnr !== null && sfnr !== '') ? sfnr : 1800; document.getElementById('startFeeRotComp').value = qd.extraFees.startFeeRotComp || 0; document.getElementById('startFeeRotInst').value = qd.extraFees.startFeeRotInst || 0; document.getElementById('colorSelect').value = qd.extraFees.colorSelect || ''; document.getElementById('colorCustom').value = qd.extraFees.colorCustom || ''; document.getElementById('feeColor').value = qd.extraFees.feeColor || 0; toggleCustomColor(); }
                     }
-                    const pdfBtn = document.getElementById('btnQuotePdf'); pdfBtn.href = `/api/quotes/${quoteId}/pdf`; pdfBtn.classList.remove('hidden');
+                    const pdfBtn = document.getElementById('btnQuotePdf'); pdfBtn.href = apiLinkWithToken(`/api/quotes/${quoteId}/pdf`); pdfBtn.classList.remove('hidden');
                 }
             } catch (e) {}
             renderConditions(); renderCart();

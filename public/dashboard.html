@@ -25,13 +25,13 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-6">
             
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 flex items-center">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 flex items-center cursor-pointer hover:border-blue-300 transition" onclick="window.location.href='/statistics.html'">
                 <div class="bg-blue-100 text-blue-600 w-12 h-12 rounded-full flex items-center justify-center text-xl shrink-0">
-                    <i class="fas fa-boxes"></i>
+                    <i class="fas fa-file-invoice-dollar"></i>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500">Katalog</p>
-                    <h3 id="statTotalProducts" class="text-2xl font-bold text-gray-800">...</h3>
+                    <p class="text-sm font-medium text-gray-500">Vunna ordrar (totalt)</p>
+                    <h3 id="statOrderCount" class="text-2xl font-bold text-gray-800">...</h3>
                 </div>
             </div>
 
@@ -57,16 +57,30 @@
             
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-            
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col">
                 <div class="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                    <h3 class="font-semibold text-gray-700 text-sm"><i class="fas fa-chart-pie text-gray-400 mr-2"></i> Produkter per kategori</h3>
+                    <h3 class="font-semibold text-gray-700 text-sm"><i class="fas fa-star text-yellow-500 mr-2"></i> Bäst säljande produkter</h3>
                 </div>
                 <div class="p-4 flex-1">
-                    <ul id="categoryList" class="space-y-3">
+                    <ul id="topProductsList" class="space-y-3">
                         <li class="text-xs text-gray-400 italic">Laddar statistik...</li>
                     </ul>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                    <h3 class="font-semibold text-gray-700 text-sm"><i class="fas fa-layer-group text-purple-500 mr-2"></i> Bäst säljande kategorier</h3>
+                </div>
+                <div class="p-4 flex-1">
+                    <ul id="topCategoriesList" class="space-y-3">
+                        <li class="text-xs text-gray-400 italic">Laddar statistik...</li>
+                    </ul>
+                </div>
+                <div class="p-3 border-t border-gray-100 bg-gray-50">
+                    <a href="/statistics.html" class="text-xs font-semibold text-blue-600 hover:text-blue-800">Se detaljerad statistik & datumfilter <i class="fas fa-arrow-right ml-1"></i></a>
                 </div>
             </div>
 
@@ -82,56 +96,102 @@
             </div>
 
         </div>
+
+        <div class="mt-6">
+            <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">🎉 Roliga siffror</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center flex flex-col justify-center">
+                    <div class="text-2xl mb-1">💰</div>
+                    <h3 id="funTotalRevenue" class="text-lg font-bold text-gray-800">...</h3>
+                    <p class="text-xs text-gray-500 mt-1">Total intäkt (vunna ordrar)</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center flex flex-col justify-center">
+                    <div class="text-2xl mb-1">🏆</div>
+                    <h3 id="funBiggestOrder" class="text-lg font-bold text-gray-800">...</h3>
+                    <p id="funBiggestOrderSub" class="text-xs text-gray-500 mt-1">Största ordern genom tiderna</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center flex flex-col justify-center">
+                    <div class="text-2xl mb-1">🎯</div>
+                    <h3 id="funWinRate" class="text-lg font-bold text-gray-800">...</h3>
+                    <p class="text-xs text-gray-500 mt-1">Vinstgrad, offert &rarr; order</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center flex flex-col justify-center">
+                    <div class="text-2xl mb-1">📬</div>
+                    <h3 id="funNewLeads" class="text-lg font-bold text-gray-800">...</h3>
+                    <p class="text-xs text-gray-500 mt-1">Nya leads, senaste 30 dagarna</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center flex flex-col justify-center">
+                    <div class="text-2xl mb-1">🌍</div>
+                    <h3 id="funTopKommun" class="text-lg font-bold text-gray-800">...</h3>
+                    <p class="text-xs text-gray-500 mt-1">Hetaste kommunen (flest leads)</p>
+                </div>
+            </div>
+        </div>
     </main>
 
+    <script src="/common.js"></script>
     <script src="/menu.js"></script>
     
     <script>
+        function renderRevenueList(container, rows, labelFn, emptyText) {
+            container.innerHTML = '';
+            if (!rows || rows.length === 0) { container.innerHTML = `<li class="text-xs text-gray-400 italic">${emptyText}</li>`; return; }
+            rows.slice(0, 5).forEach(r => {
+                container.innerHTML += `
+                    <li class="flex justify-between items-center text-xs md:text-sm border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+                        <span class="font-medium text-gray-700 truncate pr-2">${labelFn(r)}</span>
+                        <span class="text-gray-600 font-bold whitespace-nowrap">${parseFloat(r.revenue).toLocaleString()} kr</span>
+                    </li>
+                `;
+            });
+        }
+
         async function fetchDashboardStats() {
             try {
-                const res = await fetch('/api/statistics');
+                const res = await fetch('/api/statistics/overview');
                 const data = await res.json();
-                
-                const catList = document.getElementById('categoryList');
-                catList.innerHTML = '';
-                
-                let totalProducts = 0;
 
-                if (data.categories && data.categories.length > 0) {
-                    data.categories.forEach(cat => {
-                        const count = parseInt(cat.count) || 0;
-                        totalProducts += count;
-                        
-                        // Bygg en enkel visuell mätare för varje kategori
-                        const maxExpected = 50; // Skalvärde för bredden på mätaren
-                        const widthPercent = Math.min(100, (count / maxExpected) * 100);
-
-                        catList.innerHTML += `
-                            <li>
-                                <div class="flex justify-between items-center text-xs md:text-sm mb-1">
-                                    <span class="font-medium text-gray-700">${cat.category}</span>
-                                    <span class="text-gray-500 font-bold">${count} st</span>
-                                </div>
-                                <div class="w-full bg-gray-100 rounded-full h-2 md:h-2.5">
-                                    <div class="bg-blue-500 h-2 md:h-2.5 rounded-full" style="width: ${widthPercent}%"></div>
-                                </div>
-                            </li>
-                        `;
-                    });
-                } else {
-                    catList.innerHTML = '<li class="text-xs text-gray-400">Ingen data hittades.</li>';
-                }
-
-                document.getElementById('statTotalProducts').innerText = totalProducts;
-
+                document.getElementById('statOrderCount').innerText = data.orderCount;
+                renderRevenueList(document.getElementById('topProductsList'), data.topProducts, p => p.name, 'Ingen försäljningsdata ännu.');
+                renderRevenueList(document.getElementById('topCategoriesList'), data.topCategories, c => c.category || 'Okategoriserad', 'Ingen försäljningsdata ännu.');
             } catch (err) {
                 console.error("Kunde inte ladda statistik", err);
-                document.getElementById('categoryList').innerHTML = '<li class="text-xs text-red-500">Ett fel uppstod vid laddning av data.</li>';
+                document.getElementById('topProductsList').innerHTML = '<li class="text-xs text-red-500">Ett fel uppstod vid laddning av data.</li>';
+                document.getElementById('topCategoriesList').innerHTML = '<li class="text-xs text-red-500">Ett fel uppstod vid laddning av data.</li>';
+            }
+        }
+
+        async function fetchFunFacts() {
+            try {
+                const res = await fetch('/api/statistics/fun-facts');
+                const data = await res.json();
+
+                document.getElementById('funTotalRevenue').innerText = (parseFloat(data.totalRevenue) || 0).toLocaleString() + ' kr';
+
+                if (data.biggestOrder) {
+                    document.getElementById('funBiggestOrder').innerText = (parseFloat(data.biggestOrder.total) || 0).toLocaleString() + ' kr';
+                    document.getElementById('funBiggestOrderSub').innerText = `${data.biggestOrder.quote_name} (${data.biggestOrder.customer_name})`;
+                } else {
+                    document.getElementById('funBiggestOrder').innerText = '- kr';
+                }
+
+                document.getElementById('funWinRate').innerText = data.sentCount > 0 ? data.winRate + '%' : '-';
+                document.getElementById('funNewLeads').innerText = data.newLeads30d;
+
+                if (data.topKommun) {
+                    document.getElementById('funTopKommun').innerText = data.topKommun.kommun;
+                    document.getElementById('funTopKommun').nextElementSibling.innerText = `Hetaste kommunen (${data.topKommun.c} leads)`;
+                } else {
+                    document.getElementById('funTopKommun').innerText = '-';
+                }
+            } catch (err) {
+                console.error("Kunde inte ladda roliga siffror", err);
             }
         }
 
         // Initiera
         fetchDashboardStats();
+        fetchFunFacts();
     </script>
 </body>
 </html>

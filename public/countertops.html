@@ -105,6 +105,7 @@
         </div>
     </div>
 
+    <script src="/common.js"></script>
     <script src="/menu.js"></script>
     <script>
         let dbData = { materials: [], colors: [], prices: [], services: [], edges: [] };
@@ -184,7 +185,7 @@
                 const isActive = activeColorId === c.id;
                 list.innerHTML += `
                     <div onclick="selectColor(${c.id})" class="p-2 rounded border cursor-pointer flex justify-between items-center group ${isActive ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'}">
-                        <p class="font-semibold text-xs ${isActive ? 'text-blue-800' : 'text-gray-700'}">${c.name}</p>
+                        <p class="font-semibold text-xs ${isActive ? 'text-blue-800' : 'text-gray-700'} flex items-center gap-2">${c.image_url ? `<img src="${c.image_url}" class="w-6 h-6 object-contain border rounded bg-white">` : ''}${c.name}</p>
                         <div class="flex gap-2">
                             <button onclick="event.stopPropagation(); openModal('color', ${c.id})" class="text-gray-400 hover:text-blue-600 hidden group-hover:block"><i class="fas fa-edit"></i></button>
                             <button onclick="event.stopPropagation(); deleteData('colors', ${c.id})" class="text-gray-400 hover:text-red-600 hidden group-hover:block"><i class="fas fa-trash"></i></button>
@@ -332,7 +333,14 @@
             else if (type === 'color') {
                 title.innerText = id ? 'Ändra Färg/Dekor' : 'Ny Färg/Dekor';
                 if(id) item = dbData.colors.find(c => c.id === id);
-                form.innerHTML = `<div><label class="block text-xs font-semibold text-gray-600 mb-1">Namn på Färg/Dekor</label><input type="text" id="cName" value="${item ? item.name : ''}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>`;
+                form.innerHTML = `
+                    <div><label class="block text-xs font-semibold text-gray-600 mb-1">Namn på Färg/Dekor</label><input type="text" id="cName" value="${item ? item.name : ''}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                    <div class="mt-3">
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Bild (visas på köpeavtalets PDF)</label>
+                        ${item && item.image_url ? `<img src="${item.image_url}" class="h-16 w-16 object-contain border rounded mb-1 bg-gray-50">` : ''}
+                        <input type="file" id="cImage" accept=".jpg,.jpeg,.png,.webp" class="w-full text-xs text-gray-500 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-gray-800 file:text-white hover:file:bg-gray-900">
+                    </div>
+                `;
             }
             else if (type === 'price') {
                 title.innerText = id ? 'Ändra Prisintervall' : 'Nytt Prisintervall';
@@ -446,20 +454,27 @@
 
             try {
                 const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-                if(res.ok) { closeModal(); await fetchData(); }
+                if (!res.ok) return;
+                if (currentModalType === 'color') {
+                    const imgFile = document.getElementById('cImage').files[0];
+                    if (imgFile) {
+                        const data = await res.json();
+                        const colorId = currentEditId || data.id;
+                        const imgForm = new FormData();
+                        imgForm.append('image', imgFile);
+                        await fetch(`/api/countertops/colors/${colorId}/image`, { method: 'POST', body: imgForm });
+                    }
+                }
+                closeModal(); await fetchData();
             } catch(e) { console.error(e); }
         }
 
-        async function deleteData(endpoint, id) {
-            if(!confirm("Vill du verkligen radera detta? Allt kopplat till det kommer också försvinna!")) return;
-            try {
-                const res = await fetch(`/api/countertops/${endpoint}/${id}`, { method: 'DELETE' });
-                if(res.ok) {
-                    if(endpoint === 'materials') { if(id === activeMaterialId) { activeMaterialId = null; activeColorId = null; } if(id === activeEdgeMaterialId) activeEdgeMaterialId = null; }
-                    if(endpoint === 'colors' && id === activeColorId) activeColorId = null;
-                    await fetchData();
-                }
-            } catch(e) { console.error(e); }
+        function deleteData(endpoint, id) {
+            confirmAndDelete("Vill du verkligen radera detta? Allt kopplat till det kommer också försvinna!", `/api/countertops/${endpoint}/${id}`, () => {
+                if(endpoint === 'materials') { if(id === activeMaterialId) { activeMaterialId = null; activeColorId = null; } if(id === activeEdgeMaterialId) activeEdgeMaterialId = null; }
+                if(endpoint === 'colors' && id === activeColorId) activeColorId = null;
+                fetchData();
+            });
         }
 
         fetchData();

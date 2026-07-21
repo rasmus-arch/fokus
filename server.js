@@ -1,11 +1,12 @@
 require('dotenv').config();
 const express = require('express');
-const mysql = require('mysql2');
 const path = require('path');
-const multer = require('multer');
 const fs = require('fs');
-const http = require('http');
-const https = require('https');
+const crypto = require('crypto');
+const { hashPassword, verifyPassword, initSessions } = require('./lib/auth.js');
+const db = require('./lib/db.js');
+const { upload, uploadDir } = require('./lib/upload.js');
+const { htmlToPdfmakeNodes, buildPdfImageCell, downloadExternalImage } = require('./lib/pdfHelpers.js');
 
 let PdfPrinter = null;
 try {
@@ -15,205 +16,104 @@ try {
     console.warn("Varning: 'pdfmake' saknas! Kör 'npm install pdfmake' i cPanel.");
 }
 
-// ==========================================
-// HTML -> pdfmake-konverterare för fri text (t.ex. köpeavtal/kommentarer) som
-// numera kan innehålla enkel HTML från en contenteditable-editor (se settings.html).
-// Ingen DOM/jsdom - en enkel regex/tokenizer anpassad efter vad vår egen editor
-// faktiskt producerar (platta p/div/h1-h3/ul/ol-block, ej djupt nästlade element).
-// ==========================================
-function decodeHtmlEntities(str) {
-    return str.replace(/&nbsp;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;/g, "'").replace(/&amp;/gi, '&');
-}
-
-// Plockar isär <b>/<strong>, <i>/<em>, <u> till en array av pdfmake-textruns.
-// Övrig okänd markup i textsegmenten städas bort som en sista säkerhetsåtgärd.
-function parseInlineHtml(html) {
-    const tokens = html.split(/(<\/?(?:b|strong|i|em|u)[^>]*>)/gi);
-    const runs = [];
-    let bold = false, italics = false, underline = false;
-    tokens.forEach(tok => {
-        if (!tok) return;
-        const tagMatch = tok.match(/^<(\/?)(\w+)[^>]*>$/);
-        if (tagMatch) {
-            const closing = tagMatch[1] === '/';
-            const tagName = tagMatch[2].toLowerCase();
-            if (tagName === 'b' || tagName === 'strong') bold = !closing;
-            else if (tagName === 'i' || tagName === 'em') italics = !closing;
-            else if (tagName === 'u') underline = !closing;
-            return;
-        }
-        const text = decodeHtmlEntities(tok.replace(/<[^>]+>/g, ''));
-        if (text === '') return;
-        const run = { text };
-        if (bold) run.bold = true;
-        if (italics) run.italics = true;
-        if (underline) run.decoration = 'underline';
-        runs.push(run);
-    });
-    return runs;
-}
-
-function htmlBlockToNodes(tag, inner) {
-    if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
-        const fontSize = tag === 'h1' ? 20 : (tag === 'h2' ? 15 : 12);
-        const runs = parseInlineHtml(inner);
-        return [{ text: runs.length ? runs : '', fontSize, bold: true, margin: [0, 8, 0, 4] }];
-    }
-    if (tag === 'ul' || tag === 'ol') {
-        const items = [];
-        const liRegex = /<li(?:\s[^>]*)?>([\s\S]*?)<\/li>/gi;
-        let m;
-        while ((m = liRegex.exec(inner)) !== null) {
-            const runs = parseInlineHtml(m[1]);
-            items.push({ text: runs.length ? runs : '' });
-        }
-        return items.length ? [{ [tag]: items, margin: [0, 2, 0, 6] }] : [];
-    }
-    // p / div: dela på <br> till rader inom samma stycke.
-    const lines = inner.split(/<br\s*\/?>/gi);
-    const textNode = [];
-    lines.forEach((line, idx) => {
-        if (idx > 0) textNode.push('\n');
-        textNode.push(...parseInlineHtml(line));
-    });
-    return [{ text: textNode.length ? textNode : '', margin: [0, 0, 0, 6] }];
-}
-
-// Returnerar en array av pdfmake content-noder från en HTML-sträng (eller ren klartext).
-function htmlToPdfmakeNodes(html) {
-    if (!html) return [];
-    const nodes = [];
-    const blockRegex = /<(p|div|h1|h2|h3|ul|ol)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi;
-    let match; let matchedAny = false;
-    while ((match = blockRegex.exec(html)) !== null) {
-        matchedAny = true;
-        nodes.push(...htmlBlockToNodes(match[1].toLowerCase(), match[2]));
-    }
-    if (!matchedAny) nodes.push(...htmlBlockToNodes('p', html)); // ren klartext/enstaka rad utan blocktaggar
-    return nodes;
-}
-
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    if (req.method === 'OPTIONS') return res.sendStatus(200);
-    next();
-});
+const { createSession, deleteSession, purgeExpiredSessions, requireAuth, requireRole } = initSessions(db);
+purgeExpiredSessions(); // rensa gamla sessioner vid serverstart, samma mönster som offert-papperskorgen
+const requireStaff = requireRole('Superadmin', 'Admin', 'Säljare'); // "ej Montör"
+const requireAdmin = requireRole('Superadmin', 'Admin');
 
-const uploadDir = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true }); 
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => { cb(null, uploadDir); },
-    filename: (req, file, cb) => { cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname)); }
-});
-const upload = multer({ storage: storage });
-
-const db = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
-
-function downloadExternalImage(urlStr, destFolder) {
-    return new Promise((resolve) => {
-        try {
-            const urlObj = new URL(urlStr);
-            const client = urlObj.protocol === 'https:' ? https : http;
-            let ext = path.extname(urlObj.pathname).toLowerCase();
-            if (!['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) ext = '.jpg';
-            const filename = 'dl_' + Date.now() + '-' + Math.round(Math.random() * 1E9) + ext;
-            const filepath = path.join(destFolder, filename);
-
-            client.get(urlStr, (response) => {
-                if (response.statusCode === 200 || response.statusCode === 301 || response.statusCode === 302) {
-                    const file = fs.createWriteStream(filepath);
-                    file.on('error', () => resolve(null));
-                    response.pipe(file);
-                    file.on('finish', () => { file.close(); resolve('/uploads/' + filename); });
-                } else resolve(null);
-            }).on('error', () => resolve(null));
-        } catch(e) { resolve(null); }
-    });
-}
-
-function getExternalImageBase64(urlStr) {
-    return new Promise((resolve) => {
-        try {
-            const client = urlStr.startsWith('https') ? https : http;
-            client.get(urlStr, (response) => {
-                if (response.statusCode === 200) {
-                    const chunks = [];
-                    response.on('data', (chunk) => chunks.push(chunk));
-                    response.on('end', () => resolve(Buffer.concat(chunks).toString('base64')));
-                } else resolve(null);
-            }).on('error', () => resolve(null));
-        } catch(e) { resolve(null); }
-    });
+// Enhetligt svar för enkla INSERT/UPDATE/DELETE-anrop: {message: string} med 500 vid db-fel,
+// annars 200 med successMessage (och ev. extra fält, t.ex. { id: result.insertId }).
+function dbResult(res, successMessage, extra) {
+    return (err, result) => {
+        if (err) return res.status(500).json({ message: err.message });
+        res.json({ message: successMessage, ...(extra ? extra(result) : {}) });
+    };
 }
 
 // ANVÄNDARE & LEADS & KUNDER
 app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
-    db.query('SELECT * FROM users WHERE email = ? AND password = ?', [email, password], (err, results) => {
+    db.query('SELECT * FROM users WHERE email = ?', [email], (err, results) => {
         if (err) return res.status(500).json({ message: 'Serverfel' });
-        if (results.length > 0) res.json({ message: 'Inloggning lyckades', role: results[0].role, id: results[0].id });
-        else res.status(401).json({ message: 'Fel e-post eller lösenord.' });
+        if (results.length > 0 && verifyPassword(password, results[0].password)) {
+            const user = { id: results[0].id, name: results[0].name, role: results[0].role };
+            createSession(user, (sessErr, token) => {
+                if (sessErr) return res.status(500).json({ message: 'Kunde inte skapa session.' });
+                res.json({ message: 'Inloggning lyckades', role: user.role, id: user.id, name: user.name, token });
+            });
+        } else res.status(401).json({ message: 'Fel e-post eller lösenord.' });
     });
 });
-app.get('/api/users', (req, res) => db.query('SELECT id, name, email, role FROM users', (err, results) => res.json(results || [])));
-app.get('/api/installers', (req, res) => db.query('SELECT id, name FROM users WHERE role = "Montör"', (err, results) => res.json(results || [])));
-app.post('/api/users', (req, res) => {
-    const { name, email, password, role } = req.body;
-    db.query('INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)', [name, email, password, role], (err) => res.json(err ? {message: err.message} : { message: 'Användare skapad!' }));
+app.post('/api/logout', (req, res) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : (req.body && req.body.token);
+    if (!token) return res.json({ message: 'Utloggad.' });
+    deleteSession(token, () => res.json({ message: 'Utloggad.' }));
 });
-app.delete('/api/users/:id', (req, res) => db.query('DELETE FROM users WHERE id = ?', [req.params.id], () => res.json({ message: 'Borttagen' })));
+app.get('/api/users', requireAuth, requireAdmin, (req, res) => db.query('SELECT id, name, email, role, order_range_start, order_range_end FROM users', (err, results) => res.json(results || [])));
+app.get('/api/installers', requireAuth, (req, res) => db.query('SELECT id, name FROM users WHERE role = "Montör"', (err, results) => res.json(results || [])));
+app.post('/api/users', requireAuth, requireAdmin, (req, res) => {
+    const { name, email, password, role, order_range_start, order_range_end } = req.body;
+    db.query('INSERT INTO users (name, email, password, role, order_range_start, order_range_end) VALUES (?, ?, ?, ?, ?, ?)', [name, email, hashPassword(password), role, order_range_start || null, order_range_end || null], dbResult(res, 'Användare skapad!'));
+});
+app.put('/api/users/:id', requireAuth, requireAdmin, (req, res) => {
+    const { name, email, password, role, order_range_start, order_range_end } = req.body;
+    if (password) {
+        db.query('UPDATE users SET name=?, email=?, role=?, order_range_start=?, order_range_end=?, password=? WHERE id=?',
+            [name, email, role, order_range_start || null, order_range_end || null, hashPassword(password), req.params.id],
+            dbResult(res, 'Användare uppdaterad!'));
+    } else {
+        db.query('UPDATE users SET name=?, email=?, role=?, order_range_start=?, order_range_end=? WHERE id=?',
+            [name, email, role, order_range_start || null, order_range_end || null, req.params.id],
+            dbResult(res, 'Användare uppdaterad!'));
+    }
+});
+app.delete('/api/users/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM users WHERE id = ?', [req.params.id], dbResult(res, 'Borttagen')));
 
-app.post('/api/webhook/elementor', (req, res) => {
-    res.status(200).send("Webhook mottagen!");
-    try {
-        let name = 'Okänd Lead', email = '', phone = '', kommun = '';
-        
-        // Supersmart sökfunktion som hittar fälten oavsett vad Elementor döpt dem till
-        const findVal = (obj, keywords) => {
-            for (let key in obj) {
-                let k = key.toLowerCase();
-                if (keywords.some(kw => k.includes(kw))) {
-                    return obj[key].value !== undefined ? obj[key].value : obj[key];
-                }
-            }
-            return '';
-        };
-
-        if (req.body.fields) {
-            name = findVal(req.body.fields, ['name', 'namn', 'first_name']);
-            email = findVal(req.body.fields, ['email', 'epost', 'e-post']);
-            phone = findVal(req.body.fields, ['phone', 'tel', 'mobil']);
-            kommun = findVal(req.body.fields, ['kommun', 'city', 'ort']);
-        } else {
-            name = findVal(req.body, ['name', 'namn']) || name;
-            email = findVal(req.body, ['email', 'epost', 'e-post']) || email;
-            phone = findVal(req.body, ['phone', 'tel', 'mobil']) || phone;
-            kommun = findVal(req.body, ['kommun', 'city', 'ort']) || kommun;
+app.post('/api/webhook/elementor/:token', (req, res) => {
+    db.query('SELECT webhook_token FROM company_settings WHERE id = 1', (tokenErr, tokenRows) => {
+        if (tokenErr || !tokenRows.length || !tokenRows[0].webhook_token || tokenRows[0].webhook_token !== req.params.token) {
+            return res.status(403).send('Ogiltig eller saknad webhook-token.');
         }
+        res.status(200).send("Webhook mottagen!");
+        try {
+            let name = 'Okänd Lead', email = '', phone = '', kommun = '';
 
-        db.query('INSERT INTO leads (name, email, phone, kommun) VALUES (?, ?, ?, ?)', [name, email, phone, kommun], () => {});
-    } catch (error) {}
+            // Supersmart sökfunktion som hittar fälten oavsett vad Elementor döpt dem till
+            const findVal = (obj, keywords) => {
+                for (let key in obj) {
+                    let k = key.toLowerCase();
+                    if (keywords.some(kw => k.includes(kw))) {
+                        return obj[key].value !== undefined ? obj[key].value : obj[key];
+                    }
+                }
+                return '';
+            };
+
+            if (req.body.fields) {
+                name = findVal(req.body.fields, ['name', 'namn', 'first_name']);
+                email = findVal(req.body.fields, ['email', 'epost', 'e-post']);
+                phone = findVal(req.body.fields, ['phone', 'tel', 'mobil']);
+                kommun = findVal(req.body.fields, ['kommun', 'city', 'ort']);
+            } else {
+                name = findVal(req.body, ['name', 'namn']) || name;
+                email = findVal(req.body, ['email', 'epost', 'e-post']) || email;
+                phone = findVal(req.body, ['phone', 'tel', 'mobil']) || phone;
+                kommun = findVal(req.body, ['kommun', 'city', 'ort']) || kommun;
+            }
+
+            db.query('INSERT INTO leads (name, email, phone, kommun) VALUES (?, ?, ?, ?)', [name, email, phone, kommun], () => {});
+        } catch (error) {}
+    });
 });
 
-app.get('/api/leads', (req, res) => db.query("SELECT * FROM leads WHERE status = 'Ny' ORDER BY created_at DESC", (err, results) => res.json(results || [])));
-app.post('/api/leads/:id/convert', (req, res) => {
+app.get('/api/leads', requireAuth, requireStaff, (req, res) => db.query("SELECT * FROM leads WHERE status = 'Ny' ORDER BY created_at DESC", (err, results) => res.json(results || [])));
+app.post('/api/leads/:id/convert', requireAuth, requireStaff, (req, res) => {
     db.query('SELECT * FROM leads WHERE id = ?', [req.params.id], (err, leadsResults) => {
         if (err || !leadsResults || leadsResults.length === 0) return res.status(404).json({ message: 'Lead hittades inte' });
         const targetLead = leadsResults[0];
@@ -224,23 +124,23 @@ app.post('/api/leads/:id/convert', (req, res) => {
         });
     });
 });
-app.delete('/api/leads/:id', (req, res) => db.query('DELETE FROM leads WHERE id = ?', [req.params.id], () => res.json({ message: 'Lead raderad' })));
+app.delete('/api/leads/:id', requireAuth, requireStaff, (req, res) => db.query('DELETE FROM leads WHERE id = ?', [req.params.id], dbResult(res, 'Lead raderad')));
 
-app.get('/api/customers', (req, res) => db.query('SELECT * FROM customers ORDER BY created_at DESC', (err, results) => res.json(results || [])));
-app.post('/api/customers', (req, res) => {
+app.get('/api/customers', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM customers ORDER BY created_at DESC', (err, results) => res.json(results || [])));
+app.post('/api/customers', requireAuth, requireStaff, (req, res) => {
     const { name, address, address2, apartment_number, brf_org_nr, property_designation, email, phone, personnummer } = req.body;
-    db.query(`INSERT INTO customers (name, address, address2, apartment_number, brf_org_nr, property_designation, email, phone, personnummer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [name, address, address2, apartment_number, brf_org_nr, property_designation, email, phone, personnummer], (err, result) => res.json({ message: 'Kund sparad!', id: result.insertId }));
+    db.query(`INSERT INTO customers (name, address, address2, apartment_number, brf_org_nr, property_designation, email, phone, personnummer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [name, address, address2, apartment_number, brf_org_nr, property_designation, email, phone, personnummer], dbResult(res, 'Kund sparad!', result => ({ id: result.insertId })));
 });
-app.put('/api/customers/:id', (req, res) => {
+app.put('/api/customers/:id', requireAuth, requireStaff, (req, res) => {
     const { name, address, address2, apartment_number, brf_org_nr, property_designation, email, phone, personnummer } = req.body;
-    db.query(`UPDATE customers SET name=?, address=?, address2=?, apartment_number=?, brf_org_nr=?, property_designation=?, email=?, phone=?, personnummer=? WHERE id=?`, [name, address, address2, apartment_number, brf_org_nr, property_designation, email, phone, personnummer, req.params.id], () => res.json({ message: 'Kund uppdaterad!' }));
+    db.query(`UPDATE customers SET name=?, address=?, address2=?, apartment_number=?, brf_org_nr=?, property_designation=?, email=?, phone=?, personnummer=? WHERE id=?`, [name, address, address2, apartment_number, brf_org_nr, property_designation, email, phone, personnummer, req.params.id], dbResult(res, 'Kund uppdaterad!'));
 });
-app.get('/api/customers/:id/quotes', (req, res) => db.query('SELECT * FROM quotes WHERE customer_id = ? ORDER BY created_at DESC', [req.params.id], (err, results) => res.json(results || [])));
+app.get('/api/customers/:id/quotes', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM quotes WHERE customer_id = ? ORDER BY created_at DESC', [req.params.id], (err, results) => res.json(results || [])));
 
 // ==========================================
 // PRODUKTER (NU MED VARIANT-STÖD!)
 // ==========================================
-app.get('/api/products', (req, res) => db.query(
+app.get('/api/products', requireAuth, requireStaff, (req, res) => db.query(
     `SELECT p.*, COALESCE(ft.front_layout, p.front_layout) AS effective_front_layout
      FROM products p
      LEFT JOIN frame_types ft ON p.frame_type_id = ft.id AND ft.active = 1
@@ -250,7 +150,7 @@ app.get('/api/products', (req, res) => db.query(
 
 const uploadMiddleware = upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 10 }]);
 
-app.post('/api/products', (req, res) => {
+app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
     uploadMiddleware(req, res, async function (err) {
         if (err) return res.status(400).json({ message: 'Uppladdningsfel' });
         const { id, name, description, sku, cc_measurement, height, length, width, brand, category, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, remove_main_image, retained_gallery, has_variations, variations } = req.body;
@@ -301,18 +201,18 @@ app.post('/api/products', (req, res) => {
 // ==========================================
 // STOMTYPER (frame_types) - återanvändbara frontkonfigurationer
 // ==========================================
-app.get('/api/frame-types', (req, res) => db.query('SELECT * FROM frame_types WHERE active = 1 ORDER BY name ASC', (err, results) => res.json(results || [])));
-app.post('/api/frame-types', (req, res) => {
+app.get('/api/frame-types', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM frame_types WHERE active = 1 ORDER BY name ASC', (err, results) => res.json(results || [])));
+app.post('/api/frame-types', requireAuth, requireAdmin, (req, res) => {
     const { name, front_layout } = req.body;
-    db.query('INSERT INTO frame_types (name, front_layout) VALUES (?, ?)', [name, front_layout], (err, result) => res.json(err ? { message: err.message } : { message: 'Stomtyp skapad!', id: result.insertId }));
+    db.query('INSERT INTO frame_types (name, front_layout) VALUES (?, ?)', [name, front_layout], dbResult(res, 'Stomtyp skapad!', result => ({ id: result.insertId })));
 });
-app.put('/api/frame-types/:id', (req, res) => {
+app.put('/api/frame-types/:id', requireAuth, requireAdmin, (req, res) => {
     const { name, front_layout, active } = req.body;
-    db.query('UPDATE frame_types SET name=?, front_layout=?, active=? WHERE id=?', [name, front_layout, active === false || active === 'false' ? 0 : 1, req.params.id], (err) => res.json(err ? { message: err.message } : { message: 'Stomtyp uppdaterad!' }));
+    db.query('UPDATE frame_types SET name=?, front_layout=?, active=? WHERE id=?', [name, front_layout, active === false || active === 'false' ? 0 : 1, req.params.id], dbResult(res, 'Stomtyp uppdaterad!'));
 });
-app.delete('/api/frame-types/:id', (req, res) => db.query('UPDATE frame_types SET active = 0 WHERE id = ?', [req.params.id], (err) => res.json(err ? { message: err.message } : { message: 'Stomtyp inaktiverad!' })));
+app.delete('/api/frame-types/:id', requireAuth, requireAdmin, (req, res) => db.query('UPDATE frame_types SET active = 0 WHERE id = ?', [req.params.id], dbResult(res, 'Stomtyp inaktiverad!')));
 
-app.post('/api/products/bulk', async (req, res) => {
+app.post('/api/products/bulk', requireAuth, requireAdmin, async (req, res) => {
     const products = req.body;
     if (!products || products.length === 0) return res.status(400).json({ message: 'Inga produkter skickades in.' });
     
@@ -347,12 +247,12 @@ app.post('/api/products/bulk', async (req, res) => {
     });
 });
 
-app.delete('/api/products/:id', (req, res) => db.query('DELETE FROM products WHERE id = ?', [req.params.id], () => res.json({ message: 'Raderad!' })));
+app.delete('/api/products/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM products WHERE id = ?', [req.params.id], dbResult(res, 'Raderad!')));
 
 // ==========================================
 // RESTEN AV API:ER (BÄNKSKIVOR & OFFERTER - OFÖRÄNDRADE)
 // ==========================================
-app.get('/api/countertops/config', (req, res) => {
+app.get('/api/countertops/config', requireAuth, requireStaff, (req, res) => {
     db.query('SELECT * FROM countertop_materials', (err1, materials) => {
         db.query('SELECT * FROM countertop_colors', (err2, colors) => {
             db.query('SELECT * FROM countertop_prices', (err3, prices) => {
@@ -367,41 +267,87 @@ app.get('/api/countertops/config', (req, res) => {
 });
 const ctTables = ['materials', 'colors', 'prices', 'services', 'edges'];
 ctTables.forEach(table => {
-    app.post(`/api/countertops/${table}`, (req, res) => {
+    app.post(`/api/countertops/${table}`, requireAuth, requireAdmin, (req, res) => {
         if (table === 'prices' && req.body.color_ids) {
             const { depth_min, depth_max, price_per_lm, thickness, color_ids } = req.body;
-            if (!color_ids || color_ids.length === 0) return res.status(400).json({error: "Inga färger angivna"});
+            if (!color_ids || color_ids.length === 0) return res.status(400).json({ message: "Inga färger angivna" });
             const values = color_ids.map(id => [id, depth_min, depth_max, price_per_lm, thickness]);
-            db.query(`INSERT INTO countertop_prices (color_id, depth_min, depth_max, price_per_lm, thickness) VALUES ?`, [values], (err) => res.json(err ? {error: err.message} : {message: 'Priserna har sparats på alla valda färger!'}));
-        } else db.query(`INSERT INTO countertop_${table} SET ?`, req.body, (err) => res.json(err ? {error: err.message} : {message: 'Sparad'}));
+            db.query(`INSERT INTO countertop_prices (color_id, depth_min, depth_max, price_per_lm, thickness) VALUES ?`, [values], (err) => {
+                if (err) return res.status(500).json({ message: err.message });
+                res.json({ message: 'Priserna har sparats på alla valda färger!' });
+            });
+        } else db.query(`INSERT INTO countertop_${table} SET ?`, req.body, (err, result) => {
+            if (err) return res.status(500).json({ message: err.message });
+            res.json({ message: 'Sparad', id: result.insertId });
+        });
     });
-    app.put(`/api/countertops/${table}/:id`, (req, res) => db.query(`UPDATE countertop_${table} SET ? WHERE id = ?`, [req.body, req.params.id], (err) => res.json(err ? {error: err.message} : {message: 'Uppdaterad'})));
-    app.delete(`/api/countertops/${table}/:id`, (req, res) => db.query(`DELETE FROM countertop_${table} WHERE id = ?`, [req.params.id], (err) => res.json(err ? {error: err.message} : {message: 'Raderad'})));
+    app.put(`/api/countertops/${table}/:id`, requireAuth, requireAdmin, (req, res) => db.query(`UPDATE countertop_${table} SET ? WHERE id = ?`, [req.body, req.params.id], (err) => {
+        if (err) return res.status(500).json({ message: err.message });
+        res.json({ message: 'Uppdaterad' });
+    }));
+    app.delete(`/api/countertops/${table}/:id`, requireAuth, requireAdmin, (req, res) => db.query(`DELETE FROM countertop_${table} WHERE id = ?`, [req.params.id], (err) => {
+        if (err) return res.status(500).json({ message: err.message });
+        res.json({ message: 'Raderad' });
+    }));
 });
 
-app.get('/api/quotes', (req, res) => db.query(`SELECT q.*, c.name as customer_name, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.status != 'Order' ORDER BY q.created_at DESC`, (err, results) => res.json(results || [])));
-app.get('/api/orders', (req, res) => {
-    const installerId = req.query.installer_id;
-    db.query(`SELECT q.*, c.name as customer_name, c.address, c.phone, c.email, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.status = 'Order' ORDER BY q.created_at DESC`, installerId ? [installerId] : [], (err, results) => res.json(results || []));
+app.post('/api/countertops/colors/:id/image', requireAuth, requireAdmin, upload.single('image'), (req, res) => {
+    if (!req.file) return res.status(400).json({ message: 'Ingen bildfil mottagen' });
+    db.query('UPDATE countertop_colors SET image_url = ? WHERE id = ?', ['/uploads/' + req.file.filename, req.params.id], (err) => {
+        if (err) return res.status(500).json({ message: err.message });
+        res.json({ message: 'Bild uppladdad!' });
+    });
 });
-app.get('/api/quotes/:id', (req, res) => db.query('SELECT q.*, c.name as customer_name, c.address, c.address2, c.apartment_number, c.brf_org_nr, c.property_designation, c.email, c.phone, c.personnummer FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?', [req.params.id], (err, results) => res.json(results && results.length > 0 ? results[0] : null)));
-app.post('/api/quotes', (req, res) => db.query('INSERT INTO quotes (customer_id, quote_name, status) VALUES (?, ?, "Utkast")', [req.body.customer_id, req.body.quote_name], (err, result) => res.json({ message: 'Offert skapad!', quoteId: result.insertId })));
-app.put('/api/quotes/:id/status', (req, res) => {
-    const { status, installer_id, user_name } = req.body; const quoteId = req.params.id;
+
+app.get('/api/quotes', requireAuth, requireStaff, (req, res) => db.query(`SELECT q.*, c.name as customer_name, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.status != 'Order' AND q.deleted_at IS NULL ORDER BY q.created_at DESC`, (err, results) => res.json(results || [])));
+app.get('/api/orders', requireAuth, (req, res) => {
+    const installerId = req.query.installer_id;
+    db.query(`SELECT q.*, c.name as customer_name, c.address, c.phone, c.email, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.status = 'Order' AND q.deleted_at IS NULL ORDER BY q.created_at DESC`, installerId ? [installerId] : [], (err, results) => res.json(results || []));
+});
+
+// ==========================================
+// PAPPERSKORG FÖR OFFERTER (mjuk borttagning, auto-rensning efter 10 dagar)
+// ==========================================
+const TRASH_RETENTION_DAYS = 10;
+function purgeExpiredQuotes(callback) {
+    db.query('DELETE FROM quotes WHERE deleted_at IS NOT NULL AND deleted_at < DATE_SUB(NOW(), INTERVAL ? DAY)', [TRASH_RETENTION_DAYS], (err) => { if (callback) callback(err); });
+}
+purgeExpiredQuotes(); // rensa gamla papperskorgs-rader vid serverstart
+
+app.delete('/api/quotes/:id', requireAuth, requireStaff, (req, res) => db.query('UPDATE quotes SET deleted_at = NOW() WHERE id = ?', [req.params.id], dbResult(res, 'Offerten flyttad till papperskorgen.')));
+app.put('/api/quotes/:id/restore', requireAuth, requireStaff, (req, res) => db.query('UPDATE quotes SET deleted_at = NULL WHERE id = ?', [req.params.id], dbResult(res, 'Offerten återställd!')));
+app.delete('/api/quotes/:id/permanent', requireAuth, requireStaff, (req, res) => db.query('DELETE FROM quotes WHERE id = ? AND deleted_at IS NOT NULL', [req.params.id], dbResult(res, 'Raderad permanent.')));
+app.get('/api/quotes/trash', requireAuth, requireStaff, (req, res) => {
+    purgeExpiredQuotes(() => {
+        db.query(`SELECT q.*, c.name as customer_name FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.deleted_at IS NOT NULL ORDER BY q.deleted_at DESC`, (err, results) => res.json(results || []));
+    });
+});
+app.get('/api/quotes/:id', requireAuth, requireStaff, (req, res) => db.query('SELECT q.*, c.name as customer_name, c.address, c.address2, c.apartment_number, c.brf_org_nr, c.property_designation, c.email, c.phone, c.personnummer FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?', [req.params.id], (err, results) => res.json(results && results.length > 0 ? results[0] : null)));
+app.post('/api/quotes', requireAuth, requireStaff, (req, res) => db.query('INSERT INTO quotes (customer_id, quote_name, status) VALUES (?, ?, "Utkast")', [req.body.customer_id, req.body.quote_name], dbResult(res, 'Offert skapad!', result => ({ quoteId: result.insertId }))));
+app.put('/api/quotes/:id/status', requireAuth, requireStaff, (req, res) => {
+    const { status, installer_id } = req.body; const quoteId = req.params.id;
     if (status === 'Order') {
         db.query('SELECT order_number FROM quotes WHERE id = ?', [quoteId], (err, results) => {
             if (results && results[0] && results[0].order_number) db.query('UPDATE quotes SET status = ?, installer_id = ? WHERE id = ?', [status, installer_id || null, quoteId], () => res.json({message: 'Uppdaterad!'}));
             else {
-                let minRange = 1000, maxRange = 1999; if (user_name === 'Rasmus') { minRange = 2000; maxRange = 2999; } else if (user_name === 'Peter') { minRange = 3000; maxRange = 3999; }
-                db.query('SELECT MAX(order_number) as max_num FROM quotes WHERE order_number >= ? AND order_number <= ?', [minRange, maxRange], (err, maxRes) => {
-                    let newOrderNumber = maxRes && maxRes[0].max_num ? maxRes[0].max_num + 1 : minRange;
-                    db.query('UPDATE quotes SET status = ?, installer_id = ?, order_number = ? WHERE id = ?', [status, installer_id || null, newOrderNumber, quoteId], () => res.json({message: `Order skapad med ordernummer #${newOrderNumber}!`}));
+                db.query('SELECT order_range_start, order_range_end FROM users WHERE id = ?', [req.user.id], (userErr, userRows) => {
+                    const configured = userRows && userRows[0] && userRows[0].order_range_start != null && userRows[0].order_range_end != null;
+                    const assignOrderNumber = (maxRes, fallback) => {
+                        const newOrderNumber = maxRes && maxRes[0].max_num ? maxRes[0].max_num + 1 : fallback;
+                        db.query('UPDATE quotes SET status = ?, installer_id = ?, order_number = ? WHERE id = ?', [status, installer_id || null, newOrderNumber, quoteId], () => res.json({message: `Order skapad med ordernummer #${newOrderNumber}!`}));
+                    };
+                    if (configured) {
+                        const minRange = userRows[0].order_range_start, maxRange = userRows[0].order_range_end;
+                        db.query('SELECT MAX(order_number) as max_num FROM quotes WHERE order_number >= ? AND order_number <= ?', [minRange, maxRange], (err2, maxRes) => assignOrderNumber(maxRes, minRange));
+                    } else {
+                        db.query('SELECT MAX(order_number) as max_num FROM quotes', (err2, maxRes) => assignOrderNumber(maxRes, 1000));
+                    }
                 });
             }
         });
     } else db.query('UPDATE quotes SET status = ?, installer_id = ? WHERE id = ?', [status, installer_id || null, quoteId], () => res.json({message: 'Uppdaterad!'}));
 });
-app.put('/api/quotes/:id', (req, res) => {
+app.put('/api/quotes/:id', requireAuth, requireStaff, (req, res) => {
     const { quoteCart, selectedConditions, kitchenSpecs, extraFees, globalDiscount, discountType, useRot, internal_comment, public_comment } = req.body;
     db.query('UPDATE quotes SET global_discount = ?, discount_type = ?, quote_data = ?, internal_comment = ?, public_comment = ? WHERE id = ?', 
         [globalDiscount || 0, discountType || '%', JSON.stringify({ selectedConditions, kitchenSpecs, extraFees, quoteCart, useRot }), internal_comment || null, public_comment || null, req.params.id], (err) => {
@@ -413,38 +359,106 @@ app.put('/api/quotes/:id', (req, res) => {
         });
     });
 });
-app.post('/api/quotes/:id/duplicate', (req, res) => {
+app.post('/api/quotes/:id/duplicate', requireAuth, requireStaff, (req, res) => {
     db.query('SELECT * FROM quotes WHERE id = ?', [req.params.id], (err, quoteResults) => {
+        if (err) return res.status(500).json({ message: err.message });
+        if (!quoteResults || quoteResults.length === 0) return res.status(404).json({ message: 'Offerten hittades inte' });
         const o = quoteResults[0];
-        db.query('INSERT INTO quotes (customer_id, quote_name, status, quote_data, global_discount, discount_type, internal_comment, public_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
-            [o.customer_id, o.quote_name + ' (Kopia)', 'Utkast', o.quote_data, o.global_discount, o.discount_type, o.internal_comment, o.public_comment], (err, newQuoteResult) => {
-            db.query('INSERT INTO quote_items (quote_id, product_id, sku, name, price_inc_vat, install_inc_vat, qty, is_free_text) SELECT ?, product_id, sku, name, price_inc_vat, install_inc_vat, qty, is_free_text FROM quote_items WHERE quote_id = ?', [newQuoteResult.insertId, req.params.id], () => res.json({ message: 'Duplicerad!' }));
+        db.query('INSERT INTO quotes (customer_id, quote_name, status, quote_data, global_discount, discount_type, internal_comment, public_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [o.customer_id, o.quote_name + ' (Kopia)', 'Utkast', o.quote_data, o.global_discount, o.discount_type, o.internal_comment, o.public_comment], (err2, newQuoteResult) => {
+            if (err2) return res.status(500).json({ message: err2.message });
+            db.query('INSERT INTO quote_items (quote_id, product_id, sku, name, price_inc_vat, install_inc_vat, qty, is_free_text) SELECT ?, product_id, sku, name, price_inc_vat, install_inc_vat, qty, is_free_text FROM quote_items WHERE quote_id = ?', [newQuoteResult.insertId, req.params.id], dbResult(res, 'Duplicerad!'));
         });
     });
 });
-app.put('/api/orders/:id/comments', (req, res) => db.query('UPDATE quotes SET internal_comment = ?, public_comment = ? WHERE id = ?', [req.body.internal_comment || null, req.body.public_comment || null, req.params.id], () => res.json({ message: 'Kommentarer sparade!' })));
-app.get('/api/orders/:id/files', (req, res) => db.query('SELECT * FROM order_files WHERE quote_id = ? ORDER BY created_at DESC', [req.params.id], (err, results) => res.json(results || [])));
-app.post('/api/orders/:id/files', upload.single('file'), (req, res) => {
+app.put('/api/orders/:id/comments', requireAuth, (req, res) => db.query('UPDATE quotes SET internal_comment = ?, public_comment = ? WHERE id = ?', [req.body.internal_comment || null, req.body.public_comment || null, req.params.id], dbResult(res, 'Kommentarer sparade!')));
+app.get('/api/orders/:id/files', requireAuth, (req, res) => db.query('SELECT * FROM order_files WHERE quote_id = ? ORDER BY created_at DESC', [req.params.id], (err, results) => res.json(results || [])));
+app.post('/api/orders/:id/files', requireAuth, upload.single('file'), (req, res) => {
+    if (!req.file) return res.status(400).json({ message: 'Ingen fil mottagen' });
     const fileType = ['.jpg', '.jpeg', '.png', '.heic', '.gif'].includes(path.extname(req.file.originalname).toLowerCase()) ? 'image' : 'document';
-    db.query('INSERT INTO order_files (quote_id, file_name, file_url, file_type, uploaded_by) VALUES (?,?,?,?,?)', [req.params.id, req.file.originalname, '/uploads/' + req.file.filename, fileType, req.body.user_id || null], () => res.json({ message: 'Fil uppladdad!' }));
+    db.query('INSERT INTO order_files (quote_id, file_name, file_url, file_type, uploaded_by) VALUES (?,?,?,?,?)', [req.params.id, req.file.originalname, '/uploads/' + req.file.filename, fileType, req.body.user_id || null], dbResult(res, 'Fil uppladdad!'));
 });
-app.delete('/api/orders/files/:fileId', (req, res) => {
+app.delete('/api/orders/files/:fileId', requireAuth, (req, res) => {
     db.query('SELECT file_url FROM order_files WHERE id = ?', [req.params.fileId], (err, results) => {
-        if(results && results.length > 0) db.query('DELETE FROM order_files WHERE id = ?', [req.params.fileId], () => { fs.unlink(path.join(__dirname, 'public', results[0].file_url), () => res.json({ message: 'Raderad' })); });
+        if (err) return res.status(500).json({ message: err.message });
+        if(results && results.length > 0) db.query('DELETE FROM order_files WHERE id = ?', [req.params.fileId], (err2) => {
+            if (err2) return res.status(500).json({ message: err2.message });
+            fs.unlink(path.join(__dirname, 'public', results[0].file_url), () => res.json({ message: 'Raderad' }));
+        });
         else res.json({message: 'Redan raderad'});
     });
 });
-app.get('/api/orders/:id/assembly', (req, res) => {
+app.get('/api/orders/:id/assembly', requireAuth, (req, res) => {
     db.query('SELECT q.*, c.name as customer_name, c.address, c.phone, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.id = ?', [req.params.id], (err, quoteRes) => {
         db.query('SELECT id, sku, name, is_delivered, is_packed, is_assembled, assembly_comment FROM quote_items WHERE quote_id = ? AND is_free_text = 0', [req.params.id], (err, itemsRes) => res.json({ quote: quoteRes[0], items: itemsRes || [] }));
     });
 });
-app.put('/api/orders/:id/assembly/status', (req, res) => db.query(`UPDATE quotes SET factory_date = ?, assembly_start_date = ?, assembly_completed_date = ?, assembly_status = ? WHERE id = ?`, [req.body.factory_date || null, req.body.assembly_start_date || null, req.body.assembly_completed_date || null, req.body.assembly_status || 'Ej påbörjad', req.params.id], () => res.json({ message: 'Sparat!' })));
-app.put('/api/orders/assembly/item/:itemId', (req, res) => db.query(`UPDATE quote_items SET is_delivered = ?, is_packed = ?, is_assembled = ?, assembly_comment = ? WHERE id = ?`, [req.body.is_delivered ? 1 : 0, req.body.is_packed ? 1 : 0, req.body.is_assembled ? 1 : 0, req.body.assembly_comment, req.params.itemId], () => res.json({ message: 'Sparat!' })));
-app.get('/api/statistics', (req, res) => db.query('SELECT category, COUNT(*) as count FROM products GROUP BY category', (err, results) => res.json({ categories: results && results.length > 0 ? results : [{ category: 'Inga', count: 0 }] })));
+app.put('/api/orders/:id/assembly/status', requireAuth, (req, res) => db.query(`UPDATE quotes SET factory_date = ?, assembly_start_date = ?, assembly_completed_date = ?, assembly_status = ? WHERE id = ?`, [req.body.factory_date || null, req.body.assembly_start_date || null, req.body.assembly_completed_date || null, req.body.assembly_status || 'Ej påbörjad', req.params.id], dbResult(res, 'Sparat!')));
+app.put('/api/orders/assembly/item/:itemId', requireAuth, (req, res) => db.query(`UPDATE quote_items SET is_delivered = ?, is_packed = ?, is_assembled = ?, assembly_comment = ? WHERE id = ?`, [req.body.is_delivered ? 1 : 0, req.body.is_packed ? 1 : 0, req.body.is_assembled ? 1 : 0, req.body.assembly_comment, req.params.itemId], dbResult(res, 'Sparat!')));
+// requireStaff (inte requireAdmin) - dashboard.html (startsidan) visas för alla utom Montör
+// och anropar dessa statistik-endpoints, inte bara den admin-gated statistics.html-sidan.
+app.get('/api/statistics', requireAuth, requireStaff, (req, res) => db.query('SELECT category, COUNT(*) as count FROM products GROUP BY category', (err, results) => res.json({ categories: results && results.length > 0 ? results : [{ category: 'Inga', count: 0 }] })));
+
+// Riktig försäljningsstatistik (bäst säljande produkter/kategorier, ordersantal per månad).
+// Filtreras på quotes.status='Order' (vunna ordrar) och valfritt datumintervall på quotes.created_at
+// (offertens skapandedatum - det finns ingen separat "blev vunnen"-tidsstämpel i schemat).
+// Fria textrader/bänkskivor/auto-fronter (utan riktigt product_id) räknas inte in i produkt-/kategoristatistiken.
+app.get('/api/statistics/overview', requireAuth, requireStaff, (req, res) => {
+    const { from, to } = req.query;
+    let dateFilter = ''; const dateParams = [];
+    if (from) { dateFilter += ' AND q.created_at >= ?'; dateParams.push(from); }
+    if (to) { dateFilter += ' AND q.created_at < DATE_ADD(?, INTERVAL 1 DAY)'; dateParams.push(to); }
+
+    db.query(`SELECT COUNT(*) as c FROM quotes q WHERE q.status = 'Order'${dateFilter}`, dateParams, (err1, orderCountRows) => {
+        const orderCount = (!err1 && orderCountRows[0]) ? orderCountRows[0].c : 0;
+        db.query(`SELECT DATE_FORMAT(q.created_at, '%Y-%m') as month, COUNT(*) as count FROM quotes q WHERE q.status = 'Order'${dateFilter} GROUP BY month ORDER BY month ASC`, dateParams, (err2, monthRows) => {
+            const ordersByMonth = err2 ? [] : monthRows;
+            const itemJoinFilter = `q.status = 'Order' AND qi.is_free_text = 0 AND qi.product_id IS NOT NULL${dateFilter}`;
+            db.query(`SELECT qi.product_id, p.name, p.sku, SUM(qi.qty) as qty, SUM(qi.price_inc_vat * qi.qty) as revenue
+                       FROM quote_items qi JOIN quotes q ON qi.quote_id = q.id JOIN products p ON qi.product_id = p.id
+                       WHERE ${itemJoinFilter} GROUP BY qi.product_id, p.name, p.sku ORDER BY revenue DESC LIMIT 10`, dateParams, (err3, productRows) => {
+                const topProducts = err3 ? [] : productRows;
+                db.query(`SELECT p.category, SUM(qi.qty) as qty, SUM(qi.price_inc_vat * qi.qty) as revenue
+                           FROM quote_items qi JOIN quotes q ON qi.quote_id = q.id JOIN products p ON qi.product_id = p.id
+                           WHERE ${itemJoinFilter} GROUP BY p.category ORDER BY revenue DESC`, dateParams, (err4, catRows) => {
+                    const topCategories = err4 ? [] : catRows;
+                    res.json({ range: { from: from || null, to: to || null }, orderCount, ordersByMonth, topProducts, topCategories });
+                });
+            });
+        });
+    });
+});
+
+// "Roliga siffror" för dashboarden - kul, lätt smält statistik (heltid, inget datumfilter).
+// Total intäkt räknar in ALLA rader (även fritext/bänkskivor/tjänster) till skillnad från topProducts/topCategories ovan,
+// eftersom det här ska spegla verklig total omsättning, inte per-produkt-attribution.
+app.get('/api/statistics/fun-facts', requireAuth, requireStaff, (req, res) => {
+    db.query(`SELECT SUM(qi.price_inc_vat * qi.qty) as total FROM quote_items qi JOIN quotes q ON qi.quote_id = q.id WHERE q.status = 'Order'`, (e1, r1) => {
+        const totalRevenue = (r1 && r1[0] && r1[0].total) ? r1[0].total : 0;
+        db.query(`SELECT q.id, q.quote_name, c.name as customer_name, SUM(qi.price_inc_vat * qi.qty) as total
+                   FROM quote_items qi JOIN quotes q ON qi.quote_id = q.id JOIN customers c ON q.customer_id = c.id
+                   WHERE q.status = 'Order' GROUP BY q.id, q.quote_name, c.name ORDER BY total DESC LIMIT 1`, (e2, r2) => {
+            const biggestOrder = (r2 && r2[0]) ? r2[0] : null;
+            db.query(`SELECT COUNT(*) as c FROM quotes WHERE status = 'Order' AND deleted_at IS NULL`, (e3, r3) => {
+                const orderCount = (r3 && r3[0]) ? r3[0].c : 0;
+                db.query(`SELECT COUNT(*) as c FROM quotes WHERE status IN ('Offert', 'Order') AND deleted_at IS NULL`, (e4, r4) => {
+                    const sentCount = (r4 && r4[0]) ? r4[0].c : 0;
+                    const winRate = sentCount > 0 ? Math.round((orderCount / sentCount) * 100) : 0;
+                    db.query(`SELECT COUNT(*) as c FROM leads WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)`, (e5, r5) => {
+                        const newLeads30d = (r5 && r5[0]) ? r5[0].c : 0;
+                        db.query(`SELECT kommun, COUNT(*) as c FROM leads WHERE kommun IS NOT NULL AND kommun != '' GROUP BY kommun ORDER BY c DESC LIMIT 1`, (e6, r6) => {
+                            const topKommun = (r6 && r6[0]) ? r6[0] : null;
+                            res.json({ totalRevenue, biggestOrder, orderCount, sentCount, winRate, newLeads30d, topKommun });
+                        });
+                    });
+                });
+            });
+        });
+    });
+});
 
 // PDF GENERATORS BEHÅLLS INTAKTA (Förkortade kommentarer)
-app.get('/api/quotes/:id/pdf', (req, res) => {
+app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
     if (!PdfPrinter) return res.status(500).send("PDF-motorn saknas!");
     const fonts = { Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' } };
     const printer = new PdfPrinter(fonts);
@@ -457,33 +471,30 @@ app.get('/api/quotes/:id/pdf', (req, res) => {
 
         db.query('SELECT * FROM company_settings WHERE id = 1', (err0, companyRes) => {
             const company = companyRes && companyRes.length > 0 ? companyRes[0] : {};
-            const companyName = company.company_name || 'KLARÄLVSKÖK';
+            if (!company.company_name || !company.logo_url) {
+                return res.status(400).send('Företagsinformation saknas. Fyll i företagsnamn och ladda upp en logga under Företagsinfo innan du skapar PDF-dokument.');
+            }
+            const companyName = company.company_name;
             let headerLeftBlock = { text: companyName, fontSize: 24, bold: true, color: '#000000' };
-            const logoPath = company.logo_url ? path.join(__dirname, 'public', company.logo_url.replace(/^\/?(public\/)?/, '')) : path.join(__dirname, 'public', 'uploads', 'Klaralvskok-logga-1.jpg');
+            const logoPath = path.join(__dirname, 'public', company.logo_url.replace(/^\/?(public\/)?/, ''));
             if (fs.existsSync(logoPath)) { const ext = path.extname(logoPath).toLowerCase(); const mime = ext === '.png' ? 'image/png' : 'image/jpeg'; headerLeftBlock = { image: `data:${mime};base64,${fs.readFileSync(logoPath).toString('base64')}`, width: 140 }; }
             let ytbehandling = extraFees.colorSelect || '-'; if (extraFees.colorSelect === 'Valfri NCS-kod' && extraFees.colorCustom) ytbehandling = `NCS: ${extraFees.colorCustom}`;
             const tableBody = [ [{ text: '', style: 'th', alignment: 'center' }, { text: 'Artikel / Beskrivning', style: 'th' }, { text: 'Antal', style: 'th', alignment: 'center' }] ];
         
         db.query('SELECT id, sku, image_url FROM products', async (err, dbProducts) => {
-            if (err) dbProducts = []; let totalMaterialBeforeGlobalDiscount = 0;
+            if (err) dbProducts = [];
+        db.query('SELECT id, image_url FROM countertop_colors', async (errCol, dbColors) => {
+            if (errCol) dbColors = [];
+            let totalMaterialBeforeGlobalDiscount = 0;
             for (let item of cart) {
                 const rowMaterialTotal = (item.priceIncVat * (1 - (item.discount / 100))) * item.qty; totalMaterialBeforeGlobalDiscount += rowMaterialTotal;
-                let pdfImageCell = { text: '', alignment: 'center', margin: [0, 10] }; const dbProd = dbProducts.find(p => p.sku === item.sku || p.id == item.id);
-                if (dbProd && dbProd.image_url) {
-                    let rawUrl = dbProd.image_url.split('?')[0]; 
-                    if (rawUrl.startsWith('http')) {
-                        const base64 = await getExternalImageBase64(rawUrl);
-                        if (base64) { const mime = rawUrl.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'; pdfImageCell = { image: `data:${mime};base64,${base64}`, width: 45, height: 45, alignment: 'center', margin: [0, 5, 0, 5] }; }
-                    } else {
-                        let cleanPath = rawUrl.startsWith('/') ? rawUrl.substring(1) : rawUrl; if (cleanPath.startsWith('public/')) cleanPath = cleanPath.substring(7);
-                        const fullImgPath = path.join(__dirname, 'public', cleanPath);
-                        if (fs.existsSync(fullImgPath)) {
-                            const ext = path.extname(fullImgPath).toLowerCase();
-                            if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') {
-                                try { const mime = ext === '.png' ? 'image/png' : 'image/jpeg'; pdfImageCell = { image: `data:${mime};base64,${fs.readFileSync(fullImgPath).toString('base64')}`, width: 45, height: 45, alignment: 'center', margin: [0, 5, 0, 5] }; } catch (e) {}
-                            }
-                        }
-                    }
+                let pdfImageCell;
+                if (item.colorId) {
+                    const dbColor = dbColors.find(c => c.id == item.colorId);
+                    pdfImageCell = await buildPdfImageCell(dbColor ? dbColor.image_url : null);
+                } else {
+                    const dbProd = dbProducts.find(p => p.sku === item.sku || p.id == item.id);
+                    pdfImageCell = await buildPdfImageCell(dbProd ? dbProd.image_url : null);
                 }
                 tableBody.push([ pdfImageCell, [{ text: item.name, bold: true, color: '#000000', margin: [0, 5] }, { text: `Art.nr: ${item.sku}`, fontSize: 8, color: '#444444' }], { text: item.qty.toString(), alignment: 'center', margin: [0, 15], color: '#000000' } ]);
             }
@@ -527,17 +538,19 @@ app.get('/api/quotes/:id/pdf', (req, res) => {
             const pdfDoc = printer.createPdfKitDocument(docDefinition); res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `inline; filename="${docTitle}_${order.customer_name}.pdf"`); pdfDoc.pipe(res); pdfDoc.end();
         });
         });
+        });
     });
 });
 
-app.get('/api/orders/:id/assembly/pdf', (req, res) => {
+app.get('/api/orders/:id/assembly/pdf', requireAuth, (req, res) => {
     if (!PdfPrinter) return res.status(500).send("PDF-motorn saknas!");
     const fonts = { Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' } }; const printer = new PdfPrinter(fonts);
     db.query('SELECT q.*, c.name as customer_name, c.address, c.phone, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.id = ?', [req.params.id], (err, quoteResults) => {
         if (err || quoteResults.length === 0) return res.status(404).send('Order hittades ej');
         db.query('SELECT sku, name, assembly_comment FROM quote_items WHERE quote_id = ? AND is_free_text = 0', [req.params.id], (err, items) => {
           db.query('SELECT company_name FROM company_settings WHERE id = 1', (err0, companyRes) => {
-            const companyName = (companyRes && companyRes[0] && companyRes[0].company_name) || 'KLARÄLVSKÖK';
+            const companyName = companyRes && companyRes[0] && companyRes[0].company_name;
+            if (!companyName) return res.status(400).send('Företagsinformation saknas. Fyll i företagsnamn under Företagsinfo innan du skapar PDF-dokument.');
             const order = quoteResults[0]; const startDate = order.assembly_start_date ? new Date(order.assembly_start_date).toLocaleDateString('sv-SE') : 'Ej satt';
             const tableBody = [ [{ text: 'Artikel / Beskrivning', style: 'th' }, { text: 'Fabr', style: 'th', alignment: 'center' }, { text: 'I Bil', style: 'th', alignment: 'center' }, { text: 'Mont', style: 'th', alignment: 'center' }] ];
             items.forEach(i => {
@@ -566,26 +579,29 @@ app.get('/api/orders/:id/assembly/pdf', (req, res) => {
 // ==========================================
 // LEVERANTÖRER & PRISPÅSLAG
 // ==========================================
-app.get('/api/suppliers', (req, res) => db.query('SELECT * FROM suppliers ORDER BY name ASC', (err, results) => res.json(results || [])));
-app.post('/api/suppliers', (req, res) => {
+app.get('/api/suppliers', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM suppliers ORDER BY name ASC', (err, results) => res.json(results || [])));
+app.post('/api/suppliers', requireAuth, requireAdmin, (req, res) => {
     const { name, markup_percent, contact_info } = req.body;
-    db.query('INSERT INTO suppliers (name, markup_percent, contact_info) VALUES (?, ?, ?)', [name, markup_percent || 0, contact_info || ''], (err, result) => res.json(err ? { message: err.message } : { message: 'Leverantör sparad!', id: result.insertId }));
+    db.query('INSERT INTO suppliers (name, markup_percent, contact_info) VALUES (?, ?, ?)', [name, markup_percent || 0, contact_info || ''], dbResult(res, 'Leverantör sparad!', result => ({ id: result.insertId })));
 });
-app.put('/api/suppliers/:id', (req, res) => {
+app.put('/api/suppliers/:id', requireAuth, requireAdmin, (req, res) => {
     const { name, markup_percent, contact_info } = req.body;
-    db.query('UPDATE suppliers SET name=?, markup_percent=?, contact_info=? WHERE id=?', [name, markup_percent || 0, contact_info || '', req.params.id], (err) => res.json(err ? { message: err.message } : { message: 'Uppdaterad!' }));
+    db.query('UPDATE suppliers SET name=?, markup_percent=?, contact_info=? WHERE id=?', [name, markup_percent || 0, contact_info || '', req.params.id], dbResult(res, 'Uppdaterad!'));
 });
-app.delete('/api/suppliers/:id', (req, res) => db.query('DELETE FROM suppliers WHERE id = ?', [req.params.id], (err) => res.json(err ? { message: err.message } : { message: 'Raderad!' })));
+app.delete('/api/suppliers/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM suppliers WHERE id = ?', [req.params.id], dbResult(res, 'Raderad!')));
 
 // Räkna om försäljningspris (standard_price) för alla produkter kopplade till en leverantör,
-// utifrån inköpspris (purchase_price) * (1 + prispåslag%). Rör bara produkter utan varianter.
-app.post('/api/suppliers/:id/recalculate', (req, res) => {
+// utifrån inköpspris (purchase_price) * (1 + prispåslag%) * (1 + moms%). Rör bara produkter utan varianter.
+// Samma formel som dörrmodeller/variantpriser använder, för konsekvens.
+app.post('/api/suppliers/:id/recalculate', requireAuth, requireAdmin, (req, res) => {
     db.query('SELECT markup_percent FROM suppliers WHERE id = ?', [req.params.id], (err, supRes) => {
         if (err || !supRes || supRes.length === 0) return res.status(404).json({ message: 'Leverantör hittades inte' });
         const markup = parseFloat(supRes[0].markup_percent) || 0;
-        db.query('UPDATE products SET standard_price = ROUND(purchase_price * ?, 2) WHERE supplier_id = ? AND has_variations = 0 AND purchase_price > 0', [1 + (markup / 100), req.params.id], (err, result) => {
-            if (err) return res.status(500).json({ message: err.message });
-            res.json({ message: `Priser omräknade för ${result.affectedRows} produkter.` });
+        getVatFactor(vatFactor => {
+            db.query('UPDATE products SET standard_price = ROUND(purchase_price * ? * ?, 2) WHERE supplier_id = ? AND has_variations = 0 AND purchase_price > 0', [1 + (markup / 100), vatFactor, req.params.id], (err, result) => {
+                if (err) return res.status(500).json({ message: err.message });
+                res.json({ message: `Priser omräknade för ${result.affectedRows} produkter.` });
+            });
         });
     });
 });
@@ -593,80 +609,114 @@ app.post('/api/suppliers/:id/recalculate', (req, res) => {
 // ==========================================
 // FÖRETAGSINSTÄLLNINGAR (för vidareförsäljning av systemet)
 // ==========================================
+// OBS: den här endpointen är medvetet publik (ingen requireAuth) - används av index.html
+// (inloggningssidans logga) INNAN inloggning, och av menu.js för sidomenyns logga. Därför
+// listas kolumnerna explicit (INTE "SELECT *") så känsliga fält som webhook_token aldrig
+// läcker ut till en icke-inloggad besökare.
 app.get('/api/settings', (req, res) => {
-    db.query('SELECT * FROM company_settings WHERE id = 1', (err, results) => {
+    db.query('SELECT company_name, org_number, logo_url, address, phone, email, agreement_text, vat_rate FROM company_settings WHERE id = 1', (err, results) => {
         res.json(results && results.length > 0 ? results[0] : {});
     });
 });
-app.put('/api/settings', upload.single('logo'), (req, res) => {
-    const { company_name, org_number, address, phone, email, agreement_text } = req.body;
-    let sql = 'UPDATE company_settings SET company_name=?, org_number=?, address=?, phone=?, email=?, agreement_text=?';
-    let params = [company_name || '', org_number || '', address || '', phone || '', email || '', agreement_text || ''];
+app.put('/api/settings', requireAuth, requireAdmin, upload.single('logo'), (req, res) => {
+    const { company_name, org_number, address, phone, email, agreement_text, vat_rate } = req.body;
+    let sql = 'UPDATE company_settings SET company_name=?, org_number=?, address=?, phone=?, email=?, agreement_text=?, vat_rate=?';
+    let params = [company_name || '', org_number || '', address || '', phone || '', email || '', agreement_text || '', (vat_rate !== undefined && vat_rate !== '') ? parseFloat(vat_rate) : 25.00];
     if (req.file) { sql += ', logo_url=?'; params.push('/uploads/' + req.file.filename); }
     sql += ' WHERE id=1';
-    db.query(sql, params, (err) => res.json(err ? { message: err.message } : { message: 'Företagsinformation sparad!' }));
+    db.query(sql, params, dbResult(res, 'Företagsinformation sparad!'));
+});
+
+// Skyddad separat endpoint för webhook-token (settings.html/Admin-only) - GET /api/settings
+// ovan exkluderar den medvetet eftersom den endpointen är publik.
+app.get('/api/settings/webhook-token', requireAuth, requireAdmin, (req, res) => {
+    db.query('SELECT webhook_token FROM company_settings WHERE id = 1', (err, results) => {
+        res.json({ webhook_token: (results && results[0]) ? results[0].webhook_token : null });
+    });
+});
+
+app.post('/api/settings/webhook-token/regenerate', requireAuth, requireAdmin, (req, res) => {
+    const token = crypto.randomBytes(24).toString('hex');
+    db.query('UPDATE company_settings SET webhook_token = ? WHERE id = 1', [token], (err) => {
+        if (err) return res.status(500).json({ message: err.message });
+        res.json({ message: 'Ny webhook-URL genererad!', webhook_token: token });
+    });
 });
 
 // ==========================================
 // DÖRRMODELLER & PRISGRUPPER (luckor, lådfronter, grytfronter)
 // ==========================================
-const DOOR_VAT_FACTOR = 1.25; // 25% moms - används när försäljningspris räknas fram från inköpspris x faktor
+// Momsfaktorn hämtas från company_settings.vat_rate (konfigurerbar under Företagsinfo) istället för att hårdkodas.
+function getVatFactor(callback) {
+    db.query('SELECT vat_rate FROM company_settings WHERE id = 1', (err, rows) => {
+        const vatRate = (rows && rows[0] && rows[0].vat_rate != null) ? parseFloat(rows[0].vat_rate) : 25;
+        callback(1 + vatRate / 100);
+    });
+}
 
-app.get('/api/door-models', (req, res) => db.query('SELECT * FROM door_models WHERE active = 1 ORDER BY name ASC', (err, results) => res.json(results || [])));
-app.post('/api/door-models', (req, res) => {
-    db.query('INSERT INTO door_models (name) VALUES (?)', [req.body.name], (err, result) => res.json(err ? { message: err.message } : { message: 'Modell skapad!', id: result.insertId }));
+app.get('/api/door-models', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM door_models WHERE active = 1 ORDER BY name ASC', (err, results) => res.json(results || [])));
+app.post('/api/door-models', requireAuth, requireAdmin, (req, res) => {
+    db.query('INSERT INTO door_models (name) VALUES (?)', [req.body.name], dbResult(res, 'Modell skapad!', result => ({ id: result.insertId })));
 });
-app.delete('/api/door-models/:id', (req, res) => db.query('DELETE FROM door_models WHERE id = ?', [req.params.id], (err) => res.json(err ? { message: err.message } : { message: 'Raderad!' })));
+app.delete('/api/door-models/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM door_models WHERE id = ?', [req.params.id], dbResult(res, 'Raderad!')));
 
-app.get('/api/door-models/:id/prices', (req, res) => db.query('SELECT * FROM door_price_items WHERE model_id = ? ORDER BY component_type, height_min, width_min', [req.params.id], (err, results) => res.json(results || [])));
+app.get('/api/door-models/:id/prices', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM door_price_items WHERE model_id = ? ORDER BY component_type, height_min, width_min', [req.params.id], (err, results) => res.json(results || [])));
 
-app.post('/api/door-models/:id/prices', (req, res) => {
+app.post('/api/door-models/:id/prices', requireAuth, requireAdmin, (req, res) => {
     const { component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share } = req.body;
     const purchase = parseFloat(purchase_price) || 0;
     const factor = (markup_factor === '' || markup_factor === undefined || markup_factor === null) ? null : parseFloat(markup_factor);
-    // Om faktor angetts och inget pris skickats med, räkna fram försäljningspriset serverside som facit.
-    const finalPrice = (price !== undefined && price !== '' && price !== null) ? parseFloat(price) : (factor !== null ? Math.round(purchase * factor * DOOR_VAT_FACTOR * 100) / 100 : 0);
-    db.query('INSERT INTO door_price_items (model_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-        [req.params.id, component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice, parseFloat(installation_price) || 0, parseFloat(installer_share) || 0],
-        (err, result) => res.json(err ? { message: err.message } : { message: 'Rad tillagd!', id: result.insertId }));
+    getVatFactor(vatFactor => {
+        // Om faktor angetts och inget pris skickats med, räkna fram försäljningspriset serverside som facit.
+        const finalPrice = (price !== undefined && price !== '' && price !== null) ? parseFloat(price) : (factor !== null ? Math.round(purchase * factor * vatFactor * 100) / 100 : 0);
+        db.query('INSERT INTO door_price_items (model_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+            [req.params.id, component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice, parseFloat(installation_price) || 0, parseFloat(installer_share) || 0],
+            dbResult(res, 'Rad tillagd!', result => ({ id: result.insertId })));
+    });
 });
 
-app.put('/api/door-models/:modelId/prices/:id', (req, res) => {
+app.put('/api/door-models/:modelId/prices/:id', requireAuth, requireAdmin, (req, res) => {
     const { component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share } = req.body;
     const purchase = parseFloat(purchase_price) || 0;
     const factor = (markup_factor === '' || markup_factor === undefined || markup_factor === null) ? null : parseFloat(markup_factor);
-    const finalPrice = (price !== undefined && price !== '' && price !== null) ? parseFloat(price) : (factor !== null ? Math.round(purchase * factor * DOOR_VAT_FACTOR * 100) / 100 : 0);
-    db.query('UPDATE door_price_items SET component_type=?, height_min=?, height_max=?, width_min=?, width_max=?, purchase_price=?, markup_factor=?, price=?, installation_price=?, installer_share=? WHERE id=? AND model_id=?',
-        [component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice, parseFloat(installation_price) || 0, parseFloat(installer_share) || 0, req.params.id, req.params.modelId],
-        (err) => res.json(err ? { message: err.message } : { message: 'Rad uppdaterad!' }));
+    getVatFactor(vatFactor => {
+        const finalPrice = (price !== undefined && price !== '' && price !== null) ? parseFloat(price) : (factor !== null ? Math.round(purchase * factor * vatFactor * 100) / 100 : 0);
+        db.query('UPDATE door_price_items SET component_type=?, height_min=?, height_max=?, width_min=?, width_max=?, purchase_price=?, markup_factor=?, price=?, installation_price=?, installer_share=? WHERE id=? AND model_id=?',
+            [component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice, parseFloat(installation_price) || 0, parseFloat(installer_share) || 0, req.params.id, req.params.modelId],
+            dbResult(res, 'Rad uppdaterad!'));
+    });
 });
 
-app.post('/api/door-models/:id/prices/bulk', (req, res) => {
+app.post('/api/door-models/:id/prices/bulk', requireAuth, requireAdmin, (req, res) => {
     const rows = req.body;
     if (!rows || rows.length === 0) return res.status(400).json({ message: 'Inga rader skickades in.' });
-    const values = rows.map(r => {
-        const purchase = parseFloat(r.purchase_price) || 0;
-        const factor = (r.markup_factor === '' || r.markup_factor === undefined || r.markup_factor === null) ? null : parseFloat(r.markup_factor);
-        const finalPrice = (r.price !== undefined && r.price !== '' && r.price !== null) ? parseFloat(r.price) : (factor !== null ? Math.round(purchase * factor * DOOR_VAT_FACTOR * 100) / 100 : 0);
-        return [req.params.id, r.component_type, r.height_min || 0, r.height_max || 100000, r.width_min || 0, r.width_max || 100000, purchase, factor, finalPrice, parseFloat(r.installation_price) || 0, parseFloat(r.installer_share) || 0];
-    });
-    db.query('INSERT INTO door_price_items (model_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share) VALUES ?', [values], (err, result) => {
-        if (err) return res.status(500).json({ message: err.message });
-        res.json({ message: `${result.affectedRows} rader importerade!` });
+    getVatFactor(vatFactor => {
+        const values = rows.map(r => {
+            const purchase = parseFloat(r.purchase_price) || 0;
+            const factor = (r.markup_factor === '' || r.markup_factor === undefined || r.markup_factor === null) ? null : parseFloat(r.markup_factor);
+            const finalPrice = (r.price !== undefined && r.price !== '' && r.price !== null) ? parseFloat(r.price) : (factor !== null ? Math.round(purchase * factor * vatFactor * 100) / 100 : 0);
+            return [req.params.id, r.component_type, r.height_min || 0, r.height_max || 100000, r.width_min || 0, r.width_max || 100000, purchase, factor, finalPrice, parseFloat(r.installation_price) || 0, parseFloat(r.installer_share) || 0];
+        });
+        db.query('INSERT INTO door_price_items (model_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share) VALUES ?', [values], (err, result) => {
+            if (err) return res.status(500).json({ message: err.message });
+            res.json({ message: `${result.affectedRows} rader importerade!` });
+        });
     });
 });
 
 // Räknar om försäljningspriset för alla rader i modellen som har både inköpspris och faktor angivna:
-// pris = inköpspris x faktor x 1,25 (moms). Rader utan faktor (manuellt satta priser) rörs inte.
-app.post('/api/door-models/:id/recalculate', (req, res) => {
-    db.query('UPDATE door_price_items SET price = ROUND(purchase_price * markup_factor * ?, 2) WHERE model_id = ? AND markup_factor IS NOT NULL AND purchase_price > 0', [DOOR_VAT_FACTOR, req.params.id], (err, result) => {
-        if (err) return res.status(500).json({ message: err.message });
-        res.json({ message: `Priser omräknade för ${result.affectedRows} rader.` });
+// pris = inköpspris x faktor x momsfaktor (från company_settings.vat_rate). Rader utan faktor (manuellt satta priser) rörs inte.
+app.post('/api/door-models/:id/recalculate', requireAuth, requireAdmin, (req, res) => {
+    getVatFactor(vatFactor => {
+        db.query('UPDATE door_price_items SET price = ROUND(purchase_price * markup_factor * ?, 2) WHERE model_id = ? AND markup_factor IS NOT NULL AND purchase_price > 0', [vatFactor, req.params.id], (err, result) => {
+            if (err) return res.status(500).json({ message: err.message });
+            res.json({ message: `Priser omräknade för ${result.affectedRows} rader.` });
+        });
     });
 });
 
-app.delete('/api/door-models/:modelId/prices/:id', (req, res) => db.query('DELETE FROM door_price_items WHERE id = ? AND model_id = ?', [req.params.id, req.params.modelId], (err) => res.json(err ? { message: err.message } : { message: 'Raderad!' })));
-app.delete('/api/door-models/:id/prices', (req, res) => db.query('DELETE FROM door_price_items WHERE model_id = ?', [req.params.id], (err) => res.json(err ? { message: err.message } : { message: 'Alla rader raderade!' })));
+app.delete('/api/door-models/:modelId/prices/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM door_price_items WHERE id = ? AND model_id = ?', [req.params.id, req.params.modelId], dbResult(res, 'Raderad!')));
+app.delete('/api/door-models/:id/prices', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM door_price_items WHERE model_id = ?', [req.params.id], dbResult(res, 'Alla rader raderade!')));
 
 app.use('/api/*', (req, res) => res.status(404).json({ message: 'API-rutten hittades inte' }));
 const PORT = process.env.PORT || 3000;
