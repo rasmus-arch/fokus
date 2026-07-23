@@ -15,11 +15,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     const activeClass = "bg-blue-900 bg-opacity-40 border border-blue-700 text-blue-300 font-medium";
     const inactiveClass = "hover:bg-gray-800 text-gray-300";
 
-    let logoHtml = 'KLARO 2.0';
+    let logoHtml = 'Logga saknas';
     try {
         const res = await fetch('/api/settings');
         const s = await res.json();
-        if (s && s.logo_url) logoHtml = `<img src="${s.logo_url}" alt="${s.company_name || 'Logotyp'}" class="h-10 mx-auto object-contain" onerror="this.outerHTML='KLARO 2.0'">`;
+        if (s && s.logo_url) logoHtml = `<img src="${s.logo_url}" alt="${s.company_name || 'Logotyp'}" class="h-10 mx-auto object-contain" onerror="this.outerHTML='Logga saknas'">`;
     } catch (e) {}
 
     let menuHtml = `
