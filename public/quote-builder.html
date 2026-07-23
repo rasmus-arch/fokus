@@ -504,6 +504,14 @@
         let parsedVariations = [];
         let selectedVariation = null;
 
+        // Vissa MySQL-drivrutinskonfigurationer packar redan upp JSON-kolumner till
+        // objekt/arrayer istället för att lämna dem som strängar - hantera båda formaten.
+        function parseJsonField(val, fallback) {
+            if (val === null || val === undefined || val === '') return fallback;
+            if (typeof val !== 'string') return val;
+            try { return JSON.parse(val); } catch(e) { return fallback; }
+        }
+
         let filteredProducts = [];
         let currentPage = 1;
         const itemsPerPage = 24;
@@ -1104,7 +1112,7 @@
 
             if (p.has_variations === 1) {
                 varContainer.classList.remove('hidden');
-                try { parsedVariations = JSON.parse(p.variations || '[]'); } catch(e){}
+                parsedVariations = parseJsonField(p.variations, []);
 
                 if (parsedVariations.length > 0) {
                     const firstVar = parsedVariations[0];
@@ -1129,7 +1137,7 @@
             }
 
             let images = []; if(p.image_url) images.push(p.image_url);
-            if(p.gallery) { try { const parsed = JSON.parse(p.gallery); if(Array.isArray(parsed)) images = images.concat(parsed); } catch(e){} }
+            if(p.gallery) { const parsed = parseJsonField(p.gallery, []); if(Array.isArray(parsed)) images = images.concat(parsed); }
             if(images.length === 0) images.push('/logo.png');
             document.getElementById('modalMainImage').src = images[0];
             const thumbContainer = document.getElementById('modalThumbnails'); thumbContainer.innerHTML = '';
@@ -1280,8 +1288,8 @@
 
         function addAutoFrontsForProduct(product) {
             if (!product.effective_front_layout) return;
-            let frontLayout;
-            try { frontLayout = JSON.parse(product.effective_front_layout); } catch (e) { return; }
+            const frontLayout = parseJsonField(product.effective_front_layout, null);
+            if (!frontLayout) return;
             const stommeWidth = product.width; const stommeHeight = product.height;
             if (!stommeWidth || !stommeHeight) return;
 
@@ -1400,7 +1408,7 @@
                     document.getElementById('headerQuoteName').innerText = `Offert: ${data.quote_name}`;
                     document.getElementById('globalDiscount').value = data.global_discount || 0; document.getElementById('globalDiscountType').value = data.discount_type || '%'; document.getElementById('internalComment').value = data.internal_comment || ''; document.getElementById('publicComment').value = data.public_comment || '';
                     if (data.quote_data) {
-                        const qd = JSON.parse(data.quote_data); if (qd.quoteCart) quoteCart = qd.quoteCart; 
+                        const qd = parseJsonField(data.quote_data, {}); if (qd.quoteCart) quoteCart = qd.quoteCart;
                         if (qd.selectedConditions) { for (const key in qd.selectedConditions) { if(selectedConditions[key]) { selectedConditions[key].responsibility = qd.selectedConditions[key].responsibility || ''; selectedConditions[key].qty = qd.selectedConditions[key].qty || 1; selectedConditions[key].customPrice = qd.selectedConditions[key].customPrice || 0; } } }
                         if (qd.useRot !== undefined) document.getElementById('useRotCheckbox').checked = qd.useRot;
                         if (qd.kitchenSpecs) { document.getElementById('qsMaterial').value = qd.kitchenSpecs.material || ''; document.getElementById('qsColor').value = qd.kitchenSpecs.color || ''; document.getElementById('qsDoor').value = qd.kitchenSpecs.door || ''; if (qd.kitchenSpecs.doorModelId) { document.getElementById('qsDoorModelId').value = qd.kitchenSpecs.doorModelId; onDoorModelChange(); } }

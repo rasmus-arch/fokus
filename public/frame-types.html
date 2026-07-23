@@ -225,7 +225,9 @@
             document.getElementById('tFrontCustomJson').classList.add('hidden');
             if (!frontLayoutRaw) { toggleCustomFrontUI(); return; }
             try {
-                const fl = JSON.parse(frontLayoutRaw);
+                // frontLayoutRaw kan komma antingen som JSON-sträng eller redan uppackad som
+                // objekt beroende på MySQL-drivrutinens hantering av JSON-kolumner.
+                const fl = typeof frontLayoutRaw === 'string' ? JSON.parse(frontLayoutRaw) : frontLayoutRaw;
                 if (fl.type === 'door') document.getElementById('tFrontType').value = 'door';
                 else if (fl.type === 'drawers') document.getElementById('tFrontType').value = 'drawers' + fl.count;
                 else if (fl.type === 'fixed135') document.getElementById('tFrontType').value = 'fixed135_' + fl.count;
