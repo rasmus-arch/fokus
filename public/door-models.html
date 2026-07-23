@@ -19,23 +19,52 @@
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div class="bg-white p-5 rounded-lg shadow-sm h-fit">
-                <h3 class="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wide">Modeller</h3>
-                <div class="flex gap-2 mb-4">
-                    <input type="text" id="newModelName" placeholder="Ny modell, t.ex. MDF16mm Prisgrupp B" class="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm">
-                    <button onclick="addModel()" class="bg-blue-600 text-white px-3 rounded text-sm hover:bg-blue-700"><i class="fas fa-plus"></i></button>
+            <div class="space-y-6">
+                <div class="bg-white p-5 rounded-lg shadow-sm h-fit">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wide">Modeller</h3>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="newModelName" placeholder="Ny modell, t.ex. Standard" class="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm">
+                        <button onclick="addModel()" class="bg-blue-600 text-white px-3 rounded text-sm hover:bg-blue-700"><i class="fas fa-plus"></i></button>
+                    </div>
+                    <div id="modelList" class="space-y-1"></div>
                 </div>
-                <div id="modelList" class="space-y-1"></div>
+
+                <div class="bg-white p-5 rounded-lg shadow-sm h-fit">
+                    <h3 class="text-sm font-bold text-gray-700 mb-1 uppercase tracking-wide">Grupper</h3>
+                    <p class="text-[11px] text-gray-500 mb-3">Namngivna grupper som flera modeller kan dela - antingen för gemensamma priser (t.ex. "MDF16mm Prisgrupp A") eller för att tagga vilka tillbehörsprodukter som ska dyka upp i offertbyggaren (t.ex. "Tillbehör MDF").</p>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="newGroupName" placeholder="Ny grupp" class="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm">
+                        <button onclick="addPriceGroup()" class="bg-blue-600 text-white px-3 rounded text-sm hover:bg-blue-700"><i class="fas fa-plus"></i></button>
+                    </div>
+                    <div id="groupList" class="space-y-1"></div>
+                </div>
             </div>
 
             <div class="lg:col-span-3 bg-white p-5 rounded-lg shadow-sm">
                 <div id="noModelSelected" class="text-gray-400 italic text-sm py-10 text-center">Välj eller skapa en modell till vänster för att hantera dess prislista.</div>
 
                 <div id="modelDetail" class="hidden">
-                    <div class="flex justify-between items-center mb-4 border-b pb-3">
-                        <h3 class="text-lg font-bold text-gray-800" id="modelDetailName">-</h3>
-                        <button onclick="deleteModel()" class="text-red-600 hover:text-red-900 text-sm"><i class="fas fa-trash mr-1"></i> Ta bort modell</button>
+                    <div class="flex justify-between items-start mb-4 border-b pb-3 gap-3">
+                        <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Modellnamn</label>
+                                <input type="text" id="modelDetailName" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm font-semibold">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Prisgrupp <span class="normal-case text-gray-400">(delar Lucka/Lådfront-priser)</span></label>
+                                <select id="modelPriceGroup" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white"></select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-gray-600 uppercase">Tillbehörsgrupp <span class="normal-case text-gray-400">(styr vilka artiklar som visas)</span></label>
+                                <select id="modelAccessoryGroup" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white"></select>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-2 shrink-0">
+                            <button onclick="saveModelDetails()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700 whitespace-nowrap"><i class="fas fa-save mr-1"></i> Spara</button>
+                            <button onclick="deleteModel()" class="text-red-600 hover:text-red-900 text-xs"><i class="fas fa-trash mr-1"></i> Ta bort modell</button>
+                        </div>
                     </div>
+                    <div id="groupModeNotice" class="hidden mb-4 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800"></div>
 
                     <div class="bg-blue-50 border border-blue-200 rounded p-4 mb-4">
                         <h4 class="text-xs font-bold text-gray-700 mb-3 uppercase" id="rowFormTitle">Lägg till prisrad</h4>
@@ -137,6 +166,7 @@
     <script src="/menu.js"></script>
     <script>
         let allModels = [];
+        let priceGroups = [];
         let currentModelId = null;
         let currentPrices = [];
         let VAT_FACTOR = 1.25;
@@ -175,13 +205,103 @@
             if (data.id) selectModel(data.id);
         }
 
+        // ================= GRUPPER (delade priser / tillbehörstaggning) =================
+        async function fetchPriceGroups() {
+            const res = await fetch('/api/door-price-groups');
+            priceGroups = await res.json();
+            renderGroupList();
+        }
+
+        function renderGroupList() {
+            const div = document.getElementById('groupList');
+            div.innerHTML = '';
+            if (priceGroups.length === 0) { div.innerHTML = '<p class="text-xs text-gray-400 italic">Inga grupper ännu.</p>'; return; }
+            priceGroups.forEach(g => {
+                div.innerHTML += `
+                    <div class="flex justify-between items-center px-2 py-1.5 rounded hover:bg-gray-50 group">
+                        <span class="text-sm text-gray-700">${g.name}</span>
+                        <div class="flex gap-2">
+                            <button onclick="renamePriceGroup(${g.id})" class="text-gray-400 hover:text-blue-600 hidden group-hover:block"><i class="fas fa-edit"></i></button>
+                            <button onclick="deletePriceGroup(${g.id})" class="text-gray-400 hover:text-red-600 hidden group-hover:block"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        async function addPriceGroup() {
+            const name = document.getElementById('newGroupName').value.trim();
+            if (!name) return;
+            await fetch('/api/door-price-groups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+            document.getElementById('newGroupName').value = '';
+            await fetchPriceGroups();
+            populateGroupSelects();
+        }
+
+        async function renamePriceGroup(id) {
+            const group = priceGroups.find(g => g.id === id);
+            const name = prompt('Nytt namn på gruppen:', group ? group.name : '');
+            if (!name || !name.trim()) return;
+            await fetch(`/api/door-price-groups/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) });
+            await fetchPriceGroups();
+            populateGroupSelects();
+        }
+
+        function deletePriceGroup(id) {
+            confirmAndDelete('Ta bort gruppen? Modeller som delar priser via den mister sina prisrader, och modeller som taggat tillbehör via den slutar visa dem. Går inte att ångra.', `/api/door-price-groups/${id}`, async () => {
+                await fetchPriceGroups();
+                populateGroupSelects();
+                if (currentModelId) await fetchPrices();
+            });
+        }
+
+        function populateGroupSelects() {
+            const opts = '<option value="">— Ingen —</option>' + priceGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            document.getElementById('modelPriceGroup').innerHTML = opts;
+            document.getElementById('modelAccessoryGroup').innerHTML = opts;
+            const model = allModels.find(m => m.id === currentModelId);
+            if (model) {
+                document.getElementById('modelPriceGroup').value = model.price_group_id || '';
+                document.getElementById('modelAccessoryGroup').value = model.accessory_group_id || '';
+            }
+        }
+
+        async function saveModelDetails() {
+            if (!currentModelId) return;
+            const payload = {
+                name: document.getElementById('modelDetailName').value.trim(),
+                price_group_id: document.getElementById('modelPriceGroup').value || null,
+                accessory_group_id: document.getElementById('modelAccessoryGroup').value || null
+            };
+            if (!payload.name) return alert('Modellen måste ha ett namn.');
+            const res = await fetch(`/api/door-models/${currentModelId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            if (!res.ok) return alert(data.message || 'Kunde inte spara.');
+            await fetchModels();
+            await selectModel(currentModelId);
+        }
+
+        function updateGroupModeNotice() {
+            const model = allModels.find(m => m.id === currentModelId);
+            const notice = document.getElementById('groupModeNotice');
+            if (model && model.price_group_id) {
+                const group = priceGroups.find(g => g.id === model.price_group_id);
+                const sharedWith = allModels.filter(m => m.price_group_id === model.price_group_id && m.id !== model.id).map(m => m.name);
+                notice.innerHTML = `<i class="fas fa-circle-info mr-1"></i> Prisraderna nedan delas via gruppen <strong>${group ? group.name : ''}</strong>. Ändringar slår igenom på: ${sharedWith.length ? sharedWith.join(', ') : 'inga andra modeller än'}.`;
+                notice.classList.remove('hidden');
+            } else {
+                notice.classList.add('hidden');
+            }
+        }
+
         async function selectModel(id) {
             currentModelId = id;
             renderModelList();
             document.getElementById('noModelSelected').classList.add('hidden');
             document.getElementById('modelDetail').classList.remove('hidden');
             const model = allModels.find(m => m.id === id);
-            document.getElementById('modelDetailName').innerText = model ? model.name : '-';
+            document.getElementById('modelDetailName').value = model ? model.name : '';
+            populateGroupSelects();
+            updateGroupModeNotice();
             resetRowForm();
             await fetchPrices();
         }
@@ -347,6 +467,7 @@
 
         fetchVatRate();
         fetchModels();
+        fetchPriceGroups();
     </script>
 </body>
 </html>

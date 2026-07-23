@@ -77,9 +77,7 @@
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
                             <div>
                                 <label class="block text-[10px] text-gray-400 uppercase">Material bänkskiva</label>
-                                <select id="qsMaterial" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded bg-white text-xs outline-none focus:border-blue-500">
-                                    <option value="">-- Välj --</option><option value="Laminat">Laminat</option><option value="Kvartskomposit">Kvartskomposit</option><option value="Cosmolite">Cosmolite</option><option value="Trä">Trä</option>
-                                </select>
+                                <input type="text" id="qsMaterial" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-blue-500" placeholder="Fylls i automatiskt när du lägger till en bänkskiva">
                             </div>
                             <div><label class="block text-[10px] text-gray-400 uppercase">Färg bänkskiva</label><input type="text" id="qsColor" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-blue-500"></div>
                             <div><label class="block text-[10px] text-gray-400 uppercase">Modell lucka</label><input type="text" id="qsDoor" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-blue-500"></div>
@@ -892,6 +890,11 @@
             const colorId = colSelect.value ? parseInt(colSelect.value) : null;
             const thk = thkSelect.value;
 
+            // Fyller automatiskt i köpeavtalets specifikationsfält utifrån vad som faktiskt valdes här,
+            // så säljaren slipper skriva in material/färg en gång till för hand.
+            document.getElementById('qsMaterial').value = matName;
+            document.getElementById('qsColor').value = colName;
+
             let hoActive = document.getElementById('ctHoActive').checked;
             let hoPart = parseInt(document.getElementById('ctHoPart').value) || 1;
             let hoX = document.getElementById('ctHoX').value; let hoY = document.getElementById('ctHoY').value;
@@ -1025,10 +1028,17 @@
             const cat = document.getElementById('catFilter').value; 
             const sort = document.getElementById('sortFilter').value;
             
+            // Om en dörrmodell är vald: visa dess egna produkter (exakt door_model_id-träff) OCH
+            // tillbehörsprodukter taggade med samma tillbehörsgrupp som modellen pekar på (t.ex.
+            // "Sockel"/"Kakellist" för hela MDF-familjen, inte bara den specifika dekoren).
+            const selectedModel = doorModels.find(m => String(m.id) === String(selectedDoorModelId));
+            const accessoryGroupId = selectedModel ? selectedModel.accessory_group_id : null;
+
             filteredProducts = products.filter(p =>
                 (p.name.toLowerCase().includes(term) || (p.sku && p.sku.toLowerCase().includes(term))) &&
                 (cat === "" || p.category === cat) &&
-                (!selectedDoorModelId || !p.door_model_id || String(p.door_model_id) === String(selectedDoorModelId))
+                (!selectedDoorModelId || !p.door_model_id || String(p.door_model_id) === String(selectedDoorModelId)
+                    || (accessoryGroupId && p.door_price_group_id && String(p.door_price_group_id) === String(accessoryGroupId)))
             );
             
             filteredProducts.sort((a, b) => {
@@ -1206,6 +1216,9 @@
             selectedDoorModelId = document.getElementById('qsDoorModelId').value;
             doorModelPriceItems = [];
             applyFilters();
+            // Fyller automatiskt i "Modell lucka" på köpeavtalet utifrån vald dörrmodell.
+            const model = doorModels.find(m => String(m.id) === String(selectedDoorModelId));
+            document.getElementById('qsDoor').value = model ? model.name : '';
             if (!selectedDoorModelId) return;
             try {
                 const res = await fetch(`/api/door-models/${selectedDoorModelId}/prices`);

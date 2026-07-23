@@ -211,7 +211,7 @@ const uploadMiddleware = upload.fields([{ name: 'mainImage', maxCount: 1 }, { na
 app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
     uploadMiddleware(req, res, async function (err) {
         if (err) return res.status(400).json({ message: 'Uppladdningsfel' });
-        const { id, name, description, sku, cc_measurement, height, length, width, brand, category, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, remove_main_image, retained_gallery, has_variations, variations } = req.body;
+        const { id, name, description, sku, cc_measurement, height, length, width, brand, category, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, door_price_group_id, remove_main_image, retained_gallery, has_variations, variations } = req.body;
         // Tomt SKU sparas som NULL istället för '' - annars krockar flera produkter utan eget SKU
         // (t.ex. variantprodukter) mot den unika SKU-kolumnen.
         const skuValue = (sku && sku.trim() !== '') ? sku.trim() : null;
@@ -232,8 +232,8 @@ app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
             // OBS: front_layout skrivs medvetet inte över här längre - stomtyper (frame_types) har
             // ersatt inline-konfiguration för nya/redigerade produkter. Gamla produkters front_layout
             // lämnas orört som legacy-fallback (se COALESCE i GET /api/products).
-            let sql = `UPDATE products SET name=?, description=?, sku=?, cc_measurement=?, height=?, length=?, width=?, brand=?, category=?, installation_price=?, installer_share=?, standard_price=?, purchase_price=?, supplier_id=?, frame_type_id=?, door_model_id=?, gallery=?, has_variations=?, variations=?`;
-            let params = [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, JSON.stringify(finalGallery), has_variations === 'true' ? 1 : 0, finalVariations];
+            let sql = `UPDATE products SET name=?, description=?, sku=?, cc_measurement=?, height=?, length=?, width=?, brand=?, category=?, installation_price=?, installer_share=?, standard_price=?, purchase_price=?, supplier_id=?, frame_type_id=?, door_model_id=?, door_price_group_id=?, gallery=?, has_variations=?, variations=?`;
+            let params = [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, door_price_group_id || null, JSON.stringify(finalGallery), has_variations === 'true' ? 1 : 0, finalVariations];
 
             if (remove_main_image === 'true') { sql += `, image_url=''`; }
             else if (mainFile) { sql += `, image_url=?`; params.push('/uploads/' + mainFile.filename); }
@@ -247,8 +247,8 @@ app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
         } else {
             const finalMain = mainFile ? '/uploads/' + mainFile.filename : '';
             const finalGallery = galleryFiles.map(f => '/uploads/' + f.filename);
-            const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, has_variations, variations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-            db.query(sql, [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, finalMain, JSON.stringify(finalGallery), installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, has_variations === 'true' ? 1 : 0, finalVariations], (err) => {
+            const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, door_price_group_id, has_variations, variations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            db.query(sql, [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, finalMain, JSON.stringify(finalGallery), installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, door_price_group_id || null, has_variations === 'true' ? 1 : 0, finalVariations], (err) => {
                 if (err) return res.status(500).json({ message: 'Kunde inte spara produkten: ' + err.message });
                 res.json({ message: 'Sparad!' });
             });
@@ -774,9 +774,55 @@ app.get('/api/door-models', requireAuth, requireStaff, (req, res) => db.query('S
 app.post('/api/door-models', requireAuth, requireAdmin, (req, res) => {
     db.query('INSERT INTO door_models (name) VALUES (?)', [req.body.name], dbResult(res, 'Modell skapad!', result => ({ id: result.insertId })));
 });
+app.put('/api/door-models/:id', requireAuth, requireAdmin, (req, res) => {
+    const { name, price_group_id, accessory_group_id } = req.body;
+    db.query('UPDATE door_models SET name=?, price_group_id=?, accessory_group_id=? WHERE id=?',
+        [name, price_group_id || null, accessory_group_id || null, req.params.id], dbResult(res, 'Modell uppdaterad!'));
+});
 app.delete('/api/door-models/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM door_models WHERE id = ?', [req.params.id], dbResult(res, 'Raderad!')));
 
-app.get('/api/door-models/:id/prices', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM door_price_items WHERE model_id = ? ORDER BY component_type, height_min, width_min', [req.params.id], (err, results) => res.json(results || [])));
+// Dörrmodell-prisgrupper: flera modeller (dekornamn) kan dela exakt samma prislista
+// genom att peka på samma price_group_id istället för att ha egna door_price_items.
+// Samma tabell (door_price_groups) återanvänds som "tillbehörsgrupp" - se products.door_price_group_id.
+app.get('/api/door-price-groups', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM door_price_groups ORDER BY name ASC', (err, results) => res.json(results || [])));
+app.post('/api/door-price-groups', requireAuth, requireAdmin, (req, res) => {
+    db.query('INSERT INTO door_price_groups (name) VALUES (?)', [req.body.name], dbResult(res, 'Grupp skapad!', result => ({ id: result.insertId })));
+});
+app.put('/api/door-price-groups/:id', requireAuth, requireAdmin, (req, res) => {
+    db.query('UPDATE door_price_groups SET name = ? WHERE id = ?', [req.body.name, req.params.id], dbResult(res, 'Grupp uppdaterad!'));
+});
+app.delete('/api/door-price-groups/:id', requireAuth, requireAdmin, (req, res) => {
+    const gid = req.params.id;
+    db.query('DELETE FROM door_price_items WHERE price_group_id = ?', [gid], (err) => {
+        if (err) return res.status(500).json({ message: err.message });
+        db.query('UPDATE door_models SET price_group_id = NULL WHERE price_group_id = ?', [gid], (err2) => {
+            if (err2) return res.status(500).json({ message: err2.message });
+            db.query('UPDATE door_models SET accessory_group_id = NULL WHERE accessory_group_id = ?', [gid], (err3) => {
+                if (err3) return res.status(500).json({ message: err3.message });
+                db.query('UPDATE products SET door_price_group_id = NULL WHERE door_price_group_id = ?', [gid], (err4) => {
+                    if (err4) return res.status(500).json({ message: err4.message });
+                    db.query('DELETE FROM door_price_groups WHERE id = ?', [gid], dbResult(res, 'Grupp raderad!'));
+                });
+            });
+        });
+    });
+});
+
+// Hämtar modellens price_group_id (om satt) och kör callback(scopeColumn, scopeId) -
+// 'price_group_id' + gruppens id om modellen delar prislista, annars 'model_id' + modellens eget id.
+function resolveDoorModelScope(modelId, callback) {
+    db.query('SELECT price_group_id FROM door_models WHERE id = ?', [modelId], (err, rows) => {
+        const groupId = (!err && rows && rows[0] && rows[0].price_group_id) ? rows[0].price_group_id : null;
+        if (groupId) callback('price_group_id', groupId);
+        else callback('model_id', modelId);
+    });
+}
+
+app.get('/api/door-models/:id/prices', requireAuth, requireStaff, (req, res) => {
+    resolveDoorModelScope(req.params.id, (col, id) => {
+        db.query(`SELECT * FROM door_price_items WHERE ${col} = ? ORDER BY component_type, height_min, width_min`, [id], (err, results) => res.json(results || []));
+    });
+});
 
 app.post('/api/door-models/:id/prices', requireAuth, requireAdmin, (req, res) => {
     const { component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share } = req.body;
@@ -785,9 +831,13 @@ app.post('/api/door-models/:id/prices', requireAuth, requireAdmin, (req, res) =>
     getVatFactor(vatFactor => {
         // Om faktor angetts och inget pris skickats med, räkna fram försäljningspriset serverside som facit.
         const finalPrice = (price !== undefined && price !== '' && price !== null) ? parseFloat(price) : (factor !== null ? Math.round(purchase * factor * vatFactor * 100) / 100 : 0);
-        db.query('INSERT INTO door_price_items (model_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-            [req.params.id, component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice, parseFloat(installation_price) || 0, parseFloat(installer_share) || 0],
-            dbResult(res, 'Rad tillagd!', result => ({ id: result.insertId })));
+        resolveDoorModelScope(req.params.id, (col, id) => {
+            const modelId = col === 'model_id' ? id : null;
+            const groupId = col === 'price_group_id' ? id : null;
+            db.query('INSERT INTO door_price_items (model_id, price_group_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                [modelId, groupId, component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice, parseFloat(installation_price) || 0, parseFloat(installer_share) || 0],
+                dbResult(res, 'Rad tillagd!', result => ({ id: result.insertId })));
+        });
     });
 });
 
@@ -797,8 +847,9 @@ app.put('/api/door-models/:modelId/prices/:id', requireAuth, requireAdmin, (req,
     const factor = (markup_factor === '' || markup_factor === undefined || markup_factor === null) ? null : parseFloat(markup_factor);
     getVatFactor(vatFactor => {
         const finalPrice = (price !== undefined && price !== '' && price !== null) ? parseFloat(price) : (factor !== null ? Math.round(purchase * factor * vatFactor * 100) / 100 : 0);
-        db.query('UPDATE door_price_items SET component_type=?, height_min=?, height_max=?, width_min=?, width_max=?, purchase_price=?, markup_factor=?, price=?, installation_price=?, installer_share=? WHERE id=? AND model_id=?',
-            [component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice, parseFloat(installation_price) || 0, parseFloat(installer_share) || 0, req.params.id, req.params.modelId],
+        // Redigering ändrar bara siffrorna - vilken modell/prisgrupp raden hör till rörs inte.
+        db.query('UPDATE door_price_items SET component_type=?, height_min=?, height_max=?, width_min=?, width_max=?, purchase_price=?, markup_factor=?, price=?, installation_price=?, installer_share=? WHERE id=?',
+            [component_type, height_min || 0, height_max || 100000, width_min || 0, width_max || 100000, purchase, factor, finalPrice, parseFloat(installation_price) || 0, parseFloat(installer_share) || 0, req.params.id],
             dbResult(res, 'Rad uppdaterad!'));
     });
 });
@@ -807,32 +858,43 @@ app.post('/api/door-models/:id/prices/bulk', requireAuth, requireAdmin, (req, re
     const rows = req.body;
     if (!rows || rows.length === 0) return res.status(400).json({ message: 'Inga rader skickades in.' });
     getVatFactor(vatFactor => {
-        const values = rows.map(r => {
-            const purchase = parseFloat(r.purchase_price) || 0;
-            const factor = (r.markup_factor === '' || r.markup_factor === undefined || r.markup_factor === null) ? null : parseFloat(r.markup_factor);
-            const finalPrice = (r.price !== undefined && r.price !== '' && r.price !== null) ? parseFloat(r.price) : (factor !== null ? Math.round(purchase * factor * vatFactor * 100) / 100 : 0);
-            return [req.params.id, r.component_type, r.height_min || 0, r.height_max || 100000, r.width_min || 0, r.width_max || 100000, purchase, factor, finalPrice, parseFloat(r.installation_price) || 0, parseFloat(r.installer_share) || 0];
-        });
-        db.query('INSERT INTO door_price_items (model_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share) VALUES ?', [values], (err, result) => {
-            if (err) return res.status(500).json({ message: err.message });
-            res.json({ message: `${result.affectedRows} rader importerade!` });
+        resolveDoorModelScope(req.params.id, (col, id) => {
+            const modelId = col === 'model_id' ? id : null;
+            const groupId = col === 'price_group_id' ? id : null;
+            const values = rows.map(r => {
+                const purchase = parseFloat(r.purchase_price) || 0;
+                const factor = (r.markup_factor === '' || r.markup_factor === undefined || r.markup_factor === null) ? null : parseFloat(r.markup_factor);
+                const finalPrice = (r.price !== undefined && r.price !== '' && r.price !== null) ? parseFloat(r.price) : (factor !== null ? Math.round(purchase * factor * vatFactor * 100) / 100 : 0);
+                return [modelId, groupId, r.component_type, r.height_min || 0, r.height_max || 100000, r.width_min || 0, r.width_max || 100000, purchase, factor, finalPrice, parseFloat(r.installation_price) || 0, parseFloat(r.installer_share) || 0];
+            });
+            db.query('INSERT INTO door_price_items (model_id, price_group_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share) VALUES ?', [values], (err, result) => {
+                if (err) return res.status(500).json({ message: err.message });
+                res.json({ message: `${result.affectedRows} rader importerade!` });
+            });
         });
     });
 });
 
-// Räknar om försäljningspriset för alla rader i modellen som har både inköpspris och faktor angivna:
-// pris = inköpspris x faktor x momsfaktor (från company_settings.vat_rate). Rader utan faktor (manuellt satta priser) rörs inte.
+// Räknar om försäljningspriset för alla rader i modellen (eller dess prisgrupp) som har
+// både inköpspris och faktor angivna: pris = inköpspris x faktor x momsfaktor.
+// Rader utan faktor (manuellt satta priser) rörs inte.
 app.post('/api/door-models/:id/recalculate', requireAuth, requireAdmin, (req, res) => {
     getVatFactor(vatFactor => {
-        db.query('UPDATE door_price_items SET price = ROUND(purchase_price * markup_factor * ?, 2) WHERE model_id = ? AND markup_factor IS NOT NULL AND purchase_price > 0', [vatFactor, req.params.id], (err, result) => {
-            if (err) return res.status(500).json({ message: err.message });
-            res.json({ message: `Priser omräknade för ${result.affectedRows} rader.` });
+        resolveDoorModelScope(req.params.id, (col, id) => {
+            db.query(`UPDATE door_price_items SET price = ROUND(purchase_price * markup_factor * ?, 2) WHERE ${col} = ? AND markup_factor IS NOT NULL AND purchase_price > 0`, [vatFactor, id], (err, result) => {
+                if (err) return res.status(500).json({ message: err.message });
+                res.json({ message: `Priser omräknade för ${result.affectedRows} rader.` });
+            });
         });
     });
 });
 
-app.delete('/api/door-models/:modelId/prices/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM door_price_items WHERE id = ? AND model_id = ?', [req.params.id, req.params.modelId], dbResult(res, 'Raderad!')));
-app.delete('/api/door-models/:id/prices', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM door_price_items WHERE model_id = ?', [req.params.id], dbResult(res, 'Alla rader raderade!')));
+app.delete('/api/door-models/:modelId/prices/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM door_price_items WHERE id = ?', [req.params.id], dbResult(res, 'Raderad!')));
+app.delete('/api/door-models/:id/prices', requireAuth, requireAdmin, (req, res) => {
+    resolveDoorModelScope(req.params.id, (col, id) => {
+        db.query(`DELETE FROM door_price_items WHERE ${col} = ?`, [id], dbResult(res, 'Alla rader raderade!'));
+    });
+});
 
 app.use('/api/*', (req, res) => res.status(404).json({ message: 'API-rutten hittades inte' }));
 const PORT = process.env.PORT || 3000;

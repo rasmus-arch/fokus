@@ -122,6 +122,13 @@
                                     <option value="">-- Ingen (visas alltid) --</option>
                                 </select>
                             </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Tillbehörsgrupp</label>
+                                <p class="text-[10px] text-gray-400 mb-1">För tillbehör (sockel, kakellist m.m.) - dyker upp i offertbyggaren när kunden valt en dörrmodell som pekar på samma grupp. Ställs in per dörrmodell under Dörrmodeller & Prisgrupper.</p>
+                                <select id="pAccessoryGroup" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white">
+                                    <option value="">-- Ingen --</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div id="variationsUI" class="hidden flex-col gap-3 border-t border-blue-200 pt-3">
@@ -236,6 +243,7 @@
             fetchProducts();
             fetchSuppliersForDropdown();
             fetchDoorModelsForDropdown();
+            fetchAccessoryGroupsForDropdown();
             fetchFrameTypesForDropdown();
             document.getElementById('searchInput').addEventListener('input', applyFilters);
             document.getElementById('catFilter').addEventListener('change', applyFilters);
@@ -483,6 +491,7 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                 document.getElementById('pPurchase').value = p.purchase_price || 0;
                 document.getElementById('pSupplier').value = p.supplier_id || '';
                 document.getElementById('pDoorModel').value = p.door_model_id || '';
+                document.getElementById('pAccessoryGroup').value = p.door_price_group_id || '';
                 document.getElementById('pStommeHeight').value = p.height || 0;
                 document.getElementById('pStommeWidth').value = p.width || 0;
                 document.getElementById('pStommeDepth').value = p.length || 0;
@@ -518,6 +527,7 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                 document.getElementById('pId').value = '';
                 document.getElementById('pSupplier').value = '';
                 document.getElementById('pDoorModel').value = '';
+                document.getElementById('pAccessoryGroup').value = '';
                 document.getElementById('pStommeHeight').value = 0;
                 document.getElementById('pStommeWidth').value = 0;
                 document.getElementById('pStommeDepth').value = 0;
@@ -551,6 +561,7 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
             formData.append('frame_type_id', document.getElementById('pFrameTypeId').value);
             formData.append('supplier_id', document.getElementById('pSupplier').value);
             formData.append('door_model_id', document.getElementById('pDoorModel').value);
+            formData.append('door_price_group_id', document.getElementById('pAccessoryGroup').value);
 
             const hasVar = document.getElementById('pHasVariations').checked;
             formData.append('has_variations', hasVar);
@@ -628,6 +639,16 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                 const sel = document.getElementById('pDoorModel');
                 sel.innerHTML = '<option value="">-- Ingen (visas alltid) --</option>';
                 models.forEach(m => { sel.innerHTML += `<option value="${m.id}">${m.name}</option>`; });
+            } catch (e) { console.error(e); }
+        }
+
+        async function fetchAccessoryGroupsForDropdown() {
+            try {
+                const res = await fetch('/api/door-price-groups');
+                const groups = await res.json();
+                const sel = document.getElementById('pAccessoryGroup');
+                sel.innerHTML = '<option value="">-- Ingen --</option>';
+                groups.forEach(g => { sel.innerHTML += `<option value="${g.id}">${g.name}</option>`; });
             } catch (e) { console.error(e); }
         }
 
