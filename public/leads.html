@@ -47,6 +47,7 @@
                         <th class="p-3 md:p-4">E-post</th>
                         <th class="p-3 md:p-4">Telefon</th>
                         <th class="p-3 md:p-4">Kommun</th>
+                        <th class="p-3 md:p-4">Källa</th>
                         <th class="p-3 md:p-4">Inkom datum</th>
                         <th class="p-3 md:p-4 text-right">Åtgärd</th>
                     </tr>
@@ -171,7 +172,7 @@
             tbody.innerHTML = '';
             
             if (!allLeads || allLeads.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">Du har inga nya leads. Bra jobbat!</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-gray-500">Du har inga nya leads. Bra jobbat!</td></tr>';
                 pagination.innerHTML = ''; return;
             }
 
@@ -183,11 +184,23 @@
             const end = start + rowsPerPage;
             const paginated = allLeads.slice(start, end);
 
+            const sourceBadge = { Facebook: 'bg-blue-100 text-blue-700 border-blue-200', Elementor: 'bg-purple-100 text-purple-700 border-purple-200', Manuell: 'bg-gray-100 text-gray-600 border-gray-200' };
+
             paginated.forEach(l => {
                 const date = new Date(l.created_at).toLocaleDateString('sv-SE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const source = l.source || 'Manuell';
+                const badgeCls = sourceBadge[source] || sourceBadge.Manuell;
+
+                let extra = null;
+                try { extra = l.extra_data ? (typeof l.extra_data === 'string' ? JSON.parse(l.extra_data) : l.extra_data) : null; } catch (e) { extra = null; }
+                const hasExtra = extra && Object.keys(extra).length > 0;
+
                 tbody.innerHTML += `
                     <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
-                        <td class="p-3 md:p-4 font-bold text-gray-800">${l.name || '-'}</td>
+                        <td class="p-3 md:p-4 font-bold text-gray-800">
+                            ${l.name || '-'}
+                            ${hasExtra ? `<button onclick="toggleLeadExtra(${l.id})" class="ml-2 text-gray-400 hover:text-blue-600 text-xs align-middle" title="Visa fler uppgifter"><i class="fas fa-circle-info"></i></button>` : ''}
+                        </td>
                         <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm">
                             <a href="mailto:${l.email}" class="text-blue-600 hover:underline">${l.email || '-'}</a>
                         </td>
@@ -195,12 +208,23 @@
                         <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm">
                             <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-medium border border-gray-200">${l.kommun || '-'}</span>
                         </td>
+                        <td class="p-3 md:p-4 text-xs">
+                            <span class="px-2 py-1 rounded text-xs font-medium border ${badgeCls}">${source}</span>
+                        </td>
                         <td class="p-3 md:p-4 text-gray-400 text-xs">${date}</td>
                         <td class="p-3 md:p-4 text-right whitespace-nowrap">
                             <button onclick="convertToCustomer(${l.id})" class="bg-green-100 text-green-700 hover:bg-green-200 border border-green-200 px-3 py-1.5 rounded text-xs font-bold transition mr-2"><i class="fas fa-user-plus mr-1"></i> Gör till kund</button>
                             <button onclick="deleteLead(${l.id})" class="text-red-400 hover:text-red-600 px-2"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
+                    ${hasExtra ? `
+                    <tr id="leadExtra${l.id}" class="hidden bg-blue-50/40 border-b border-gray-100">
+                        <td colspan="7" class="px-4 pb-3 pt-1">
+                            <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600">
+                                ${Object.entries(extra).map(([k, v]) => `<span><span class="font-semibold text-gray-500">${k}:</span> ${v}</span>`).join('')}
+                            </div>
+                        </td>
+                    </tr>` : ''}
                 `;
             });
 
@@ -208,6 +232,8 @@
         }
 
         function changePageLeads(dir) { currentPageLeads += dir; renderLeads(); }
+
+        function toggleLeadExtra(leadId) { document.getElementById(`leadExtra${leadId}`).classList.toggle('hidden'); }
 
         async function convertToCustomer(leadId) {
             if(!confirm("Vill du konvertera denna lead till en riktig kund i registret?")) return;

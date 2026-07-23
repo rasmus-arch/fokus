@@ -11,7 +11,8 @@
 
     <div class="bg-white p-6 md:p-8 rounded-lg shadow-lg w-full max-w-sm border border-gray-200">
         <div class="text-center mb-6">
-     <img id="loginLogo" src="/uploads/Klaralvskok-logga-1.jpg" alt="Klarälvskök Logotyp" class="h-16 mx-auto mb-3 object-contain" onerror="this.outerHTML='<h1 class=\\'text-3xl font-bold text-gray-800 tracking-tight\\'>Klarälvskök</h1>'">
+            <img id="loginLogo" alt="Företagslogotyp" class="h-16 mx-auto mb-3 object-contain hidden" onerror="this.classList.add('hidden'); document.getElementById('loginLogoFallback').classList.remove('hidden');">
+            <h1 id="loginLogoFallback" class="text-2xl font-semibold text-gray-400 tracking-tight">Logga saknas</h1>
             <p class="text-xs md:text-sm text-gray-400 mt-1">Internt affärs- och offertverktyg</p>
         </div>
 
@@ -46,7 +47,12 @@
             try {
                 const res = await fetch('/api/settings');
                 const s = await res.json();
-                if (s && s.logo_url) document.getElementById('loginLogo').src = s.logo_url;
+                if (s && s.logo_url) {
+                    const img = document.getElementById('loginLogo');
+                    img.src = s.logo_url;
+                    img.classList.remove('hidden');
+                    document.getElementById('loginLogoFallback').classList.add('hidden');
+                }
             } catch (e) {}
         })();
 

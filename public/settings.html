@@ -112,6 +112,48 @@
                 </button>
             </div>
         </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm mt-6 space-y-3 max-w-3xl">
+            <h3 class="text-lg font-medium text-gray-700 border-b pb-2 mb-2">Facebook / Meta Lead Ads</h3>
+            <p class="text-xs text-gray-500">Så här kopplar du in Facebook-leads:</p>
+            <ol class="text-xs text-gray-500 list-decimal pl-4 space-y-1">
+                <li>Skapa en app på <span class="font-mono">developers.facebook.com</span>, koppla den till er Facebook-sida och lägg till produkten "Webhooks".</li>
+                <li>Klicka "Generera" nedan för att skapa en verifieringstoken.</li>
+                <li>I Meta: registrera Callback-URL:en nedan + verifieringstoken, prenumerera på fältet <span class="font-mono">leadgen</span> för sidan.</li>
+                <li>Klistra in sidans (Page) Access Token nedan och spara.</li>
+            </ol>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Callback-URL (till Meta)</label>
+                <div class="flex gap-2">
+                    <input type="text" id="fbCallbackUrl" readonly class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-xs font-mono bg-gray-50 text-gray-600">
+                    <button type="button" onclick="copyToClipboard('fbCallbackUrl')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap"><i class="fas fa-copy mr-1"></i> Kopiera</button>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Verifieringstoken (till Meta)</label>
+                <div class="flex gap-2">
+                    <input type="text" id="fbVerifyToken" readonly class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-xs font-mono bg-gray-50 text-gray-600">
+                    <button type="button" onclick="copyToClipboard('fbVerifyToken')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap"><i class="fas fa-copy mr-1"></i> Kopiera</button>
+                    <button type="button" onclick="generateFbVerifyToken()" class="bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap"><i class="fas fa-sync-alt mr-1"></i> Generera</button>
+                </div>
+            </div>
+
+            <form id="fbSettingsForm" class="space-y-3 pt-2 border-t border-gray-100">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Page Access Token</label>
+                    <input type="text" id="fbPageAccessToken" placeholder="Klistra in token från Meta" class="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">App Secret (valfritt, men rekommenderas för att verifiera att anrop verkligen kommer från Meta)</label>
+                    <input type="text" id="fbAppSecret" placeholder="Klistra in App Secret från appens inställningar" class="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono">
+                </div>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700">
+                    <i class="fas fa-save mr-1"></i> Spara Facebook-inställningar
+                </button>
+            </form>
+        </div>
     </main>
 
     <script src="/common.js"></script>
@@ -191,6 +233,49 @@
                 alert(data.message);
             } catch (e) { alert('Kunde inte generera ny webhook-URL.'); }
         }
+
+        function copyToClipboard(inputId) {
+            const input = document.getElementById(inputId);
+            navigator.clipboard.writeText(input.value);
+        }
+
+        async function loadFbSettings() {
+            document.getElementById('fbCallbackUrl').value = `${location.origin}/api/webhook/facebook`;
+            try {
+                const res = await fetch('/api/settings/facebook');
+                const s = await res.json();
+                document.getElementById('fbVerifyToken').value = s.fb_verify_token || 'Klicka "Generera" för att skapa en token.';
+                document.getElementById('fbPageAccessToken').value = s.fb_page_access_token || '';
+                document.getElementById('fbAppSecret').value = s.fb_app_secret || '';
+            } catch (e) { console.error(e); }
+        }
+
+        async function generateFbVerifyToken() {
+            try {
+                const res = await fetch('/api/settings/facebook/generate-token', { method: 'POST' });
+                const data = await res.json();
+                document.getElementById('fbVerifyToken').value = data.fb_verify_token;
+                alert(data.message);
+            } catch (e) { alert('Kunde inte generera token.'); }
+        }
+
+        document.getElementById('fbSettingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                const res = await fetch('/api/settings/facebook', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fb_page_access_token: document.getElementById('fbPageAccessToken').value,
+                        fb_app_secret: document.getElementById('fbAppSecret').value
+                    })
+                });
+                const data = await res.json();
+                alert(data.message);
+            } catch (e) { alert('Kunde inte spara Facebook-inställningar.'); }
+        });
+
+        loadFbSettings();
 
         document.getElementById('settingsForm').addEventListener('submit', async (e) => {
             e.preventDefault();
