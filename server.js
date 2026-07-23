@@ -17,7 +17,9 @@ try {
 }
 
 const app = express();
-app.use(express.json({ limit: '50mb' }));
+// verify sparar undan råa request-bytes - krävs för att kunna signaturverifiera
+// Facebooks webhook (X-Hub-Signature-256) mot den exakta body som skickades.
+app.use(express.json({ limit: '50mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -75,6 +77,35 @@ app.put('/api/users/:id', requireAuth, requireAdmin, (req, res) => {
 });
 app.delete('/api/users/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM users WHERE id = ?', [req.params.id], dbResult(res, 'Borttagen')));
 
+// Kända lead-fält matchas via nyckelord oavsett vad formulärverktyget döpt dem till.
+// Fält som INTE matchar någon känd kategori tappas inte bort - de sparas i extra_data (JSON)
+// så inget går förlorat även om formuläret har fält vi inte kände till i förväg.
+const LEAD_FIELD_KEYWORDS = {
+    name: ['name', 'namn', 'first_name'],
+    email: ['email', 'epost', 'e-post'],
+    phone: ['phone', 'tel', 'mobil'],
+    kommun: ['kommun', 'city', 'ort']
+};
+
+function extractLeadFields(fieldsObj, valueOf) {
+    const result = { name: '', email: '', phone: '', kommun: '' };
+    const extra = {};
+    for (let key in fieldsObj) {
+        const k = key.toLowerCase();
+        const value = valueOf(fieldsObj[key]);
+        const category = Object.keys(LEAD_FIELD_KEYWORDS).find(cat => LEAD_FIELD_KEYWORDS[cat].some(kw => k.includes(kw)));
+        if (category) { if (!result[category] && value) result[category] = value; }
+        else if (value !== undefined && value !== null && value !== '') extra[key] = value;
+    }
+    return { ...result, extra };
+}
+
+function insertLead(fields, source, defaultName) {
+    const { name, email, phone, kommun, extra } = fields;
+    db.query('INSERT INTO leads (name, email, phone, kommun, source, extra_data) VALUES (?, ?, ?, ?, ?, ?)',
+        [name || defaultName, email, phone, kommun, source, Object.keys(extra).length ? JSON.stringify(extra) : null], () => {});
+}
+
 app.post('/api/webhook/elementor/:token', (req, res) => {
     db.query('SELECT webhook_token FROM company_settings WHERE id = 1', (tokenErr, tokenRows) => {
         if (tokenErr || !tokenRows.length || !tokenRows[0].webhook_token || tokenRows[0].webhook_token !== req.params.token) {
@@ -82,32 +113,59 @@ app.post('/api/webhook/elementor/:token', (req, res) => {
         }
         res.status(200).send("Webhook mottagen!");
         try {
-            let name = 'Okänd Lead', email = '', phone = '', kommun = '';
+            const source = req.body.fields || req.body;
+            const valueOf = v => (v && v.value !== undefined) ? v.value : v;
+            insertLead(extractLeadFields(source, valueOf), 'Elementor', 'Okänd Lead');
+        } catch (error) {}
+    });
+});
 
-            // Supersmart sökfunktion som hittar fälten oavsett vad Elementor döpt dem till
-            const findVal = (obj, keywords) => {
-                for (let key in obj) {
-                    let k = key.toLowerCase();
-                    if (keywords.some(kw => k.includes(kw))) {
-                        return obj[key].value !== undefined ? obj[key].value : obj[key];
-                    }
+// Facebook/Meta Lead Ads. Meta verifierar webhooken med ett GET-anrop (hub.challenge ska
+// ekas tillbaka), och skickar sedan bara ett leadgen_id via POST - själva svarsdatan hämtas
+// separat via Graph API med sidans access-token. Kräver uppgifter under Inställningar > Facebook.
+const FB_GRAPH_VERSION = 'v21.0';
+
+app.get('/api/webhook/facebook', (req, res) => {
+    db.query('SELECT fb_verify_token FROM company_settings WHERE id = 1', (err, rows) => {
+        const expected = rows && rows[0] ? rows[0].fb_verify_token : null;
+        const mode = req.query['hub.mode'];
+        const token = req.query['hub.verify_token'];
+        if (!err && expected && mode === 'subscribe' && token === expected) {
+            res.status(200).send(req.query['hub.challenge']);
+        } else {
+            res.sendStatus(403);
+        }
+    });
+});
+
+function verifyFacebookSignature(req, appSecret) {
+    if (!appSecret) return true; // ingen app secret konfigurerad - signaturverifiering hoppas över
+    const signature = req.get('x-hub-signature-256') || '';
+    const expected = 'sha256=' + crypto.createHmac('sha256', appSecret).update(req.rawBody || Buffer.alloc(0)).digest('hex');
+    try { return signature.length === expected.length && crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected)); }
+    catch (e) { return false; }
+}
+
+app.post('/api/webhook/facebook', (req, res) => {
+    res.status(200).send('EVENT_RECEIVED'); // Meta kräver ett snabbt 200-svar - resten bearbetas i bakgrunden
+    db.query('SELECT fb_page_access_token, fb_app_secret FROM company_settings WHERE id = 1', async (err, rows) => {
+        const settings = rows && rows[0] ? rows[0] : {};
+        if (err || !settings.fb_page_access_token) return;
+        if (!verifyFacebookSignature(req, settings.fb_app_secret)) return;
+        try {
+            const entries = req.body.entry || [];
+            for (const entry of entries) {
+                for (const change of (entry.changes || [])) {
+                    if (change.field !== 'leadgen' || !change.value || !change.value.leadgen_id) continue;
+                    const url = `https://graph.facebook.com/${FB_GRAPH_VERSION}/${change.value.leadgen_id}?access_token=${encodeURIComponent(settings.fb_page_access_token)}`;
+                    const fbRes = await fetch(url);
+                    const leadData = await fbRes.json();
+                    if (!leadData || !Array.isArray(leadData.field_data)) continue;
+                    const fieldsObj = {};
+                    leadData.field_data.forEach(f => { fieldsObj[f.name] = (f.values && f.values[0]) || ''; });
+                    insertLead(extractLeadFields(fieldsObj, v => v), 'Facebook', 'Okänd Lead (Facebook)');
                 }
-                return '';
-            };
-
-            if (req.body.fields) {
-                name = findVal(req.body.fields, ['name', 'namn', 'first_name']);
-                email = findVal(req.body.fields, ['email', 'epost', 'e-post']);
-                phone = findVal(req.body.fields, ['phone', 'tel', 'mobil']);
-                kommun = findVal(req.body.fields, ['kommun', 'city', 'ort']);
-            } else {
-                name = findVal(req.body, ['name', 'namn']) || name;
-                email = findVal(req.body, ['email', 'epost', 'e-post']) || email;
-                phone = findVal(req.body, ['phone', 'tel', 'mobil']) || phone;
-                kommun = findVal(req.body, ['kommun', 'city', 'ort']) || kommun;
             }
-
-            db.query('INSERT INTO leads (name, email, phone, kommun) VALUES (?, ?, ?, ?)', [name, email, phone, kommun], () => {});
         } catch (error) {}
     });
 });
@@ -291,6 +349,18 @@ ctTables.forEach(table => {
     }));
 });
 
+// Snabbinmatning: godtycklig blandning av rader (olika färger/tjocklekar/djup) i ett enda anrop,
+// för att slippa öppna en modal per rad när ett helt prisunderlag matas in manuellt.
+app.post('/api/countertops/prices/bulk', requireAuth, requireAdmin, (req, res) => {
+    const rows = req.body;
+    if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ message: 'Inga rader skickades in.' });
+    const values = rows.map(r => [r.color_id, r.depth_min || 0, r.depth_max || 0, r.price_per_lm || 0, r.thickness || 0]);
+    db.query('INSERT INTO countertop_prices (color_id, depth_min, depth_max, price_per_lm, thickness) VALUES ?', [values], (err, result) => {
+        if (err) return res.status(500).json({ message: err.message });
+        res.json({ message: `${result.affectedRows} prisrader sparade!` });
+    });
+});
+
 app.post('/api/countertops/colors/:id/image', requireAuth, requireAdmin, upload.single('image'), (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Ingen bildfil mottagen' });
     db.query('UPDATE countertop_colors SET image_url = ? WHERE id = ?', ['/uploads/' + req.file.filename, req.params.id], (err) => {
@@ -435,7 +505,9 @@ app.get('/api/statistics/overview', requireAuth, requireStaff, (req, res) => {
 app.get('/api/statistics/fun-facts', requireAuth, requireStaff, (req, res) => {
     db.query(`SELECT SUM(qi.price_inc_vat * qi.qty) as total FROM quote_items qi JOIN quotes q ON qi.quote_id = q.id WHERE q.status = 'Order'`, (e1, r1) => {
         const totalRevenue = (r1 && r1[0] && r1[0].total) ? r1[0].total : 0;
-        db.query(`SELECT q.id, q.quote_name, c.name as customer_name, SUM(qi.price_inc_vat * qi.qty) as total
+        db.query(`SELECT SUM(qi.price_inc_vat * qi.qty) as total FROM quote_items qi JOIN quotes q ON qi.quote_id = q.id WHERE q.status = 'Order' AND YEAR(q.created_at) = YEAR(NOW())`, (eYear, rYear) => {
+            const yearRevenue = (rYear && rYear[0] && rYear[0].total) ? rYear[0].total : 0;
+            db.query(`SELECT q.id, q.quote_name, c.name as customer_name, SUM(qi.price_inc_vat * qi.qty) as total
                    FROM quote_items qi JOIN quotes q ON qi.quote_id = q.id JOIN customers c ON q.customer_id = c.id
                    WHERE q.status = 'Order' GROUP BY q.id, q.quote_name, c.name ORDER BY total DESC LIMIT 1`, (e2, r2) => {
             const biggestOrder = (r2 && r2[0]) ? r2[0] : null;
@@ -448,11 +520,12 @@ app.get('/api/statistics/fun-facts', requireAuth, requireStaff, (req, res) => {
                         const newLeads30d = (r5 && r5[0]) ? r5[0].c : 0;
                         db.query(`SELECT kommun, COUNT(*) as c FROM leads WHERE kommun IS NOT NULL AND kommun != '' GROUP BY kommun ORDER BY c DESC LIMIT 1`, (e6, r6) => {
                             const topKommun = (r6 && r6[0]) ? r6[0] : null;
-                            res.json({ totalRevenue, biggestOrder, orderCount, sentCount, winRate, newLeads30d, topKommun });
+                            res.json({ totalRevenue, yearRevenue, biggestOrder, orderCount, sentCount, winRate, newLeads30d, topKommun });
                         });
                     });
                 });
             });
+        });
         });
     });
 });
@@ -640,6 +713,26 @@ app.post('/api/settings/webhook-token/regenerate', requireAuth, requireAdmin, (r
     db.query('UPDATE company_settings SET webhook_token = ? WHERE id = 1', [token], (err) => {
         if (err) return res.status(500).json({ message: err.message });
         res.json({ message: 'Ny webhook-URL genererad!', webhook_token: token });
+    });
+});
+
+// Facebook/Meta Lead Ads-uppgifter - separat skyddad endpoint av samma anledning som
+// webhook-token ovan: hålls borta från den publika /api/settings.
+app.get('/api/settings/facebook', requireAuth, requireAdmin, (req, res) => {
+    db.query('SELECT fb_verify_token, fb_page_access_token, fb_app_secret FROM company_settings WHERE id = 1', (err, results) => {
+        res.json(results && results[0] ? results[0] : {});
+    });
+});
+app.put('/api/settings/facebook', requireAuth, requireAdmin, (req, res) => {
+    const { fb_page_access_token, fb_app_secret } = req.body;
+    db.query('UPDATE company_settings SET fb_page_access_token=?, fb_app_secret=? WHERE id=1',
+        [fb_page_access_token || null, fb_app_secret || null], dbResult(res, 'Facebook-inställningar sparade!'));
+});
+app.post('/api/settings/facebook/generate-token', requireAuth, requireAdmin, (req, res) => {
+    const token = crypto.randomBytes(16).toString('hex');
+    db.query('UPDATE company_settings SET fb_verify_token = ? WHERE id = 1', [token], (err) => {
+        if (err) return res.status(500).json({ message: err.message });
+        res.json({ message: 'Ny verifieringstoken genererad!', fb_verify_token: token });
     });
 });
 

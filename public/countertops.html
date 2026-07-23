@@ -13,9 +13,16 @@
 
     <main class="flex-1 flex flex-col h-screen overflow-hidden w-full relative">
         <header class="bg-white p-4 md:p-6 border-b border-gray-200 shrink-0">
-            <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Hantera Bänkskivor</h2>
-            <p class="text-xs md:text-sm text-gray-500 mt-1">Ställ in material, tjocklekar, kanter och tjänster</p>
-            
+            <div class="flex justify-between items-start gap-4">
+                <div>
+                    <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Hantera Bänkskivor</h2>
+                    <p class="text-xs md:text-sm text-gray-500 mt-1">Ställ in material, tjocklekar, kanter och tjänster</p>
+                </div>
+                <button onclick="openQuickEntry()" class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm whitespace-nowrap">
+                    <i class="fas fa-bolt mr-2"></i> Snabb prisinmatning
+                </button>
+            </div>
+
             <div class="flex space-x-4 mt-6 border-b border-gray-200">
                 <button id="tabMat" onclick="switchTab('materials')" class="py-2 border-b-2 border-blue-600 font-bold text-blue-600 outline-none transition">Material & Priser</button>
                 <button id="tabEdge" onclick="switchTab('edges')" class="py-2 font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent outline-none transition">Kantprofiler</button>
@@ -101,6 +108,41 @@
             <div class="flex justify-end gap-2 mt-5 pt-3 border-t border-gray-100">
                 <button type="button" onclick="closeModal()" class="px-3 py-1.5 bg-gray-200 rounded font-medium hover:bg-gray-300">Avbryt</button>
                 <button type="button" onclick="saveData()" class="px-4 py-1.5 bg-blue-600 text-white rounded font-medium hover:bg-blue-700">Spara</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="quickEntryModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[85vh] flex flex-col">
+            <div class="p-4 border-b border-gray-200 flex justify-between items-start shrink-0">
+                <div>
+                    <h3 class="font-bold text-gray-800">Snabb prisinmatning</h3>
+                    <p class="text-xs text-gray-500 mt-0.5">Tryck Enter i sista fältet på en rad för att direkt hoppa till en ny rad. Välj "Alla färger i materialet" för att sätta samma pris på alla färger i ett svep.</p>
+                </div>
+                <button onclick="closeQuickEntry()" class="text-gray-400 hover:text-gray-600 text-xl leading-none"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-4 border-b border-gray-100 shrink-0">
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Material</label>
+                <select id="qeMaterial" onchange="onQuickEntryMaterialChange()" class="w-full max-w-sm border px-2 py-1.5 rounded outline-none focus:border-blue-500 bg-white text-sm"></select>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4">
+                <table class="w-full text-left text-sm border-collapse">
+                    <thead>
+                        <tr class="text-xs text-gray-500 uppercase border-b border-gray-200">
+                            <th class="p-2 font-semibold">Färg</th>
+                            <th class="p-2 font-semibold w-28">Tjocklek (mm)</th>
+                            <th class="p-2 font-semibold w-28">Djup min</th>
+                            <th class="p-2 font-semibold w-28">Djup max</th>
+                            <th class="p-2 font-semibold w-32">Pris/lpm</th>
+                            <th class="p-2 w-10"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="qeRows"></tbody>
+                </table>
+            </div>
+            <div class="p-4 border-t border-gray-200 flex justify-between items-center shrink-0">
+                <button type="button" onclick="addQuickEntryRow()" class="text-blue-600 hover:text-blue-800 text-sm font-medium"><i class="fas fa-plus mr-1"></i> Lägg till rad</button>
+                <button type="button" onclick="saveQuickEntryRows()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md text-sm font-medium shadow-sm"><i class="fas fa-save mr-2"></i> Spara alla rader</button>
             </div>
         </div>
     </div>
@@ -475,6 +517,96 @@
                 if(endpoint === 'colors' && id === activeColorId) activeColorId = null;
                 fetchData();
             });
+        }
+
+        // ================= SNABB PRISINMATNING =================
+        let qeRowCounter = 0;
+
+        function currentQeMaterialId() { return parseInt(document.getElementById('qeMaterial').value); }
+
+        function colorOptionsHtml(materialId) {
+            const colors = dbData.colors.filter(c => c.material_id === materialId);
+            let html = `<option value="ALL">— Alla färger i materialet —</option>`;
+            colors.forEach(c => html += `<option value="${c.id}">${c.name}</option>`);
+            return html;
+        }
+
+        function openQuickEntry() {
+            if (dbData.materials.length === 0) return alert('Lägg till minst ett material först.');
+            const sel = document.getElementById('qeMaterial');
+            sel.innerHTML = dbData.materials.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+            if (activeMaterialId) sel.value = activeMaterialId;
+            document.getElementById('qeRows').innerHTML = '';
+            qeRowCounter = 0;
+            addQuickEntryRow();
+            document.getElementById('quickEntryModal').classList.remove('hidden');
+        }
+
+        function closeQuickEntry() { document.getElementById('quickEntryModal').classList.add('hidden'); }
+
+        function onQuickEntryMaterialChange() {
+            const materialId = currentQeMaterialId();
+            document.querySelectorAll('#qeRows select[name="qeColor"]').forEach(sel => { sel.innerHTML = colorOptionsHtml(materialId); });
+        }
+
+        function addQuickEntryRow() {
+            qeRowCounter++;
+            const rowId = qeRowCounter;
+            const materialId = currentQeMaterialId();
+            const tr = document.createElement('tr');
+            tr.id = `qeRow${rowId}`;
+            tr.className = 'border-b border-gray-100';
+            tr.innerHTML = `
+                <td class="p-1.5"><select name="qeColor" class="w-full border px-2 py-1 rounded text-xs outline-none focus:border-blue-500 bg-white">${colorOptionsHtml(materialId)}</select></td>
+                <td class="p-1.5"><input type="number" name="qeThick" value="20" class="w-full border px-2 py-1 rounded text-xs outline-none focus:border-blue-500"></td>
+                <td class="p-1.5"><input type="number" name="qeMin" value="0" class="w-full border px-2 py-1 rounded text-xs outline-none focus:border-blue-500"></td>
+                <td class="p-1.5"><input type="number" name="qeMax" value="600" class="w-full border px-2 py-1 rounded text-xs outline-none focus:border-blue-500"></td>
+                <td class="p-1.5"><input type="number" name="qePrice" value="0" class="w-full border px-2 py-1 rounded text-xs outline-none focus:border-blue-500 qe-last"></td>
+                <td class="p-1.5 text-center"><button type="button" onclick="removeQuickEntryRow(${rowId})" class="text-gray-400 hover:text-red-600"><i class="fas fa-trash"></i></button></td>
+            `;
+            document.getElementById('qeRows').appendChild(tr);
+
+            tr.querySelector('.qe-last').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); addQuickEntryRow(); }
+            });
+
+            tr.querySelector('select[name="qeColor"]').focus();
+        }
+
+        function removeQuickEntryRow(rowId) {
+            const row = document.getElementById(`qeRow${rowId}`);
+            if (row) row.remove();
+            if (document.getElementById('qeRows').children.length === 0) addQuickEntryRow();
+        }
+
+        async function saveQuickEntryRows() {
+            const materialId = currentQeMaterialId();
+            const colorsInMaterial = dbData.colors.filter(c => c.material_id === materialId);
+            const rows = [];
+
+            document.querySelectorAll('#qeRows tr').forEach(tr => {
+                const colorVal = tr.querySelector('select[name="qeColor"]').value;
+                const thickness = parseFloat(tr.querySelector('input[name="qeThick"]').value);
+                const depth_min = parseFloat(tr.querySelector('input[name="qeMin"]').value);
+                const depth_max = parseFloat(tr.querySelector('input[name="qeMax"]').value);
+                const price_per_lm = parseFloat(tr.querySelector('input[name="qePrice"]').value);
+                if ([thickness, depth_min, depth_max, price_per_lm].some(isNaN)) return;
+
+                if (colorVal === 'ALL') colorsInMaterial.forEach(c => rows.push({ color_id: c.id, thickness, depth_min, depth_max, price_per_lm }));
+                else if (colorVal) rows.push({ color_id: parseInt(colorVal), thickness, depth_min, depth_max, price_per_lm });
+            });
+
+            if (rows.length === 0) return alert('Inga giltiga rader att spara. Har materialet några färger inlagda?');
+            if (!confirm(`Spara ${rows.length} prisrad(er)?`)) return;
+
+            try {
+                const res = await fetch('/api/countertops/prices/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rows) });
+                const data = await res.json();
+                if (!res.ok) return alert(data.message || 'Något gick fel.');
+                alert(data.message);
+                closeQuickEntry();
+                await fetchData();
+            } catch (e) { alert('Kunde inte spara raderna.'); }
         }
 
         fetchData();
