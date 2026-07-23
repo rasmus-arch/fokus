@@ -228,8 +228,10 @@
 
             if (order.quote_data) {
                 try {
-                    const data = JSON.parse(order.quote_data);
-                    
+                    // order.quote_data kan komma antingen som JSON-sträng eller redan uppackad
+                    // som objekt beroende på MySQL-drivrutinens hantering av JSON-kolumner.
+                    const data = typeof order.quote_data === 'string' ? JSON.parse(order.quote_data) : order.quote_data;
+
                     if (data.quoteCart && data.quoteCart.length > 0) {
                         data.quoteCart.forEach(item => {
                             cartList.innerHTML += `

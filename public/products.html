@@ -501,13 +501,22 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                 if (p.image_url) { document.getElementById('currentMainImagePreview').src = p.image_url; mainContainer.classList.remove('hidden'); } 
                 else { mainContainer.classList.add('hidden'); }
 
-                try { currentGalleryUrls = JSON.parse(p.gallery || '[]'); } catch(e) { currentGalleryUrls = []; }
+                // Vissa MySQL-drivrutinskonfigurationer packar redan upp JSON-kolumner till
+                // objekt/arrayer istället för att lämna dem som strängar - hantera båda formaten
+                // istället för att anta att det alltid är en sträng som behöver JSON.parse().
+                function parseJsonField(val, fallback) {
+                    if (val === null || val === undefined || val === '') return fallback;
+                    if (typeof val !== 'string') return val;
+                    try { return JSON.parse(val); } catch(e) { return fallback; }
+                }
+
+                currentGalleryUrls = parseJsonField(p.gallery, []);
 
                 // Ladda varianter om det finns
                 if (p.has_variations === 1) {
                     document.getElementById('pHasVariations').checked = true;
                     try {
-                        const vars = JSON.parse(p.variations || '[]');
+                        const vars = parseJsonField(p.variations, []);
                         if(vars.length > 0) {
                             document.getElementById('varName1').value = vars[0].attr1_name || '';
                             document.getElementById('varName2').value = vars[0].attr2_name || '';
