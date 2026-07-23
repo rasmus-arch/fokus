@@ -505,7 +505,9 @@ app.get('/api/statistics/overview', requireAuth, requireStaff, (req, res) => {
 app.get('/api/statistics/fun-facts', requireAuth, requireStaff, (req, res) => {
     db.query(`SELECT SUM(qi.price_inc_vat * qi.qty) as total FROM quote_items qi JOIN quotes q ON qi.quote_id = q.id WHERE q.status = 'Order'`, (e1, r1) => {
         const totalRevenue = (r1 && r1[0] && r1[0].total) ? r1[0].total : 0;
-        db.query(`SELECT q.id, q.quote_name, c.name as customer_name, SUM(qi.price_inc_vat * qi.qty) as total
+        db.query(`SELECT SUM(qi.price_inc_vat * qi.qty) as total FROM quote_items qi JOIN quotes q ON qi.quote_id = q.id WHERE q.status = 'Order' AND YEAR(q.created_at) = YEAR(NOW())`, (eYear, rYear) => {
+            const yearRevenue = (rYear && rYear[0] && rYear[0].total) ? rYear[0].total : 0;
+            db.query(`SELECT q.id, q.quote_name, c.name as customer_name, SUM(qi.price_inc_vat * qi.qty) as total
                    FROM quote_items qi JOIN quotes q ON qi.quote_id = q.id JOIN customers c ON q.customer_id = c.id
                    WHERE q.status = 'Order' GROUP BY q.id, q.quote_name, c.name ORDER BY total DESC LIMIT 1`, (e2, r2) => {
             const biggestOrder = (r2 && r2[0]) ? r2[0] : null;
@@ -518,11 +520,12 @@ app.get('/api/statistics/fun-facts', requireAuth, requireStaff, (req, res) => {
                         const newLeads30d = (r5 && r5[0]) ? r5[0].c : 0;
                         db.query(`SELECT kommun, COUNT(*) as c FROM leads WHERE kommun IS NOT NULL AND kommun != '' GROUP BY kommun ORDER BY c DESC LIMIT 1`, (e6, r6) => {
                             const topKommun = (r6 && r6[0]) ? r6[0] : null;
-                            res.json({ totalRevenue, biggestOrder, orderCount, sentCount, winRate, newLeads30d, topKommun });
+                            res.json({ totalRevenue, yearRevenue, biggestOrder, orderCount, sentCount, winRate, newLeads30d, topKommun });
                         });
                     });
                 });
             });
+        });
         });
     });
 });

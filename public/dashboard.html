@@ -85,13 +85,11 @@
             </div>
 
             <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg shadow-sm border border-gray-700 overflow-hidden text-white flex flex-col justify-center p-6 md:p-8 relative">
-                <i class="fas fa-tools absolute -bottom-6 -right-6 text-9xl text-gray-700 opacity-30"></i>
-                <h3 class="text-xl md:text-2xl font-bold mb-2 relative z-10">Välkommen till Klaro 2.0</h3>
-                <p class="text-gray-300 text-sm md:text-base mb-6 relative z-10 max-w-md">
-                    Detta är ledningscentralen för Klarälvskök. Härifrån bygger du offerter, hanterar dina kunder och distribuerar arbetsordrar till montörerna ute på fältet.
-                </p>
-                <div class="relative z-10">
-                    <span class="inline-block bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">System Online</span>
+                <i class="fas fa-sack-dollar absolute -bottom-6 -right-6 text-9xl text-gray-700 opacity-30"></i>
+                <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2 relative z-10">Total försäljning i år <span id="revenueYearLabel"></span> (inkl. moms)</h3>
+                <p id="funYearRevenue" class="text-3xl md:text-4xl font-bold relative z-10">...</p>
+                <div class="relative z-10 mt-4">
+                    <span class="inline-block bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">Vunna ordrar</span>
                 </div>
             </div>
 
@@ -167,6 +165,8 @@
                 const data = await res.json();
 
                 document.getElementById('funTotalRevenue').innerText = (parseFloat(data.totalRevenue) || 0).toLocaleString() + ' kr';
+                document.getElementById('funYearRevenue').innerText = (parseFloat(data.yearRevenue) || 0).toLocaleString('sv-SE') + ' kr';
+                document.getElementById('revenueYearLabel').innerText = new Date().getFullYear();
 
                 if (data.biggestOrder) {
                     document.getElementById('funBiggestOrder').innerText = (parseFloat(data.biggestOrder.total) || 0).toLocaleString() + ' kr';
