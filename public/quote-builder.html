@@ -532,6 +532,14 @@
             try { const res = await fetch('/api/countertops/config'); if (res.ok) ctConfig = await res.json(); } catch(e) {}
         }
 
+        // Priser hämtas via färgens prisgrupp om materialet använder prisgrupper
+        // (flera färger delar då samma prisrader), annars som vanligt direkt via färgens color_id.
+        function priceRowsForColor(colId) {
+            const color = ctConfig.colors && ctConfig.colors.find(c => c.id == colId);
+            if (color && color.price_group_id) return ctConfig.prices.filter(p => p.price_group_id == color.price_group_id);
+            return ctConfig.prices.filter(p => p.color_id == colId);
+        }
+
         function openCountertopModal() {
             document.getElementById('countertopModal').classList.remove('hidden');
             
@@ -591,8 +599,8 @@
             const shapeSelect = document.getElementById('ctShape');
 
             if (colId) {
-                const pricesForColor = ctConfig.prices.filter(p => p.color_id == colId);
-                if (pricesForColor.length === 0) { thkSelect.innerHTML = '<option value="">Inga priser inlagda</option>'; thkSelect.disabled = true; } 
+                const pricesForColor = priceRowsForColor(colId);
+                if (pricesForColor.length === 0) { thkSelect.innerHTML = '<option value="">Inga priser inlagda</option>'; thkSelect.disabled = true; }
                 else {
                     const uniqueThicks = [...new Set(pricesForColor.map(p => p.thickness))].sort((a,b)=>a-b);
                     thkSelect.innerHTML = '<option value="">Välj tjocklek...</option>';
@@ -693,7 +701,7 @@
                 totalLpm += (part.calcL / 1000);
 
                 if (colId && thk) {
-                    const priceBand = ctConfig.prices.find(p => p.color_id == colId && p.thickness == thk && part.d >= p.depth_min && part.d <= p.depth_max);
+                    const priceBand = priceRowsForColor(colId).find(p => p.thickness == thk && part.d >= p.depth_min && part.d <= p.depth_max);
                     if (priceBand) materialPrice += (part.calcL / 1000) * parseFloat(priceBand.price_per_lm);
                     else { anyDepthError = true; allPartsValid = false; }
                 } else { allPartsValid = false; }
@@ -914,7 +922,7 @@
             let addedDrawing = false;
 
             activeParts.forEach(part => {
-                const priceBand = ctConfig.prices.find(p => p.color_id == colSelect.value && p.thickness == thk && part.d >= p.depth_min && part.d <= p.depth_max);
+                const priceBand = priceRowsForColor(colSelect.value).find(p => p.thickness == thk && part.d >= p.depth_min && part.d <= p.depth_max);
                 const materialPrice = (part.calcL / 1000) * parseFloat(priceBand.price_per_lm);
 
                 const installIncVat = (part.calcL / 1000) * 1000;

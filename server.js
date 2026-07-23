@@ -316,10 +316,33 @@ app.get('/api/countertops/config', requireAuth, requireStaff, (req, res) => {
             db.query('SELECT * FROM countertop_prices', (err3, prices) => {
                 db.query('SELECT * FROM countertop_services', (err4, services) => {
                     db.query('SELECT * FROM countertop_edges', (err5, edges) => {
-                        res.json({ materials: materials||[], colors: colors||[], prices: prices||[], services: services||[], edges: edges||[] });
+                        db.query('SELECT * FROM countertop_price_groups', (err6, priceGroups) => {
+                            res.json({ materials: materials||[], colors: colors||[], prices: prices||[], services: services||[], edges: edges||[], price_groups: priceGroups||[] });
+                        });
                     });
                 });
             });
+        });
+    });
+});
+
+// Prisgrupper (bänkskivor): material med use_price_groups=1 prissätter flera färger
+// gemensamt genom att låta dem dela samma prisgrupp istället för egna prisrader.
+// Egna endpoints (inte generiska ctTables-loopen) eftersom borttagning behöver städa
+// upp kopplade prisrader och lösgöra färger, inte bara ta bort gruppraden.
+app.post('/api/countertops/price_groups', requireAuth, requireAdmin, (req, res) => {
+    const { name, material_id } = req.body;
+    db.query('INSERT INTO countertop_price_groups (name, material_id) VALUES (?, ?)', [name, material_id], dbResult(res, 'Prisgrupp skapad!', result => ({ id: result.insertId })));
+});
+app.put('/api/countertops/price_groups/:id', requireAuth, requireAdmin, (req, res) => {
+    db.query('UPDATE countertop_price_groups SET name = ? WHERE id = ?', [req.body.name, req.params.id], dbResult(res, 'Prisgrupp uppdaterad!'));
+});
+app.delete('/api/countertops/price_groups/:id', requireAuth, requireAdmin, (req, res) => {
+    db.query('DELETE FROM countertop_prices WHERE price_group_id = ?', [req.params.id], (err) => {
+        if (err) return res.status(500).json({ message: err.message });
+        db.query('UPDATE countertop_colors SET price_group_id = NULL WHERE price_group_id = ?', [req.params.id], (err2) => {
+            if (err2) return res.status(500).json({ message: err2.message });
+            db.query('DELETE FROM countertop_price_groups WHERE id = ?', [req.params.id], dbResult(res, 'Prisgrupp raderad!'));
         });
     });
 });
@@ -354,8 +377,8 @@ ctTables.forEach(table => {
 app.post('/api/countertops/prices/bulk', requireAuth, requireAdmin, (req, res) => {
     const rows = req.body;
     if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ message: 'Inga rader skickades in.' });
-    const values = rows.map(r => [r.color_id, r.depth_min || 0, r.depth_max || 0, r.price_per_lm || 0, r.thickness || 0]);
-    db.query('INSERT INTO countertop_prices (color_id, depth_min, depth_max, price_per_lm, thickness) VALUES ?', [values], (err, result) => {
+    const values = rows.map(r => [r.color_id || null, r.price_group_id || null, r.depth_min || 0, r.depth_max || 0, r.price_per_lm || 0, r.thickness || 0]);
+    db.query('INSERT INTO countertop_prices (color_id, price_group_id, depth_min, depth_max, price_per_lm, thickness) VALUES ?', [values], (err, result) => {
         if (err) return res.status(500).json({ message: err.message });
         res.json({ message: `${result.affectedRows} prisrader sparade!` });
     });
