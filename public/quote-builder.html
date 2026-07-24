@@ -656,7 +656,7 @@
                 validServices.forEach(s => {
                     servicesList.innerHTML += `
                         <div class="flex justify-between items-center bg-gray-50 border border-gray-200 rounded p-2">
-                            <div><p class="text-sm font-medium text-gray-800">${s.name}</p><p class="text-[10px] text-gray-500">${parseFloat(s.price).toLocaleString('sv-SE')} kr / ${s.price_type === 'per_lm' ? 'lpm' : 'st'}</p></div>
+                            <div><p class="text-sm font-medium text-gray-800">${s.name}</p><p class="text-[10px] text-gray-500">${parseFloat(s.price).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr / ${s.price_type === 'per_lm' ? 'lpm' : 'st'}</p></div>
                             <input type="number" id="ctSrv_${s.id}" data-type="${s.price_type}" data-price="${s.price}" min="0" value="0" oninput="ctCalculate()" class="w-16 border border-gray-300 rounded text-center py-1 text-sm bg-white outline-none focus:border-blue-500">
                         </div>`;
                 });
@@ -1636,7 +1636,11 @@
             const url = e.currentTarget.href;
             clearTimeout(autoSaveTimer);
             try { await saveQuote(true); } catch (err) {}
-            window.open(url, '_blank');
+            // Cache-busting: samma statiska länk återanvänds annars av webbläsaren (öppnar en
+            // gammal cachad PDF istället för att hämta en ny), även med Cache-Control-headers
+            // satta server-side. En unik URL varje klick garanterar en färsk PDF.
+            const bustUrl = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+            window.open(bustUrl, '_blank');
         }
 
         function renderConditions() {
@@ -1713,14 +1717,14 @@
             let totalMaterialIncVat = Math.max(0, totalMaterialBeforeGlobalDiscount - globalDiscountAmount);
             const rotDeduction = useRot ? (totalRotInstallIncVat * 0.30) : 0; const finalToPay = totalMaterialIncVat + totalRotInstallIncVat + totalNonRotInstallIncVat - rotDeduction;
 
-            document.getElementById('sumMaterialEx').innerText = (totalMaterialIncVat/1.25).toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
-            document.getElementById('sumNonRotServices').innerText = totalNonRotInstallIncVat.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
-            document.getElementById('sumInstall').innerText = totalRotInstallIncVat.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
-            document.getElementById('sumVat').innerText = ((totalMaterialIncVat+totalRotInstallIncVat+totalNonRotInstallIncVat)-(totalMaterialIncVat/1.25)-(totalRotInstallIncVat/1.25)-(totalNonRotInstallIncVat/1.25)).toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
-            document.getElementById('sumRot').innerText = '- ' + rotDeduction.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
-            document.getElementById('sumTotal').innerText = finalToPay.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
-            document.getElementById('sumCompanyCut').innerText = totalCompanyCut.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
-            document.getElementById('sumInstallerCut').innerText = totalInstallerCut.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumMaterialEx').innerText = (totalMaterialIncVat/1.25).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumNonRotServices').innerText = totalNonRotInstallIncVat.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumInstall').innerText = totalRotInstallIncVat.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumVat').innerText = ((totalMaterialIncVat+totalRotInstallIncVat+totalNonRotInstallIncVat)-(totalMaterialIncVat/1.25)-(totalRotInstallIncVat/1.25)-(totalNonRotInstallIncVat/1.25)).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumRot').innerText = '- ' + rotDeduction.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumTotal').innerText = finalToPay.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumCompanyCut').innerText = totalCompanyCut.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumInstallerCut').innerText = totalInstallerCut.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
             scheduleAutoSave();
         }
 
