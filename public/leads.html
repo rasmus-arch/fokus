@@ -195,21 +195,24 @@
                 try { extra = l.extra_data ? (typeof l.extra_data === 'string' ? JSON.parse(l.extra_data) : l.extra_data) : null; } catch (e) { extra = null; }
                 const hasExtra = extra && Object.keys(extra).length > 0;
 
+                // Leads kan komma från externa webbformulär (Facebook/Elementor) - all textdata
+                // härifrån escapas innan den skrivs in i innerHTML, så ett namn/kommentar-fält
+                // aldrig av misstag kan tolkas som HTML/script.
                 tbody.innerHTML += `
                     <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
                         <td class="p-3 md:p-4 font-bold text-gray-800">
-                            ${l.name || '-'}
+                            ${escapeHtml(l.name) || '-'}
                             ${hasExtra ? `<button onclick="toggleLeadExtra(${l.id})" class="ml-2 text-gray-400 hover:text-blue-600 text-xs align-middle" title="Visa fler uppgifter"><i class="fas fa-circle-info"></i></button>` : ''}
                         </td>
                         <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm">
-                            <a href="mailto:${l.email}" class="text-blue-600 hover:underline">${l.email || '-'}</a>
+                            <a href="mailto:${escapeHtml(l.email)}" class="text-blue-600 hover:underline">${escapeHtml(l.email) || '-'}</a>
                         </td>
-                        <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm">${l.phone || '-'}</td>
+                        <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm">${escapeHtml(l.phone) || '-'}</td>
                         <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm">
-                            <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-medium border border-gray-200">${l.kommun || '-'}</span>
+                            <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-medium border border-gray-200">${escapeHtml(l.kommun) || '-'}</span>
                         </td>
                         <td class="p-3 md:p-4 text-xs">
-                            <span class="px-2 py-1 rounded text-xs font-medium border ${badgeCls}">${source}</span>
+                            <span class="px-2 py-1 rounded text-xs font-medium border ${badgeCls}">${escapeHtml(source)}</span>
                         </td>
                         <td class="p-3 md:p-4 text-gray-400 text-xs">${date}</td>
                         <td class="p-3 md:p-4 text-right whitespace-nowrap">
@@ -221,7 +224,7 @@
                     <tr id="leadExtra${l.id}" class="hidden bg-blue-50/40 border-b border-gray-100">
                         <td colspan="7" class="px-4 pb-3 pt-1">
                             <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600">
-                                ${Object.entries(extra).map(([k, v]) => `<span><span class="font-semibold text-gray-500">${k}:</span> ${v}</span>`).join('')}
+                                ${Object.entries(extra).map(([k, v]) => `<span><span class="font-semibold text-gray-500">${escapeHtml(k)}:</span> ${escapeHtml(v)}</span>`).join('')}
                             </div>
                         </td>
                     </tr>` : ''}
@@ -281,15 +284,15 @@
             const paginated = allCustomers.slice(start, end);
 
             paginated.forEach(c => {
-                const pnrStr = c.personnummer ? `<br><span class="text-xs text-gray-400 font-mono">${c.personnummer}</span>` : '';
+                const pnrStr = c.personnummer ? `<br><span class="text-xs text-gray-400 font-mono">${escapeHtml(c.personnummer)}</span>` : '';
                 tbody.innerHTML += `
                     <tr class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onclick="openCard(${c.id})">
                         <td class="p-3 md:p-4">
-                            <span class="font-medium text-blue-600 block">${c.name || '-'}</span>
+                            <span class="font-medium text-blue-600 block">${escapeHtml(c.name) || '-'}</span>
                             ${pnrStr}
                         </td>
-                        <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm truncate max-w-[150px] md:max-w-xs">${c.address || ''} ${c.address2 ? ', ' + c.address2 : ''}</td>
-                        <td class="p-3 md:p-4 text-gray-500 text-[11px] md:text-xs truncate">${c.email || ''}<br><span class="text-gray-400">${c.phone || ''}</span></td>
+                        <td class="p-3 md:p-4 text-gray-600 text-xs md:text-sm truncate max-w-[150px] md:max-w-xs">${escapeHtml(c.address)} ${c.address2 ? ', ' + escapeHtml(c.address2) : ''}</td>
+                        <td class="p-3 md:p-4 text-gray-500 text-[11px] md:text-xs truncate">${escapeHtml(c.email)}<br><span class="text-gray-400">${escapeHtml(c.phone)}</span></td>
                         <td class="p-3 md:p-4 text-right"><i class="fas fa-chevron-right text-gray-400"></i></td>
                     </tr>
                 `;
