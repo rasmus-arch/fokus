@@ -23,6 +23,16 @@ app.use(express.json({ limit: '50mb', verify: (req, res, buf) => { req.rawBody =
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// API-svar ska aldrig cachas av mellanliggande proxyer/CDN (t.ex. LiteSpeed Cache) eller
+// webbläsaren - annars kan man spara en ändring men ändå få tillbaka gammal data på nästa
+// GET-anrop, trots att databasen har rätt värden (samma klass av cache-problem som orsakade
+// att gamla sid-versioner visades trots nya deployer).
+app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    next();
+});
+
 const { createSession, deleteSession, purgeExpiredSessions, requireAuth, requireRole } = initSessions(db);
 purgeExpiredSessions(); // rensa gamla sessioner vid serverstart, samma mönster som offert-papperskorgen
 const requireStaff = requireRole('Superadmin', 'Admin', 'Säljare'); // "ej Montör"
