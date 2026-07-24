@@ -323,6 +323,46 @@ app.post('/api/products/bulk', requireAuth, requireAdmin, async (req, res) => {
 app.delete('/api/products/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM products WHERE id = ?', [req.params.id], dbResult(res, 'Raderad!')));
 
 // ==========================================
+// KUNSKAPSBANK (informationskort med bilder/PDF:er om produkter och fakta)
+// ==========================================
+app.get('/api/knowledge-base', requireAuth, (req, res) => db.query('SELECT * FROM knowledge_base_articles ORDER BY updated_at DESC', (err, results) => res.json(results || [])));
+
+const kbUploadMiddleware = upload.fields([{ name: 'images', maxCount: 20 }, { name: 'pdfs', maxCount: 20 }]);
+
+app.post('/api/knowledge-base', requireAuth, requireStaff, (req, res) => {
+    kbUploadMiddleware(req, res, (err) => {
+        if (err) return res.status(400).json({ message: 'Uppladdningsfel' });
+        const { id, title, category, content, retained_images, retained_pdfs } = req.body;
+        if (!title || !title.trim()) return res.status(400).json({ message: 'Titel krävs.' });
+
+        const imageFiles = req.files && req.files['images'] ? req.files['images'] : [];
+        const pdfFiles = req.files && req.files['pdfs'] ? req.files['pdfs'] : [];
+
+        let finalImages = [];
+        try { finalImages = JSON.parse(retained_images || '[]'); } catch (e) {}
+        imageFiles.forEach(f => finalImages.push('/uploads/' + f.filename));
+
+        // PDF:er sparas med sitt ursprungliga filnamn (inte bara den slumpade filen på disk),
+        // så listan i kunskapsbanken kan visa ett läsbart namn istället för en teknisk sträng.
+        let finalPdfs = [];
+        try { finalPdfs = JSON.parse(retained_pdfs || '[]'); } catch (e) {}
+        pdfFiles.forEach(f => finalPdfs.push({ name: f.originalname, url: '/uploads/' + f.filename }));
+
+        if (id) {
+            db.query('UPDATE knowledge_base_articles SET title=?, category=?, content=?, images=?, pdfs=? WHERE id=?',
+                [title.trim(), category || null, content || '', JSON.stringify(finalImages), JSON.stringify(finalPdfs), id],
+                dbResult(res, 'Uppdaterat!'));
+        } else {
+            db.query('INSERT INTO knowledge_base_articles (title, category, content, images, pdfs) VALUES (?, ?, ?, ?, ?)',
+                [title.trim(), category || null, content || '', JSON.stringify(finalImages), JSON.stringify(finalPdfs)],
+                dbResult(res, 'Skapat!', result => ({ id: result.insertId })));
+        }
+    });
+});
+
+app.delete('/api/knowledge-base/:id', requireAuth, requireStaff, (req, res) => db.query('DELETE FROM knowledge_base_articles WHERE id = ?', [req.params.id], dbResult(res, 'Raderat!')));
+
+// ==========================================
 // RESTEN AV API:ER (BÄNKSKIVOR & OFFERTER - OFÖRÄNDRADE)
 // ==========================================
 app.get('/api/countertops/config', requireAuth, requireStaff, (req, res) => {

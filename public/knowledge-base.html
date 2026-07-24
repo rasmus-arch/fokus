@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kunskapsbank - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <div id="sidebar-container" class="shrink-0"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto p-4 md:p-6 lg:p-8 w-full max-w-full relative">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <div>
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Kunskapsbank</h2>
+                <p class="text-xs md:text-sm text-gray-500 mt-1">Informationskort med bilder, PDF:er och fakta om produkter och material</p>
+            </div>
+            <div id="adminActions" class="hidden">
+                <button onclick="openArticleModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
+                    <i class="fas fa-plus mr-2"></i> Nytt kort
+                </button>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap gap-3 mb-6 items-center">
+            <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Sök på titel eller innehåll..." class="px-3 py-2 border border-gray-300 rounded-md text-sm w-full sm:w-64">
+            <select id="catFilter" onchange="applyFilters()" class="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white">
+                <option value="">Alla kategorier</option>
+            </select>
+        </div>
+
+        <div id="articleGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+        <p id="emptyState" class="hidden text-center text-gray-400 text-sm mt-10">Inga kort hittades.</p>
+    </main>
+
+    <!-- Visningsmodal: bilder + PDF:er direkt på skärmen -->
+    <div id="viewModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div class="p-4 border-b border-gray-200 flex justify-between items-start shrink-0">
+                <div>
+                    <h3 id="viewTitle" class="font-bold text-gray-800 text-lg"></h3>
+                    <span id="viewCategory" class="inline-block mt-1 text-[10px] uppercase font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded"></span>
+                </div>
+                <button onclick="closeViewModal()" class="text-gray-400 hover:text-gray-600 text-xl leading-none"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                <p id="viewContent" class="text-sm text-gray-700 whitespace-pre-wrap"></p>
+                <div id="viewImages" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+                <div id="viewPdfs" class="space-y-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inbäddad PDF-visning (direkt på skärmen, ingen nedladdning krävs) -->
+    <div id="pdfViewerModal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-[60] p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full h-full max-w-5xl flex flex-col">
+            <div class="p-3 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <h4 id="pdfViewerTitle" class="font-semibold text-gray-800 text-sm truncate"></h4>
+                <button onclick="closePdfViewer()" class="text-gray-400 hover:text-gray-600 text-xl leading-none"><i class="fas fa-times"></i></button>
+            </div>
+            <iframe id="pdfViewerFrame" class="flex-1 w-full" src=""></iframe>
+        </div>
+    </div>
+
+    <!-- Redigeringsmodal (admin/säljare) -->
+    <div id="articleModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div class="p-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <h3 id="modalTitle" class="font-bold text-gray-800">Nytt kort</h3>
+                <button onclick="closeArticleModal()" class="text-gray-400 hover:text-gray-600 text-xl leading-none"><i class="fas fa-times"></i></button>
+            </div>
+            <form id="articleForm" class="flex-1 overflow-y-auto">
+                <div class="p-4 space-y-3">
+                    <input type="hidden" id="aId">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700">Titel*</label>
+                        <input type="text" id="aTitle" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700">Kategori</label>
+                        <input type="text" id="aCategory" list="catList" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                        <datalist id="catList"></datalist>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700">Innehåll / fakta</label>
+                        <textarea id="aContent" rows="6" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700">Bilder</label>
+                        <input type="file" id="aImages" multiple accept=".jpg,.jpeg,.png,.webp,.gif" class="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-gray-800 file:text-white hover:file:bg-gray-900">
+                        <div id="imagePreview" class="flex flex-wrap gap-2 mt-2"></div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700">PDF:er</label>
+                        <input type="file" id="aPdfs" multiple accept=".pdf" class="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-gray-800 file:text-white hover:file:bg-gray-900">
+                        <div id="pdfPreview" class="flex flex-col gap-1 mt-2"></div>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-gray-200 flex justify-end gap-2 shrink-0">
+                    <button type="button" onclick="closeArticleModal()" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Avbryt</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md text-sm font-medium shadow-sm">Spara</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/common.js"></script>
+    <script src="/menu.js"></script>
+    <script>
+        const userRole = localStorage.getItem('userRole');
+        const canEdit = userRole === 'Superadmin' || userRole === 'Admin' || userRole === 'Säljare';
+        if (canEdit) document.getElementById('adminActions').classList.remove('hidden');
+
+        let allArticles = [];
+        let currentImages = [];
+        let currentPdfs = [];
+
+        function parseJsonField(val, fallback) {
+            if (val === null || val === undefined || val === '') return fallback;
+            if (typeof val !== 'string') return val;
+            try { return JSON.parse(val); } catch (e) { return fallback; }
+        }
+
+        async function fetchArticles() {
+            try {
+                const res = await fetch('/api/knowledge-base');
+                allArticles = await res.json();
+                const cats = [...new Set(allArticles.map(a => a.category).filter(c => c))];
+                const catFilter = document.getElementById('catFilter');
+                const catList = document.getElementById('catList');
+                catFilter.innerHTML = '<option value="">Alla kategorier</option>';
+                catList.innerHTML = '';
+                cats.forEach(c => { catFilter.innerHTML += `<option value="${c}">${c}</option>`; catList.innerHTML += `<option value="${c}">`; });
+                applyFilters();
+            } catch (err) { console.error(err); }
+        }
+
+        function applyFilters() {
+            const term = document.getElementById('searchInput').value.toLowerCase();
+            const cat = document.getElementById('catFilter').value;
+            const filtered = allArticles.filter(a =>
+                (a.title.toLowerCase().includes(term) || (a.content || '').toLowerCase().includes(term)) &&
+                (cat === '' || a.category === cat)
+            );
+            renderGrid(filtered);
+        }
+
+        function renderGrid(articles) {
+            const grid = document.getElementById('articleGrid');
+            const empty = document.getElementById('emptyState');
+            grid.innerHTML = '';
+            empty.classList.toggle('hidden', articles.length > 0);
+
+            articles.forEach(a => {
+                const images = parseJsonField(a.images, []);
+                const pdfs = parseJsonField(a.pdfs, []);
+                const thumb = images[0]
+                    ? `<img src="${images[0]}" class="w-full h-36 object-cover rounded-t-lg">`
+                    : `<div class="w-full h-36 bg-gray-100 rounded-t-lg flex items-center justify-center text-gray-300 text-3xl"><i class="fas fa-book"></i></div>`;
+                const catBadge = a.category ? `<span class="inline-block text-[9px] uppercase font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded mb-1">${a.category}</span>` : '';
+                const pdfBadge = pdfs.length > 0 ? `<span class="text-[10px] text-gray-400"><i class="fas fa-file-pdf mr-1"></i>${pdfs.length}</span>` : '';
+                const imgBadge = images.length > 0 ? `<span class="text-[10px] text-gray-400"><i class="fas fa-image mr-1"></i>${images.length}</span>` : '';
+
+                const adminBtns = canEdit ? `
+                    <div class="flex gap-2 mt-2 pt-2 border-t border-gray-100">
+                        <button onclick="event.stopPropagation(); openArticleModal(${a.id})" class="text-xs text-gray-500 hover:text-blue-600"><i class="fas fa-pen mr-1"></i>Redigera</button>
+                        <button onclick="event.stopPropagation(); deleteArticle(${a.id})" class="text-xs text-gray-500 hover:text-red-600"><i class="fas fa-trash mr-1"></i>Radera</button>
+                    </div>` : '';
+
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition cursor-pointer flex flex-col';
+                card.onclick = () => openViewModal(a.id);
+                card.innerHTML = `
+                    ${thumb}
+                    <div class="p-3 flex-1 flex flex-col">
+                        ${catBadge}
+                        <h4 class="font-semibold text-gray-800 text-sm leading-snug">${a.title}</h4>
+                        <p class="text-xs text-gray-500 mt-1 line-clamp-2 flex-1">${(a.content || '').slice(0, 100)}</p>
+                        <div class="flex gap-3 mt-2">${imgBadge}${pdfBadge}</div>
+                        ${adminBtns}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function openViewModal(id) {
+            const a = allArticles.find(x => x.id === id);
+            if (!a) return;
+            const images = parseJsonField(a.images, []);
+            const pdfs = parseJsonField(a.pdfs, []);
+
+            document.getElementById('viewTitle').innerText = a.title;
+            const catEl = document.getElementById('viewCategory');
+            if (a.category) { catEl.innerText = a.category; catEl.classList.remove('hidden'); } else { catEl.classList.add('hidden'); }
+            document.getElementById('viewContent').innerText = a.content || '';
+
+            const imagesContainer = document.getElementById('viewImages');
+            imagesContainer.innerHTML = images.map(url => `<img src="${url}" class="w-full h-32 object-cover rounded border border-gray-200 cursor-pointer" onclick="window.open('${url}', '_blank')">`).join('');
+
+            const pdfsContainer = document.getElementById('viewPdfs');
+            pdfsContainer.innerHTML = pdfs.map(p => `
+                <button type="button" onclick="openPdfViewer('${p.url}', '${(p.name || 'Dokument').replace(/'/g, "\\'")}')" class="w-full flex items-center gap-2 text-left px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded border border-gray-200 text-sm text-gray-700">
+                    <i class="fas fa-file-pdf text-red-500"></i> ${p.name || 'Dokument.pdf'}
+                </button>
+            `).join('');
+
+            document.getElementById('viewModal').classList.remove('hidden');
+        }
+        function closeViewModal() { document.getElementById('viewModal').classList.add('hidden'); }
+
+        function openPdfViewer(url, name) {
+            document.getElementById('pdfViewerTitle').innerText = name;
+            document.getElementById('pdfViewerFrame').src = url;
+            document.getElementById('pdfViewerModal').classList.remove('hidden');
+        }
+        function closePdfViewer() {
+            document.getElementById('pdfViewerModal').classList.add('hidden');
+            document.getElementById('pdfViewerFrame').src = '';
+        }
+
+        function removeImage(idx) { currentImages.splice(idx, 1); renderImagePreview(); }
+        function renderImagePreview() {
+            const container = document.getElementById('imagePreview');
+            container.innerHTML = '';
+            currentImages.forEach((url, idx) => {
+                container.innerHTML += `<div class="relative inline-block border border-gray-200 rounded p-1 bg-white shadow-sm"><img src="${url}" class="w-12 h-12 object-contain"><button type="button" onclick="removeImage(${idx})" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] hover:bg-red-600 shadow-md"><i class="fas fa-times"></i></button></div>`;
+            });
+        }
+
+        function removePdf(idx) { currentPdfs.splice(idx, 1); renderPdfPreview(); }
+        function renderPdfPreview() {
+            const container = document.getElementById('pdfPreview');
+            container.innerHTML = '';
+            currentPdfs.forEach((p, idx) => {
+                container.innerHTML += `<div class="flex items-center justify-between border border-gray-200 rounded px-2 py-1 bg-white text-xs"><span><i class="fas fa-file-pdf text-red-500 mr-1"></i>${p.name}</span><button type="button" onclick="removePdf(${idx})" class="text-gray-400 hover:text-red-600"><i class="fas fa-times"></i></button></div>`;
+            });
+        }
+
+        function openArticleModal(id) {
+            document.getElementById('articleForm').reset();
+            currentImages = [];
+            currentPdfs = [];
+            if (id) {
+                const a = allArticles.find(x => x.id === id);
+                if (!a) return;
+                document.getElementById('modalTitle').innerText = 'Redigera kort';
+                document.getElementById('aId').value = a.id;
+                document.getElementById('aTitle').value = a.title;
+                document.getElementById('aCategory').value = a.category || '';
+                document.getElementById('aContent').value = a.content || '';
+                currentImages = parseJsonField(a.images, []);
+                currentPdfs = parseJsonField(a.pdfs, []);
+            } else {
+                document.getElementById('modalTitle').innerText = 'Nytt kort';
+                document.getElementById('aId').value = '';
+            }
+            renderImagePreview();
+            renderPdfPreview();
+            document.getElementById('articleModal').classList.remove('hidden');
+        }
+        function closeArticleModal() { document.getElementById('articleModal').classList.add('hidden'); }
+
+        document.getElementById('articleForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('id', document.getElementById('aId').value);
+            formData.append('title', document.getElementById('aTitle').value);
+            formData.append('category', document.getElementById('aCategory').value);
+            formData.append('content', document.getElementById('aContent').value);
+            formData.append('retained_images', JSON.stringify(currentImages));
+            formData.append('retained_pdfs', JSON.stringify(currentPdfs));
+
+            const imgFiles = document.getElementById('aImages').files;
+            for (let i = 0; i < imgFiles.length; i++) formData.append('images', imgFiles[i]);
+            const pdfFiles = document.getElementById('aPdfs').files;
+            for (let i = 0; i < pdfFiles.length; i++) formData.append('pdfs', pdfFiles[i]);
+
+            try {
+                const res = await fetch('/api/knowledge-base', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (res.ok) { closeArticleModal(); fetchArticles(); }
+                else alert(data.message || 'Kunde inte spara.');
+            } catch (err) { console.error(err); alert('Kunde inte spara.'); }
+        });
+
+        function deleteArticle(id) {
+            confirmAndDelete('Radera det här kortet permanent?', `/api/knowledge-base/${id}`, fetchArticles);
+        }
+
+        fetchArticles();
+    </script>
+</body>
+</html>
