@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { hashPassword, verifyPassword, initSessions } = require('./lib/auth.js');
 const db = require('./lib/db.js');
 const { upload, uploadDir } = require('./lib/upload.js');
-const { htmlToPdfmakeNodes, buildPdfImageCell, downloadExternalImage } = require('./lib/pdfHelpers.js');
+const { htmlToPdfmakeNodes, buildPdfImageCell, buildPdfHeroImageBlock, downloadExternalImage } = require('./lib/pdfHelpers.js');
 
 let PdfPrinter = null;
 try {
@@ -441,9 +441,9 @@ app.put('/api/quotes/:id/status', requireAuth, requireStaff, (req, res) => {
     } else db.query('UPDATE quotes SET status = ?, installer_id = ? WHERE id = ?', [status, installer_id || null, quoteId], () => res.json({message: 'Uppdaterad!'}));
 });
 app.put('/api/quotes/:id', requireAuth, requireStaff, (req, res) => {
-    const { quoteCart, selectedConditions, kitchenSpecs, extraFees, globalDiscount, discountType, useRot, internal_comment, public_comment } = req.body;
-    db.query('UPDATE quotes SET global_discount = ?, discount_type = ?, quote_data = ?, internal_comment = ?, public_comment = ? WHERE id = ?', 
-        [globalDiscount || 0, discountType || '%', JSON.stringify({ selectedConditions, kitchenSpecs, extraFees, quoteCart, useRot }), internal_comment || null, public_comment || null, req.params.id], (err) => {
+    const { quoteCart, selectedConditions, kitchenSpecs, extraFees, globalDiscount, discountType, useRot, internal_comment, public_comment, coverPage } = req.body;
+    db.query('UPDATE quotes SET global_discount = ?, discount_type = ?, quote_data = ?, internal_comment = ?, public_comment = ? WHERE id = ?',
+        [globalDiscount || 0, discountType || '%', JSON.stringify({ selectedConditions, kitchenSpecs, extraFees, quoteCart, useRot, coverPage }), internal_comment || null, public_comment || null, req.params.id], (err) => {
         if (err) return res.status(500).json({ message: "Fel vid sparning." });
         db.query('DELETE FROM quote_items WHERE quote_id = ?', [req.params.id], () => {
             if (!quoteCart || quoteCart.length === 0) return res.json({ message: 'Offerten har sparats.' });
@@ -451,6 +451,13 @@ app.put('/api/quotes/:id', requireAuth, requireStaff, (req, res) => {
             db.query('INSERT INTO quote_items (quote_id, product_id, sku, name, price_inc_vat, install_inc_vat, qty, is_free_text) VALUES ?', [values], () => res.json({ message: 'Offerten har sparats framgångsrikt!' }));
         });
     });
+});
+// Laddar upp en bild till offertens försättsblad (hero/handtag/modell/färg). Filen sparas
+// bara på disk och URL:en returneras - själva kopplingen till vilken offert/vilket "slot"
+// den hör till sparas i quotes.quote_data.coverPage via den vanliga auto-spara-PUT:en.
+app.post('/api/quotes/:id/cover-image', requireAuth, requireStaff, upload.single('image'), (req, res) => {
+    if (!req.file) return res.status(400).json({ message: 'Ingen bild bifogad.' });
+    res.json({ url: '/uploads/' + req.file.filename });
 });
 app.post('/api/quotes/:id/duplicate', requireAuth, requireStaff, (req, res) => {
     db.query('SELECT * FROM quotes WHERE id = ?', [req.params.id], (err, quoteResults) => {
@@ -471,6 +478,80 @@ app.post('/api/orders/:id/files', requireAuth, upload.single('file'), (req, res)
     const fileType = ['.jpg', '.jpeg', '.png', '.heic', '.gif'].includes(path.extname(req.file.originalname).toLowerCase()) ? 'image' : 'document';
     db.query('INSERT INTO order_files (quote_id, file_name, file_url, file_type, uploaded_by) VALUES (?,?,?,?,?)', [req.params.id, req.file.originalname, '/uploads/' + req.file.filename, fileType, req.body.user_id || null], dbResult(res, 'Fil uppladdad!'));
 });
+// ==========================================
+// STÄDA OANVÄNDA UPPLADDNINGAR (public/uploads)
+// ==========================================
+// Ingenting raderas automatiskt av sig själv. En raderad produkt/bänkskivefärg/offert
+// lämnar kvar sin uppladdade bildfil på disk (ingen kod rensar den idag), och listan växer
+// därför långsamt över tid. Detta är ett medvetet tvåstegsverktyg: /scan returnerar bara en
+// lista att granska, /cleanup raderar bara EXAKT de filnamn admin bekräftat - och
+// återverifierar varje filnamn mot databasen precis innan radering (aldrig admins lista blint),
+// samt hoppar alltid över filer nyare än 15 minuter för att aldrig träffa en fil som just
+// laddats upp men vars databaspost inte hunnit sparas än (t.ex. försättsbladsbilder som
+// laddas upp direkt men bara kopplas till offerten vid nästa auto-spara).
+const dbP = db.promise();
+async function findOrphanedUploads() {
+    const [[companyRow], products, colors, quotes, orderFiles] = await Promise.all([
+        dbP.query('SELECT logo_url FROM company_settings WHERE id = 1').then(r => r[0]),
+        dbP.query('SELECT image_url, gallery FROM products').then(r => r[0]),
+        dbP.query('SELECT image_url FROM countertop_colors').then(r => r[0]),
+        dbP.query('SELECT quote_data FROM quotes').then(r => r[0]),
+        dbP.query('SELECT file_url FROM order_files').then(r => r[0])
+    ]);
+    const referenced = new Set();
+    const addUrl = (u) => { if (u && typeof u === 'string' && u.includes('/uploads/')) referenced.add(path.basename(u.split('?')[0])); };
+    addUrl(companyRow && companyRow.logo_url);
+    products.forEach(p => {
+        addUrl(p.image_url);
+        try { (JSON.parse(p.gallery || '[]') || []).forEach(addUrl); } catch (e) {}
+    });
+    colors.forEach(c => addUrl(c.image_url));
+    orderFiles.forEach(f => addUrl(f.file_url));
+    quotes.forEach(q => {
+        if (!q.quote_data) return;
+        const matches = q.quote_data.match(/\/uploads\/[a-zA-Z0-9._-]+/g);
+        if (matches) matches.forEach(addUrl);
+    });
+
+    const files = fs.readdirSync(uploadDir);
+    const now = Date.now();
+    const SAFETY_MS = 15 * 60 * 1000;
+    return files
+        .filter(filename => !referenced.has(filename))
+        .map(filename => {
+            const stat = fs.statSync(path.join(uploadDir, filename));
+            return { filename, url: '/uploads/' + filename, size: stat.size, mtime: stat.mtime, tooRecent: (now - stat.mtimeMs) < SAFETY_MS };
+        })
+        .sort((a, b) => a.mtime - b.mtime);
+}
+
+app.get('/api/maintenance/uploads-scan', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const orphaned = await findOrphanedUploads();
+        res.json({ orphaned });
+    } catch (e) { res.status(500).json({ message: 'Kunde inte skanna uppladdningar: ' + e.message }); }
+});
+
+app.post('/api/maintenance/uploads-cleanup', requireAuth, requireAdmin, async (req, res) => {
+    const requested = Array.isArray(req.body.filenames) ? req.body.filenames : [];
+    if (requested.length === 0) return res.status(400).json({ message: 'Inga filer valda.' });
+    try {
+        // Skannar på nytt precis innan radering - listan admin klickade på kan vara några
+        // sekunder gammal, och en fil kan under tiden ha blivit kopplad till något (eller
+        // inte längre finnas). Raderar aldrig något som inte klarar en färsk kontroll.
+        const freshOrphaned = await findOrphanedUploads();
+        const stillOrphaned = new Set(freshOrphaned.filter(f => !f.tooRecent).map(f => f.filename));
+        const deleted = []; const skipped = [];
+        requested.forEach(filename => {
+            const safe = path.basename(filename);
+            if (safe !== filename || !stillOrphaned.has(filename)) { skipped.push(filename); return; }
+            try { fs.unlinkSync(path.join(uploadDir, filename)); deleted.push(filename); }
+            catch (e) { skipped.push(filename); }
+        });
+        res.json({ message: `${deleted.length} fil(er) raderade${skipped.length ? `, ${skipped.length} hoppades över` : ''}.`, deleted, skipped });
+    } catch (e) { res.status(500).json({ message: 'Kunde inte rensa uppladdningar: ' + e.message }); }
+});
+
 app.delete('/api/orders/files/:fileId', requireAuth, (req, res) => {
     db.query('SELECT file_url FROM order_files WHERE id = ?', [req.params.fileId], (err, results) => {
         if (err) return res.status(500).json({ message: err.message });
@@ -561,8 +642,8 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
     db.query('SELECT q.*, c.name as customer_name, c.address, c.address2, c.apartment_number, c.brf_org_nr, c.property_designation, c.email, c.phone, c.personnummer FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?', [req.params.id], (err, results) => {
         if (err || results.length === 0) return res.status(404).send('Hittades inte');
         const order = results[0];
-        let cart = []; let specs = {}; let selectedConditions = {}; let extraFees = {}; let useRot = true;
-        if (order.quote_data) { try { const parsed = JSON.parse(order.quote_data); if (parsed.quoteCart) cart = parsed.quoteCart; if (parsed.kitchenSpecs) specs = parsed.kitchenSpecs; if (parsed.selectedConditions) selectedConditions = parsed.selectedConditions; if (parsed.extraFees) extraFees = parsed.extraFees; if (parsed.useRot !== undefined) useRot = parsed.useRot; } catch(e) {} }
+        let cart = []; let specs = {}; let selectedConditions = {}; let extraFees = {}; let useRot = true; let coverPage = null;
+        if (order.quote_data) { try { const parsed = JSON.parse(order.quote_data); if (parsed.quoteCart) cart = parsed.quoteCart; if (parsed.kitchenSpecs) specs = parsed.kitchenSpecs; if (parsed.selectedConditions) selectedConditions = parsed.selectedConditions; if (parsed.extraFees) extraFees = parsed.extraFees; if (parsed.useRot !== undefined) useRot = parsed.useRot; if (parsed.coverPage) coverPage = parsed.coverPage; } catch(e) {} }
         const isOrder = order.status === 'Order'; const docTitle = isOrder ? 'KÖPEAVTAL' : 'OFFERT'; const dateStr = new Date(order.created_at).toLocaleDateString('sv-SE');
 
         db.query('SELECT * FROM company_settings WHERE id = 1', (err0, companyRes) => {
@@ -575,7 +656,14 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             const logoPath = path.join(__dirname, 'public', company.logo_url.replace(/^\/?(public\/)?/, ''));
             if (fs.existsSync(logoPath)) { const ext = path.extname(logoPath).toLowerCase(); const mime = ext === '.png' ? 'image/png' : 'image/jpeg'; headerLeftBlock = { image: `data:${mime};base64,${fs.readFileSync(logoPath).toString('base64')}`, width: 140 }; }
             let ytbehandling = extraFees.colorSelect || '-'; if (extraFees.colorSelect === 'Valfri NCS-kod' && extraFees.colorCustom) ytbehandling = `NCS: ${extraFees.colorCustom}`;
-            const tableBody = [ [{ text: '', style: 'th', alignment: 'center' }, { text: 'Artikel / Beskrivning', style: 'th' }, { text: 'Antal', style: 'th', alignment: 'center' }] ];
+            // OFFERT ska kännas säljande (färg, större bilder, framhävd totalsumma) medan
+            // KÖPEAVTAL avsiktligt behåller sitt nuktrala, avtalsmässiga utseende oförändrat.
+            // Färgerna är konfigurerbara under Företagsinfo (hämtade från loggan som standard).
+            const accentColor = company.pdf_color_primary || '#2E5339';
+            const goldColor = company.pdf_color_accent || '#E8A33D';
+            const thStyle = isOrder ? 'th' : 'thOffer';
+            const imgSize = isOrder ? 45 : 68;
+            const tableBody = [ [{ text: '', style: thStyle, alignment: 'center' }, { text: 'Artikel / Beskrivning', style: thStyle }, { text: 'Antal', style: thStyle, alignment: 'center' }] ];
         
         db.query('SELECT id, sku, image_url FROM products', async (err, dbProducts) => {
             if (err) dbProducts = [];
@@ -587,10 +675,10 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
                 let pdfImageCell;
                 if (item.colorId) {
                     const dbColor = dbColors.find(c => c.id == item.colorId);
-                    pdfImageCell = await buildPdfImageCell(dbColor ? dbColor.image_url : null);
+                    pdfImageCell = await buildPdfImageCell(dbColor ? dbColor.image_url : null, imgSize);
                 } else {
                     const dbProd = dbProducts.find(p => p.sku === item.sku || p.id == item.id);
-                    pdfImageCell = await buildPdfImageCell(dbProd ? dbProd.image_url : null);
+                    pdfImageCell = await buildPdfImageCell(dbProd ? dbProd.image_url : null, imgSize);
                 }
                 tableBody.push([ pdfImageCell, [{ text: item.name, bold: true, color: '#000000', margin: [0, 5] }, { text: `Art.nr: ${item.sku}`, fontSize: 8, color: '#444444' }], { text: item.qty.toString(), alignment: 'center', margin: [0, 15], color: '#000000' } ]);
             }
@@ -615,17 +703,61 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             let totalMaterialIncVat = Math.max(0, totalMaterialBeforeGlobalDiscount - globalDiscountAmount);
             const rotDeduction = useRot ? (totalRotInstallIncVat * 0.30) : 0; const totalAssemblyCost = totalRotInstallIncVat + totalNonRotInstallIncVat; const finalToPay = totalMaterialIncVat + totalAssemblyCost - rotDeduction;
 
+            // Totalsumma-raderna: på köpeavtalet visas "Totalt att betala" som sista raden i
+            // den vanliga tabellen precis som förut. På offerten lyfts den istället ut som en
+            // egen färgad totalsumma-banner nedanför, så tabellen slutar på "Summa montering...".
+            const totalsRows = [
+                [ { text: 'Produktkostnad innan rabatt:', color: '#000000' }, { text: totalMaterialBeforeGlobalDiscount.toLocaleString('sv-SE') + ' kr', alignment: 'right', color: '#000000' } ],
+                [ { text: 'Rabatt:', color: '#000000' }, { text: `- ${globalDiscountAmount.toLocaleString('sv-SE')} kr`, alignment: 'right', color: '#000000' } ],
+                [ { text: 'Summa produktkostnad:', bold: true, color: '#000000' }, { text: totalMaterialIncVat.toLocaleString('sv-SE') + ' kr', alignment: 'right', bold: true, color: '#000000' } ],
+                [ { text: 'Rot-berättigad monteringskostnad:', color: '#000000' }, { text: totalRotInstallIncVat.toLocaleString('sv-SE') + ' kr', alignment: 'right', color: '#000000' } ],
+                [ { text: 'ROT-avdrag (30%):', color: '#000000' }, { text: useRot ? `- ${rotDeduction.toLocaleString('sv-SE')} kr` : '0 kr', alignment: 'right', color: '#000000' } ],
+                [ { text: 'Summa montering efter rotavdrag:', bold: true, color: '#000000' }, { text: (totalAssemblyCost - rotDeduction).toLocaleString('sv-SE') + ' kr', alignment: 'right', bold: true, color: '#000000' } ]
+            ];
+            if (isOrder) totalsRows.push([ { text: 'Totalt att betala:', fontSize: 12, bold: true, color: '#000000' }, { text: finalToPay.toLocaleString('sv-SE') + ' kr', fontSize: 12, bold: true, alignment: 'right', color: '#000000' } ]);
+
+            // Valfritt försättsblad, bara för OFFERT: stor logga, en säljande rubrik, en
+            // hero-bild (t.ex. ritningen på köket) och en rad med bilder på handtag/modell/
+            // bänkskiva/färg. Bänkskivans bild hämtas automatiskt från vald bänkskivefärg i
+            // korgen - övriga tre laddas upp manuellt av säljaren i offertbyggaren.
+            let coverPageContent = [];
+            if (!isOrder && coverPage && coverPage.enabled) {
+                const coverLogoBlock = headerLeftBlock.image ? { image: headerLeftBlock.image, width: 260, alignment: 'center' } : { text: companyName, fontSize: 34, bold: true, color: accentColor, alignment: 'center' };
+                const heroBlock = await buildPdfHeroImageBlock(coverPage.heroImage, 480, 300);
+                const handleCell = await buildPdfImageCell(coverPage.handleImage, 90);
+                const modelCell = await buildPdfImageCell(coverPage.modelImage, 90);
+                const colorCell = await buildPdfImageCell(coverPage.colorImage, 90);
+                const countertopItem = cart.find(i => i.colorId);
+                const autoCountertopUrl = countertopItem ? (dbColors.find(c => c.id == countertopItem.colorId) || {}).image_url : null;
+                const countertopCell = await buildPdfImageCell(autoCountertopUrl, 90);
+
+                const galleryCol = (cell, label) => ({ width: '*', stack: [ (cell && cell.image) ? cell : { text: 'Bild saknas', italics: true, color: '#aaaaaa', fontSize: 8, alignment: 'center', margin: [0, 35, 0, 35] }, { text: label, alignment: 'center', fontSize: 9, bold: true, color: '#444444', margin: [0, 4, 0, 0] } ] });
+
+                coverPageContent = [
+                    { text: '', margin: [0, 30, 0, 0] },
+                    coverLogoBlock,
+                    { text: `Offert till ${order.customer_name || ''}`, fontSize: 24, bold: true, color: accentColor, alignment: 'center', margin: [0, 25, 0, 6] },
+                    { canvas: [{ type: 'line', x1: 200, y1: 0, x2: 315, y2: 0, lineWidth: 2, lineColor: goldColor }], margin: [0, 0, 0, 30] },
+                    ...(heroBlock ? [{ ...heroBlock, margin: [0, 0, 0, 30] }] : []),
+                    { columns: [ galleryCol(handleCell, 'Handtag'), galleryCol(modelCell, 'Modell'), galleryCol(countertopCell, 'Bänkskiva'), galleryCol(colorCell, 'Färg') ], columnGap: 15 },
+                    { text: '', pageBreak: 'after' }
+                ];
+            }
+
             const docDefinition = {
                 defaultStyle: { font: 'Helvetica', fontSize: 10, color: '#000000' },
                 footer: { text: `${companyName} - Org.nr ${company.org_number || '-'} - Registrerat för moms och F-skatt`, alignment: 'center', fontSize: 8, color: '#666666', margin: [40, 10, 40, 0] },
                 content: [
-                    { columns: [ headerLeftBlock, { text: [ { text: docTitle + '\n', fontSize: 22, bold: true, color: '#000000' }, order.order_number ? { text: `Ordernr: ${order.order_number}`, fontSize: 11, color: '#444444' } : '' ], alignment: 'right', margin: [0, 10, 0, 0] } ] },
-                    { canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 1, lineColor: '#000000' }], margin: [0, 15, 0, 20] },
+                    ...coverPageContent,
+                    { columns: [ headerLeftBlock, { text: [ { text: docTitle + '\n', fontSize: 22, bold: true, color: isOrder ? '#000000' : accentColor }, order.order_number ? { text: `Ordernr: ${order.order_number}`, fontSize: 11, color: '#444444' } : '' ], alignment: 'right', margin: [0, 10, 0, 0] } ] },
+                    { canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 1, lineColor: isOrder ? '#000000' : accentColor }], margin: [0, 15, 0, isOrder ? 20 : 10] },
+                    ...(!isOrder ? [{ text: `Tack för att du valt ${companyName}! Nedan hittar du vårt förslag på ditt nya kök, framtaget speciellt för dig.`, italics: true, color: '#555555', fontSize: 10, margin: [0, 0, 0, 15] }] : []),
                     { columns: [ { width: '*', text: [ {text: 'KUNDUPPGIFTER\n', bold: true, color: '#000000', fontSize: 11}, `Namn: ${order.customer_name || '-'}\n`, `Pers.nr: ${order.personnummer || '-'}\n`, `Adress: ${order.address || '-'}\n`, order.address2 ? `Adress 2: ${order.address2}\n` : '', order.apartment_number ? `Lgh.nr: ${order.apartment_number}\n` : '', order.brf_org_nr ? `BRF Org.nr: ${order.brf_org_nr}\n` : '', order.property_designation ? `Fastighetsbet: ${order.property_designation}\n` : '', `Telefon: ${order.phone || '-'}\nE-post: ${order.email || '-'}` ]}, { width: '*', text: [ {text: 'DATUM\n', bold: true, color: '#000000', fontSize: 11}, dateStr ]}, { width: '*', text: [ {text: 'SPECIFIKATION\n', bold: true, color: '#000000', fontSize: 11}, `Bänkskiva: ${specs.material || '-'} (${specs.color || '-'}) \nLucka: ${specs.door || '-'}\nYtbehandling: ${ytbehandling}` ]} ], columnGap: 20, margin: [0, 0, 0, 30] },
-                    { text: 'PRODUKTER, MATERIAL & VALDA TJÄNSTER', bold: true, color: '#000000', margin: [0, 0, 0, 8] },
-                    { table: { headerRows: 1, widths: [50, '*', 40], body: tableBody }, layout: 'lightHorizontalLines' },
-                    { columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 40, 0, 0], table: { widths: ['*', 'auto'], body: [ [ { text: 'Produktkostnad innan rabatt:', color: '#000000' }, { text: totalMaterialBeforeGlobalDiscount.toLocaleString('sv-SE') + ' kr', alignment: 'right', color: '#000000' } ], [ { text: 'Rabatt:', color: '#000000' }, { text: `- ${globalDiscountAmount.toLocaleString('sv-SE')} kr`, alignment: 'right', color: '#000000' } ], [ { text: 'Summa produktkostnad:', bold: true, color: '#000000' }, { text: totalMaterialIncVat.toLocaleString('sv-SE') + ' kr', alignment: 'right', bold: true, color: '#000000' } ], [ { text: 'Rot-berättigad monteringskostnad:', color: '#000000' }, { text: totalRotInstallIncVat.toLocaleString('sv-SE') + ' kr', alignment: 'right', color: '#000000' } ], [ { text: 'ROT-avdrag (30%):', color: '#000000' }, { text: useRot ? `- ${rotDeduction.toLocaleString('sv-SE')} kr` : '0 kr', alignment: 'right', color: '#000000' } ], [ { text: 'Summa montering efter rotavdrag:', bold: true, color: '#000000' }, { text: (totalAssemblyCost - rotDeduction).toLocaleString('sv-SE') + ' kr', alignment: 'right', bold: true, color: '#000000' } ], [ { text: 'Totalt att betala:', fontSize: 12, bold: true, color: '#000000' }, { text: finalToPay.toLocaleString('sv-SE') + ' kr', fontSize: 12, bold: true, alignment: 'right', color: '#000000' } ] ] }, layout: 'noBorders' } ] }
-                ], styles: { th: { bold: true, fillColor: '#000000', color: '#ffffff', padding: 6 } }
+                    { text: 'PRODUKTER, MATERIAL & VALDA TJÄNSTER', bold: true, color: isOrder ? '#000000' : accentColor, margin: [0, 0, 0, 8] },
+                    { table: { headerRows: 1, widths: [isOrder ? 50 : imgSize + 5, '*', 40], body: tableBody }, layout: 'lightHorizontalLines' },
+                    { columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 40, 0, 0], table: { widths: ['*', 'auto'], body: totalsRows }, layout: 'noBorders' } ] },
+                    ...(!isOrder ? [{ columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 8, 0, 0], table: { widths: ['*', 'auto'], body: [ [ { text: 'Totalt att betala:', fontSize: 13, bold: true, color: '#ffffff', margin: [10, 10, 0, 10] }, { text: finalToPay.toLocaleString('sv-SE') + ' kr', fontSize: 13, bold: true, alignment: 'right', color: '#ffffff', margin: [0, 10, 10, 10] } ] ] }, layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => accentColor } } ] }] : [])
+                ], styles: { th: { bold: true, fillColor: '#000000', color: '#ffffff', padding: 6 }, thOffer: { bold: true, fillColor: accentColor, color: '#ffffff', padding: 6 } }
             };
 
             const termsText = order.public_comment || company.agreement_text || '';
@@ -710,14 +842,14 @@ app.post('/api/suppliers/:id/recalculate', requireAuth, requireAdmin, (req, res)
 // listas kolumnerna explicit (INTE "SELECT *") så känsliga fält som webhook_token aldrig
 // läcker ut till en icke-inloggad besökare.
 app.get('/api/settings', (req, res) => {
-    db.query('SELECT company_name, org_number, logo_url, address, phone, email, agreement_text, vat_rate FROM company_settings WHERE id = 1', (err, results) => {
+    db.query('SELECT company_name, org_number, logo_url, address, phone, email, agreement_text, vat_rate, pdf_color_primary, pdf_color_accent FROM company_settings WHERE id = 1', (err, results) => {
         res.json(results && results.length > 0 ? results[0] : {});
     });
 });
 app.put('/api/settings', requireAuth, requireAdmin, upload.single('logo'), (req, res) => {
-    const { company_name, org_number, address, phone, email, agreement_text, vat_rate } = req.body;
-    let sql = 'UPDATE company_settings SET company_name=?, org_number=?, address=?, phone=?, email=?, agreement_text=?, vat_rate=?';
-    let params = [company_name || '', org_number || '', address || '', phone || '', email || '', agreement_text || '', (vat_rate !== undefined && vat_rate !== '') ? parseFloat(vat_rate) : 25.00];
+    const { company_name, org_number, address, phone, email, agreement_text, vat_rate, pdf_color_primary, pdf_color_accent } = req.body;
+    let sql = 'UPDATE company_settings SET company_name=?, org_number=?, address=?, phone=?, email=?, agreement_text=?, vat_rate=?, pdf_color_primary=?, pdf_color_accent=?';
+    let params = [company_name || '', org_number || '', address || '', phone || '', email || '', agreement_text || '', (vat_rate !== undefined && vat_rate !== '') ? parseFloat(vat_rate) : 25.00, pdf_color_primary || '#2E5339', pdf_color_accent || '#E8A33D'];
     if (req.file) { sql += ', logo_url=?'; params.push('/uploads/' + req.file.filename); }
     sql += ' WHERE id=1';
     db.query(sql, params, dbResult(res, 'Företagsinformation sparad!'));

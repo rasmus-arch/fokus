@@ -99,7 +99,7 @@
                         <div id="condWrapper" class="px-3 md:px-4 pb-3 md:pb-4">
                             <div class="overflow-x-auto w-full mb-4">
                                 <table class="w-full text-xs text-left min-w-[380px]">
-                                    <thead><tr class="text-gray-500 border-b border-gray-200"><th class="pb-2 font-medium w-5/12">Moment</th><th class="pb-2 font-medium text-center w-2/12">Antal</th><th class="pb-2 font-medium text-center w-2/12">K-Kök</th><th class="pb-2 font-medium text-center w-2/12">Kund</th><th class="pb-2 font-medium text-right w-2/12">Pris</th></tr></thead>
+                                    <thead><tr class="text-gray-500 border-b border-gray-200"><th class="pb-2 font-medium w-5/12">Moment</th><th class="pb-2 font-medium text-center w-2/12">Antal</th><th class="pb-2 font-medium text-center w-2/12"><span data-company-name>K-Kök</span></th><th class="pb-2 font-medium text-center w-2/12">Kund</th><th class="pb-2 font-medium text-right w-2/12">Pris</th></tr></thead>
                                     <tbody id="conditionsBody" class="text-gray-700"></tbody>
                                 </table>
                             </div>
@@ -109,7 +109,7 @@
                                     <div class="grid grid-cols-2 gap-2 md:gap-3 pt-1">
                                         <div><label class="block text-[10px] text-gray-400 uppercase">Material</label><input type="number" id="startFeeProduct" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-gray-800"></div>
                                         <div><label class="block text-[10px] text-gray-400 uppercase">Montage (Ej ROT)</label><input type="number" id="startFeeNonRot" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-gray-800"></div>
-                                        <div><label class="block text-[10px] text-blue-500 uppercase">ROT (K-kök)</label><input type="number" id="startFeeRotComp" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-blue-200 bg-blue-50 rounded text-blue-800"></div>
+                                        <div><label class="block text-[10px] text-blue-500 uppercase">ROT (<span data-company-name>K-kök</span>)</label><input type="number" id="startFeeRotComp" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-blue-200 bg-blue-50 rounded text-blue-800"></div>
                                         <div><label class="block text-[10px] text-purple-500 uppercase">ROT (Montör)</label><input type="number" id="startFeeRotInst" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-purple-200 bg-purple-50 rounded text-purple-800"></div>
                                     </div>
                                 </div>
@@ -138,6 +138,48 @@
                         </div>
                     </div>
 
+                    <div class="p-3 md:p-4 bg-white border-t border-gray-200 shrink-0">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-semibold text-gray-800 text-xs md:text-sm"><i class="fas fa-images text-blue-600 mr-2"></i> Försättsblad (OFFERT)</h4>
+                            <label class="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+                                <input type="checkbox" id="coverPageEnabled" onchange="toggleCoverPageUI(); scheduleAutoSave()" class="w-3.5 h-3.5 rounded border-gray-300 text-blue-600">
+                                Inkludera
+                            </label>
+                        </div>
+                        <div id="coverPageFields" class="hidden space-y-3">
+                            <p class="text-[10px] text-gray-400">Läggs som en extra försättssida längst fram i OFFERT-PDF:en (visas inte på köpeavtalet).</p>
+                            <div>
+                                <label class="block text-[10px] text-gray-400 uppercase mb-1">Hero-bild (t.ex. ritning på köket)</label>
+                                <div class="flex items-center gap-2">
+                                    <img id="coverHeroPreview" class="hidden w-14 h-14 object-cover rounded border border-gray-200 shrink-0">
+                                    <input type="file" accept="image/*" onchange="uploadCoverImage('hero', this)" class="text-[11px] flex-1 min-w-0">
+                                    <button type="button" onclick="removeCoverImage('hero')" id="coverHeroRemoveBtn" class="hidden text-red-400 hover:text-red-600 shrink-0"><i class="fas fa-times"></i></button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div>
+                                    <label class="block text-[10px] text-gray-400 uppercase mb-1">Handtag</label>
+                                    <img id="coverHandlePreview" class="hidden w-full h-12 object-cover rounded border border-gray-200 mb-1">
+                                    <input type="file" accept="image/*" onchange="uploadCoverImage('handle', this)" class="text-[10px] w-full">
+                                    <button type="button" onclick="removeCoverImage('handle')" id="coverHandleRemoveBtn" class="hidden text-red-400 hover:text-red-600 text-[10px] mt-0.5"><i class="fas fa-times"></i> Ta bort</button>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-gray-400 uppercase mb-1">Modell</label>
+                                    <img id="coverModelPreview" class="hidden w-full h-12 object-cover rounded border border-gray-200 mb-1">
+                                    <input type="file" accept="image/*" onchange="uploadCoverImage('model', this)" class="text-[10px] w-full">
+                                    <button type="button" onclick="removeCoverImage('model')" id="coverModelRemoveBtn" class="hidden text-red-400 hover:text-red-600 text-[10px] mt-0.5"><i class="fas fa-times"></i> Ta bort</button>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-gray-400 uppercase mb-1">Färg (NCS)</label>
+                                    <img id="coverColorPreview" class="hidden w-full h-12 object-cover rounded border border-gray-200 mb-1">
+                                    <input type="file" accept="image/*" onchange="uploadCoverImage('color', this)" class="text-[10px] w-full">
+                                    <button type="button" onclick="removeCoverImage('color')" id="coverColorRemoveBtn" class="hidden text-red-400 hover:text-red-600 text-[10px] mt-0.5"><i class="fas fa-times"></i> Ta bort</button>
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-gray-400"><i class="fas fa-magic mr-1"></i>Bänkskivans bild hämtas automatiskt från vald bänkskivefärg i korgen - ingen uppladdning behövs för den.</p>
+                        </div>
+                    </div>
+
                 </div>
 
                 <div class="p-3 md:p-4 bg-white border-t border-gray-200 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] text-xs md:text-sm z-10">
@@ -159,7 +201,7 @@
                     </div>
 
                     <div class="bg-blue-50 border border-blue-100 p-2 rounded text-[11px] mb-3">
-                        <div class="flex justify-between text-blue-700"><span>Klarälvsköks del:</span><span id="sumCompanyCut" class="font-bold">0.00 kr</span></div>
+                        <div class="flex justify-between text-blue-700"><span><span data-company-name>Klarälvskök</span>s del:</span><span id="sumCompanyCut" class="font-bold">0.00 kr</span></div>
                         <div class="flex justify-between text-blue-700 mt-0.5"><span>Montörens del:</span><span id="sumInstallerCut" class="font-bold">0.00 kr</span></div>
                     </div>
 
@@ -455,7 +497,7 @@
                 <div><label class="block text-xs font-semibold text-gray-600">Beskrivning</label><input type="text" id="ftName" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
                 <div><label class="block text-xs font-semibold text-gray-600">Pris Material (ink moms)</label><input type="number" id="ftPrice" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
                 <div class="grid grid-cols-2 gap-2">
-                    <div><label class="block text-xs font-semibold text-gray-600">Pris Montage K-kök (ink moms)</label><input type="number" id="ftInstallCompany" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
+                    <div><label class="block text-xs font-semibold text-gray-600">Pris Montage <span data-company-name>K-kök</span> (ink moms)</label><input type="number" id="ftInstallCompany" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
                     <div><label class="block text-xs font-semibold text-gray-600">Pris Montage Montör (ink moms)</label><input type="number" id="ftInstallInstaller" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
                 </div>
             </div>
@@ -525,6 +567,7 @@
     <script>
         let products = []; let quoteCart = []; const quoteId = new URLSearchParams(window.location.search).get('id');
         let currentCustomer = null;
+        let coverPageData = { enabled: false, heroImage: null, handleImage: null, modelImage: null, colorImage: null };
         let ctConfig = { materials: [], colors: [], prices: [], services: [], edges: [] };
         let doorModels = []; let selectedDoorModelId = ''; let doorModelPriceItems = [];
 
@@ -1444,6 +1487,12 @@
                         if (qd.useRot !== undefined) document.getElementById('useRotCheckbox').checked = qd.useRot;
                         if (qd.kitchenSpecs) { document.getElementById('qsMaterial').value = qd.kitchenSpecs.material || ''; document.getElementById('qsColor').value = qd.kitchenSpecs.color || ''; document.getElementById('qsDoor').value = qd.kitchenSpecs.door || ''; if (qd.kitchenSpecs.doorModelId) { document.getElementById('qsDoorModelId').value = qd.kitchenSpecs.doorModelId; onDoorModelChange(); } }
                         if (qd.extraFees) { document.getElementById('startFeeProduct').value = qd.extraFees.startFeeProduct || 0; document.getElementById('startFeeNonRot').value = qd.extraFees.startFeeNonRot || 0; document.getElementById('startFeeRotComp').value = qd.extraFees.startFeeRotComp || 0; document.getElementById('startFeeRotInst').value = qd.extraFees.startFeeRotInst || 0; document.getElementById('colorSelect').value = qd.extraFees.colorSelect || ''; document.getElementById('colorCustom').value = qd.extraFees.colorCustom || ''; document.getElementById('feeColor').value = qd.extraFees.feeColor || 0; toggleCustomColor(); }
+                        if (qd.coverPage) {
+                            coverPageData = { enabled: false, heroImage: null, handleImage: null, modelImage: null, colorImage: null, ...qd.coverPage };
+                            document.getElementById('coverPageEnabled').checked = coverPageData.enabled;
+                            document.getElementById('coverPageFields').classList.toggle('hidden', !coverPageData.enabled);
+                            ['hero', 'handle', 'model', 'color'].forEach(renderCoverPreview);
+                        }
                     }
                     const pdfBtn = document.getElementById('btnQuotePdf'); pdfBtn.href = apiLinkWithToken(`/api/quotes/${quoteId}/pdf`); pdfBtn.classList.remove('hidden');
                 }
@@ -1451,6 +1500,46 @@
             renderConditions(); renderCart();
             quoteLoaded = true;
             document.getElementById('saveStatus').innerText = '';
+        }
+
+        // ==========================================
+        // FÖRSÄTTSBLAD (endast OFFERT)
+        // ==========================================
+        const coverSlotToField = { hero: 'heroImage', handle: 'handleImage', model: 'modelImage', color: 'colorImage' };
+
+        function toggleCoverPageUI() {
+            coverPageData.enabled = document.getElementById('coverPageEnabled').checked;
+            document.getElementById('coverPageFields').classList.toggle('hidden', !coverPageData.enabled);
+        }
+
+        function renderCoverPreview(slot) {
+            const field = coverSlotToField[slot];
+            const url = coverPageData[field];
+            const img = document.getElementById(`cover${slot.charAt(0).toUpperCase()}${slot.slice(1)}Preview`);
+            const removeBtn = document.getElementById(`cover${slot.charAt(0).toUpperCase()}${slot.slice(1)}RemoveBtn`);
+            if (url) { img.src = url; img.classList.remove('hidden'); if (removeBtn) removeBtn.classList.remove('hidden'); }
+            else { img.classList.add('hidden'); img.src = ''; if (removeBtn) removeBtn.classList.add('hidden'); }
+        }
+
+        async function uploadCoverImage(slot, inputEl) {
+            const file = inputEl.files[0];
+            if (!file || !quoteId) return;
+            const formData = new FormData(); formData.append('image', file);
+            try {
+                const res = await fetch(`/api/quotes/${quoteId}/cover-image`, { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) return alert(data.message || 'Kunde inte ladda upp bilden.');
+                coverPageData[coverSlotToField[slot]] = data.url;
+                renderCoverPreview(slot);
+                scheduleAutoSave();
+            } catch (e) { alert('Kunde inte ladda upp bilden.'); }
+            inputEl.value = '';
+        }
+
+        function removeCoverImage(slot) {
+            coverPageData[coverSlotToField[slot]] = null;
+            renderCoverPreview(slot);
+            scheduleAutoSave();
         }
 
         // ==========================================
@@ -1513,7 +1602,7 @@
         }
 
         function buildQuotePayload() {
-            return { quoteCart, selectedConditions, kitchenSpecs: { material: document.getElementById('qsMaterial').value, color: document.getElementById('qsColor').value, door: document.getElementById('qsDoor').value, doorModelId: document.getElementById('qsDoorModelId').value }, extraFees: { startFeeProduct: document.getElementById('startFeeProduct').value, startFeeNonRot: document.getElementById('startFeeNonRot').value, startFeeRotComp: document.getElementById('startFeeRotComp').value, startFeeRotInst: document.getElementById('startFeeRotInst').value, colorSelect: document.getElementById('colorSelect').value, colorCustom: document.getElementById('colorCustom').value, feeColor: document.getElementById('feeColor').value }, globalDiscount: document.getElementById('globalDiscount').value, discountType: document.getElementById('globalDiscountType').value, useRot: document.getElementById('useRotCheckbox').checked, internal_comment: document.getElementById('internalComment').value, public_comment: document.getElementById('publicComment').value };
+            return { quoteCart, selectedConditions, kitchenSpecs: { material: document.getElementById('qsMaterial').value, color: document.getElementById('qsColor').value, door: document.getElementById('qsDoor').value, doorModelId: document.getElementById('qsDoorModelId').value }, extraFees: { startFeeProduct: document.getElementById('startFeeProduct').value, startFeeNonRot: document.getElementById('startFeeNonRot').value, startFeeRotComp: document.getElementById('startFeeRotComp').value, startFeeRotInst: document.getElementById('startFeeRotInst').value, colorSelect: document.getElementById('colorSelect').value, colorCustom: document.getElementById('colorCustom').value, feeColor: document.getElementById('feeColor').value }, globalDiscount: document.getElementById('globalDiscount').value, discountType: document.getElementById('globalDiscountType').value, useRot: document.getElementById('useRotCheckbox').checked, internal_comment: document.getElementById('internalComment').value, public_comment: document.getElementById('publicComment').value, coverPage: coverPageData };
         }
 
         // silent=true används av auto-sparningen (ingen alert, bara en liten statustext).

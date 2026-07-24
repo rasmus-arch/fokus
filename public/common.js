@@ -23,6 +23,22 @@
     };
 })();
 
+// Byter ut kvarvarande hårdkodade förekomster av det gamla företagsnamnet ("Klarälvskök",
+// "K-kök") i sidtiteln och i UI-element markerade med <... data-company-name>, mot det
+// faktiska företagsnamnet från Företagsinfo. /api/settings är medvetet publik (används
+// redan av inloggningssidan för loggan) så detta funkar även innan inloggning.
+(async function applyCompanyBranding() {
+    try {
+        const res = await fetch('/api/settings');
+        if (!res.ok) return;
+        const s = await res.json();
+        if (!s.company_name) return;
+        document.title = document.title.replace(/Klarälvskök/g, s.company_name);
+        const apply = () => document.querySelectorAll('[data-company-name]').forEach(el => { el.textContent = s.company_name; });
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
+    } catch (e) {}
+})();
+
 // Bygger om en <a>-länk till en API-endpoint (t.ex. PDF-generering) med token som query-param,
 // eftersom en vanlig länknavigering inte kan bära en Authorization-header.
 function apiLinkWithToken(path) {
