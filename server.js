@@ -211,7 +211,7 @@ const uploadMiddleware = upload.fields([{ name: 'mainImage', maxCount: 1 }, { na
 app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
     uploadMiddleware(req, res, async function (err) {
         if (err) return res.status(400).json({ message: 'Uppladdningsfel' });
-        const { id, name, description, sku, cc_measurement, height, length, width, brand, category, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, door_price_group_id, remove_main_image, retained_gallery, has_variations, variations } = req.body;
+        const { id, name, description, sku, cc_measurement, height, length, width, brand, category, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, door_price_group_id, remove_main_image, retained_gallery, has_variations, variations, pricing_type, price_per_sqm, min_billable_width } = req.body;
         // Tomt SKU sparas som NULL istället för '' - annars krockar flera produkter utan eget SKU
         // (t.ex. variantprodukter) mot den unika SKU-kolumnen.
         const skuValue = (sku && sku.trim() !== '') ? sku.trim() : null;
@@ -224,6 +224,12 @@ app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
             try { finalVariations = variations; } catch(e) {}
         }
 
+        // Pris per m² är bara relevant för vanliga produkter utan varianter (inte lucka/lådfront -
+        // de har sitt eget prissystem via dörrmodeller). Faller alltid tillbaka på styckpris.
+        const finalPricingType = (pricing_type === 'per_sqm' && has_variations !== 'true') ? 'per_sqm' : 'unit';
+        const finalPricePerSqm = finalPricingType === 'per_sqm' ? (parseFloat(price_per_sqm) || 0) : null;
+        const finalMinBillableWidth = finalPricingType === 'per_sqm' ? (parseInt(min_billable_width) || 0) : null;
+
         if (id) {
             let finalGallery = [];
             try { finalGallery = JSON.parse(retained_gallery || '[]'); } catch(e) {}
@@ -232,8 +238,8 @@ app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
             // OBS: front_layout skrivs medvetet inte över här längre - stomtyper (frame_types) har
             // ersatt inline-konfiguration för nya/redigerade produkter. Gamla produkters front_layout
             // lämnas orört som legacy-fallback (se COALESCE i GET /api/products).
-            let sql = `UPDATE products SET name=?, description=?, sku=?, cc_measurement=?, height=?, length=?, width=?, brand=?, category=?, installation_price=?, installer_share=?, standard_price=?, purchase_price=?, supplier_id=?, frame_type_id=?, door_model_id=?, door_price_group_id=?, gallery=?, has_variations=?, variations=?`;
-            let params = [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, door_price_group_id || null, JSON.stringify(finalGallery), has_variations === 'true' ? 1 : 0, finalVariations];
+            let sql = `UPDATE products SET name=?, description=?, sku=?, cc_measurement=?, height=?, length=?, width=?, brand=?, category=?, installation_price=?, installer_share=?, standard_price=?, purchase_price=?, supplier_id=?, frame_type_id=?, door_model_id=?, door_price_group_id=?, gallery=?, has_variations=?, variations=?, pricing_type=?, price_per_sqm=?, min_billable_width=?`;
+            let params = [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, door_price_group_id || null, JSON.stringify(finalGallery), has_variations === 'true' ? 1 : 0, finalVariations, finalPricingType, finalPricePerSqm, finalMinBillableWidth];
 
             if (remove_main_image === 'true') { sql += `, image_url=''`; }
             else if (mainFile) { sql += `, image_url=?`; params.push('/uploads/' + mainFile.filename); }
@@ -247,8 +253,8 @@ app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
         } else {
             const finalMain = mainFile ? '/uploads/' + mainFile.filename : '';
             const finalGallery = galleryFiles.map(f => '/uploads/' + f.filename);
-            const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, door_price_group_id, has_variations, variations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-            db.query(sql, [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, finalMain, JSON.stringify(finalGallery), installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, door_price_group_id || null, has_variations === 'true' ? 1 : 0, finalVariations], (err) => {
+            const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, door_price_group_id, has_variations, variations, pricing_type, price_per_sqm, min_billable_width) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            db.query(sql, [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, finalMain, JSON.stringify(finalGallery), installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, door_price_group_id || null, has_variations === 'true' ? 1 : 0, finalVariations, finalPricingType, finalPricePerSqm, finalMinBillableWidth], (err) => {
                 if (err) return res.status(500).json({ message: 'Kunde inte spara produkten: ' + err.message });
                 res.json({ message: 'Sparad!' });
             });
@@ -858,7 +864,9 @@ app.post('/api/suppliers/:id/recalculate', requireAuth, requireAdmin, (req, res)
         if (err || !supRes || supRes.length === 0) return res.status(404).json({ message: 'Leverantör hittades inte' });
         const markup = parseFloat(supRes[0].markup_percent) || 0;
         getVatFactor(vatFactor => {
-            db.query('UPDATE products SET standard_price = ROUND(purchase_price * ? * ?, 2) WHERE supplier_id = ? AND has_variations = 0 AND purchase_price > 0', [1 + (markup / 100), vatFactor, req.params.id], (err, result) => {
+            // pricing_type='per_sqm'-produkter utesluts - deras pris räknas ut per kvadratmeter i
+            // offertbyggaren, inte som ett fast styckpris, så samma påslagsformel gäller inte dem.
+            db.query("UPDATE products SET standard_price = ROUND(purchase_price * ? * ?, 2) WHERE supplier_id = ? AND has_variations = 0 AND pricing_type != 'per_sqm' AND purchase_price > 0", [1 + (markup / 100), vatFactor, req.params.id], (err, result) => {
                 if (err) return res.status(500).json({ message: err.message });
                 res.json({ message: `Priser omräknade för ${result.affectedRows} produkter.` });
             });

@@ -93,9 +93,25 @@
                                 <label class="block text-xs font-medium text-gray-700">Artikelnummer (SKU) *</label>
                                 <input type="text" id="pSku" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
                             </div>
+                            <div class="md:col-span-2 flex items-center gap-2">
+                                <input type="checkbox" id="pPricePerSqm" onchange="togglePricingTypeUI()" class="w-4 h-4 text-blue-600 rounded">
+                                <label for="pPricePerSqm" class="text-xs font-medium text-gray-700 cursor-pointer">Prissätt per m² istället för styckpris (t.ex. skivmaterial - INTE lucka/lådfront, de har redan eget prissystem via dörrmodeller)</label>
+                            </div>
                             <div>
-                                <label class="block text-xs font-medium text-gray-700">Försäljningspris Material (Inkl moms)</label>
-                                <input type="number" id="pPrice" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                                <div id="unitPriceUI">
+                                    <label class="block text-xs font-medium text-gray-700">Försäljningspris Material (Inkl moms)</label>
+                                    <input type="number" id="pPrice" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                                </div>
+                                <div id="sqmPriceUI" class="hidden space-y-2">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700">Pris per m² (Inkl moms)</label>
+                                        <input type="number" id="pPricePerSqmValue" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700">Minsta debiterbar bredd (mm)</label>
+                                        <input type="number" id="pMinBillableWidth" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                                    </div>
+                                </div>
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-gray-700">Försäljningspris Montage (Inkl moms)</label>
@@ -417,6 +433,12 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
             }
         }
 
+        function togglePricingTypeUI() {
+            const perSqm = document.getElementById('pPricePerSqm').checked;
+            document.getElementById('unitPriceUI').classList.toggle('hidden', perSqm);
+            document.getElementById('sqmPriceUI').classList.toggle('hidden', !perSqm);
+        }
+
         async function fetchFrameTypesForDropdown() {
             try {
                 const res = await fetch('/api/frame-types');
@@ -486,6 +508,10 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                 document.getElementById('pCategory').value = p.category || '';
                 document.getElementById('pBrand').value = p.brand || '';
                 document.getElementById('pPrice').value = p.standard_price || 0;
+                document.getElementById('pPricePerSqm').checked = p.pricing_type === 'per_sqm';
+                document.getElementById('pPricePerSqmValue').value = p.price_per_sqm || 0;
+                document.getElementById('pMinBillableWidth').value = p.min_billable_width || 0;
+                togglePricingTypeUI();
                 document.getElementById('pInstall').value = p.installation_price || 0;
                 document.getElementById('pInstallerShare').value = p.installer_share || 0;
                 document.getElementById('pPurchase').value = p.purchase_price || 0;
@@ -548,8 +574,10 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                 document.getElementById('varName2').value = '';
                 updateVariationHeaders();
                 addVariationRow();
+                document.getElementById('pPricePerSqm').checked = false;
+                togglePricingTypeUI();
             }
-            
+
             toggleVariationsUI();
             renderGalleryPreview();
         }
@@ -616,6 +644,9 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
                 formData.append('installer_share', document.getElementById('pInstallerShare').value);
                 formData.append('purchase_price', document.getElementById('pPurchase').value);
                 formData.append('variations', '[]');
+                formData.append('pricing_type', document.getElementById('pPricePerSqm').checked ? 'per_sqm' : 'unit');
+                formData.append('price_per_sqm', document.getElementById('pPricePerSqmValue').value);
+                formData.append('min_billable_width', document.getElementById('pMinBillableWidth').value);
             }
 
             const mainFile = document.getElementById('pMainImage').files[0];
