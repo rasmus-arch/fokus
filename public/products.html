@@ -28,6 +28,9 @@
                 <button onclick="document.getElementById('excelFileInput').click()" class="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
                     <i class="fas fa-file-excel mr-2"></i> Importera Excel
                 </button>
+                <button onclick="openQuickProductEntry()" class="bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
+                    <i class="fas fa-table mr-2"></i> Snabb produktinmatning
+                </button>
                 <button onclick="openProductModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
                     <i class="fas fa-plus mr-2"></i> Ny Produkt
                 </button>
@@ -109,6 +112,15 @@
                                 <label for="pPricePerSqm" class="text-xs font-medium text-gray-700 cursor-pointer">Prissätt per m² istället för styckpris (t.ex. skivmaterial - INTE lucka/lådfront, de har redan eget prissystem via dörrmodeller)</label>
                             </div>
                             <div>
+                                <label class="block text-xs font-medium text-gray-700">Ert Inköpspris (Valfritt)</label>
+                                <input type="number" id="pPurchase" value="0" oninput="recalcSimpleProductPrice()" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Faktor (Valfritt)</label>
+                                <p class="text-[10px] text-gray-400 mb-1">Räknar automatiskt ut försäljningspriset som Inköpspris x Faktor x moms.</p>
+                                <input type="number" step="0.01" id="pFactor" placeholder="t.ex. 2" oninput="recalcSimpleProductPrice()" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                            </div>
+                            <div>
                                 <div id="unitPriceUI">
                                     <label class="block text-xs font-medium text-gray-700">Försäljningspris Material (Inkl moms)</label>
                                     <input type="number" id="pPrice" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
@@ -125,16 +137,12 @@
                                 </div>
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-gray-700">Försäljningspris Montage (Inkl moms)</label>
+                                <label class="block text-xs font-medium text-gray-700">Montagekostnad (Inkl moms)</label>
                                 <input type="number" id="pInstall" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-gray-700">Montörens del av montage</label>
                                 <input type="number" id="pInstallerShare" value="0" class="mt-1 w-full px-3 py-2 border border-purple-300 bg-purple-50 rounded text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700">Ert Inköpspris (Valfritt)</label>
-                                <input type="number" id="pPurchase" value="0" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm">
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-gray-700">Leverantör</label>
@@ -253,6 +261,47 @@
                     <button type="submit" id="saveBtn" class="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700">Spara Produkt</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <div id="quickProductEntryModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-[95vw] max-h-[90vh] flex flex-col">
+            <div class="p-4 border-b border-gray-200 flex justify-between items-start shrink-0">
+                <div>
+                    <h3 class="font-bold text-gray-800">Snabb produktinmatning</h3>
+                    <p class="text-xs text-gray-500 mt-0.5">Bara vanliga produkter utan varianter (inte lucka/lådfront). Tryck Enter i sista fältet på en rad för att hoppa till en ny rad. Fyll bara i "Pris (styck)" ELLER "Pris/m²" + "Min yta" beroende på Prissättning.</p>
+                </div>
+                <button onclick="closeQuickProductEntry()" class="text-gray-400 hover:text-gray-600 text-xl leading-none"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="flex-1 overflow-auto p-4">
+                <table class="text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-200">
+                            <th class="p-1.5 font-semibold w-40">Namn*</th>
+                            <th class="p-1.5 font-semibold w-24">SKU</th>
+                            <th class="p-1.5 font-semibold w-32">Kategori</th>
+                            <th class="p-1.5 font-semibold w-24">Varumärke</th>
+                            <th class="p-1.5 font-semibold w-28">Prissättning</th>
+                            <th class="p-1.5 font-semibold w-20">Inköpspris</th>
+                            <th class="p-1.5 font-semibold w-16">Faktor</th>
+                            <th class="p-1.5 font-semibold w-20">Pris (styck)</th>
+                            <th class="p-1.5 font-semibold w-20">Pris/m²</th>
+                            <th class="p-1.5 font-semibold w-20">Min yta (m²)</th>
+                            <th class="p-1.5 font-semibold w-20">Montage</th>
+                            <th class="p-1.5 font-semibold w-20">Montörsdel</th>
+                            <th class="p-1.5 font-semibold w-16">Höjd</th>
+                            <th class="p-1.5 font-semibold w-16">Bredd</th>
+                            <th class="p-1.5 font-semibold w-16">Djup</th>
+                            <th class="p-1.5 w-8"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="qpeRows"></tbody>
+                </table>
+            </div>
+            <div class="p-4 border-t border-gray-200 flex justify-between items-center shrink-0">
+                <button type="button" onclick="addQuickProductRow()" class="text-blue-600 hover:text-blue-800 text-sm font-medium"><i class="fas fa-plus mr-1"></i> Lägg till rad</button>
+                <button type="button" onclick="saveQuickProductRows()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md text-sm font-medium shadow-sm"><i class="fas fa-save mr-2"></i> Spara alla rader</button>
+            </div>
         </div>
     </div>
 
@@ -388,9 +437,10 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                     standard_price: parseFloat(row['Försäljningspris Material (kr, inkl moms)']) || 0,
                     price_per_sqm: parseFloat(row['Pris per m² (kr, inkl moms)']) || 0,
                     min_billable_sqm: parseFloat(row['Minsta debiterbar yta (m²)']) || 0,
-                    installation_price: parseFloat(row['Försäljningspris Montage (kr, inkl moms)']) || 0,
+                    installation_price: parseFloat(row['Montagekostnad (kr, inkl moms)']) || 0,
                     installer_share: parseFloat(row['Montörens del av montage (kr)']) || 0,
                     purchase_price: parseFloat(row['Inköpspris (kr)']) || 0,
+                    markup_factor: row['Faktor'] === '' || row['Faktor'] === undefined ? null : (parseFloat(row['Faktor']) || null),
                     height: parseFloat(row['Stommens höjd (mm)']) || 0,
                     width: parseFloat(row['Stommens bredd (mm)']) || 0,
                     length: parseFloat(row['Stommens djup (mm)']) || 0
@@ -577,6 +627,133 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
             document.getElementById('sqmPriceUI').classList.toggle('hidden', !perSqm);
         }
 
+        // Samma "Inköpspris x Faktor x moms"-uträkning som redan finns för variantprodukter
+        // (recalcVariantRowPrice), men för vanliga produkter utan varianter. Räknar ut det pris
+        // som för tillfället är aktivt (styckpris eller per m², beroende på prissättningsvalet).
+        function recalcSimpleProductPrice() {
+            const purchase = parseFloat(document.getElementById('pPurchase').value) || 0;
+            const factorRaw = document.getElementById('pFactor').value;
+            if (factorRaw === '') return;
+            const factor = parseFloat(factorRaw) || 0;
+            const result = Math.round(purchase * factor * VAT_FACTOR * 100) / 100;
+            const targetId = document.getElementById('pPricePerSqm').checked ? 'pPricePerSqmValue' : 'pPrice';
+            document.getElementById(targetId).value = result;
+        }
+
+        // Samma Inköpspris x Faktor x moms-uträkning som recalcSimpleProductPrice, men för en
+        // rad i snabbinmatningsrutnätet - räknar ut Pris (styck) eller Pris/m² beroende på vad
+        // just den radens Prissättning är satt till.
+        function recalcQuickRowPrice(inputEl) {
+            const row = inputEl.closest('tr');
+            const purchase = parseFloat(row.querySelector('input[name="qpePurchase"]').value) || 0;
+            const factorRaw = row.querySelector('input[name="qpeFactor"]').value;
+            if (factorRaw === '') return;
+            const factor = parseFloat(factorRaw) || 0;
+            const result = Math.round(purchase * factor * VAT_FACTOR * 100) / 100;
+            const isPerSqm = row.querySelector('select[name="qpePricing"]').value === 'per_sqm';
+            row.querySelector(isPerSqm ? 'input[name="qpePricePerSqm"]' : 'input[name="qpePrice"]').value = result;
+        }
+
+        // ==========================================
+        // SNABB PRODUKTINMATNING (rutnät för att skapa flera enkla produkter i rad,
+        // utan att gå in och ut ur den vanliga produktmodalen för varje produkt)
+        // ==========================================
+        let qpeRowCounter = 0;
+
+        function openQuickProductEntry() {
+            document.getElementById('qpeRows').innerHTML = '';
+            qpeRowCounter = 0;
+            addQuickProductRow();
+            document.getElementById('quickProductEntryModal').classList.remove('hidden');
+        }
+
+        function closeQuickProductEntry() { document.getElementById('quickProductEntryModal').classList.add('hidden'); }
+
+        function addQuickProductRow() {
+            qpeRowCounter++;
+            const rowId = qpeRowCounter;
+            const tr = document.createElement('tr');
+            tr.id = `qpeRow${rowId}`;
+            tr.className = 'border-b border-gray-100';
+            tr.innerHTML = `
+                <td class="p-1"><input type="text" name="qpeName" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="text" name="qpeSku" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="text" name="qpeCategory" list="catList" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="text" name="qpeBrand" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1">
+                    <select name="qpePricing" onchange="recalcQuickRowPrice(this)" class="w-full border px-1 py-1 rounded outline-none focus:border-blue-500 bg-white">
+                        <option value="unit">Styckpris</option>
+                        <option value="per_sqm">Per m²</option>
+                    </select>
+                </td>
+                <td class="p-1"><input type="number" name="qpePurchase" value="0" oninput="recalcQuickRowPrice(this)" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="number" step="0.01" name="qpeFactor" placeholder="t.ex. 2" oninput="recalcQuickRowPrice(this)" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="number" name="qpePrice" value="0" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="number" name="qpePricePerSqm" value="0" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="number" step="0.01" name="qpeMinSqm" value="0" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="number" name="qpeInstall" value="0" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="number" name="qpeInstallerShare" value="0" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="number" name="qpeHeight" value="0" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="number" name="qpeWidth" value="0" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500"></td>
+                <td class="p-1"><input type="number" name="qpeLength" value="0" class="w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500 qpe-last"></td>
+                <td class="p-1 text-center"><button type="button" onclick="removeQuickProductRow(${rowId})" class="text-gray-400 hover:text-red-600"><i class="fas fa-trash"></i></button></td>
+            `;
+            document.getElementById('qpeRows').appendChild(tr);
+
+            tr.querySelector('.qpe-last').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); addQuickProductRow(); }
+            });
+
+            tr.querySelector('input[name="qpeName"]').focus();
+        }
+
+        function removeQuickProductRow(rowId) {
+            const row = document.getElementById(`qpeRow${rowId}`);
+            if (row) row.remove();
+            if (document.getElementById('qpeRows').children.length === 0) addQuickProductRow();
+        }
+
+        async function saveQuickProductRows() {
+            const products = [];
+            document.querySelectorAll('#qpeRows tr').forEach(tr => {
+                const name = tr.querySelector('input[name="qpeName"]').value.trim();
+                if (!name) return; // tom rad, hoppa över
+                const pricingType = tr.querySelector('select[name="qpePricing"]').value;
+                products.push({
+                    name,
+                    sku: tr.querySelector('input[name="qpeSku"]').value.trim(),
+                    description: '',
+                    category: tr.querySelector('input[name="qpeCategory"]').value.trim(),
+                    brand: tr.querySelector('input[name="qpeBrand"]').value.trim(),
+                    has_variations: false,
+                    variations: [],
+                    pricing_type: pricingType,
+                    standard_price: parseFloat(tr.querySelector('input[name="qpePrice"]').value) || 0,
+                    price_per_sqm: parseFloat(tr.querySelector('input[name="qpePricePerSqm"]').value) || 0,
+                    min_billable_sqm: parseFloat(tr.querySelector('input[name="qpeMinSqm"]').value) || 0,
+                    installation_price: parseFloat(tr.querySelector('input[name="qpeInstall"]').value) || 0,
+                    installer_share: parseFloat(tr.querySelector('input[name="qpeInstallerShare"]').value) || 0,
+                    purchase_price: parseFloat(tr.querySelector('input[name="qpePurchase"]').value) || 0,
+                    markup_factor: tr.querySelector('input[name="qpeFactor"]').value,
+                    height: parseFloat(tr.querySelector('input[name="qpeHeight"]').value) || 0,
+                    width: parseFloat(tr.querySelector('input[name="qpeWidth"]').value) || 0,
+                    length: parseFloat(tr.querySelector('input[name="qpeLength"]').value) || 0
+                });
+            });
+
+            if (products.length === 0) return alert('Inga rader med ifyllt namn att spara.');
+            if (!confirm(`Spara ${products.length} produkt(er)?`)) return;
+
+            try {
+                const res = await fetch('/api/products/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(products) });
+                const data = await res.json();
+                if (!res.ok) return alert(data.message || 'Något gick fel.');
+                alert(data.message);
+                closeQuickProductEntry();
+                fetchProducts();
+            } catch (e) { alert('Kunde inte spara produkterna.'); }
+        }
+
         async function fetchFrameTypesForDropdown() {
             try {
                 const res = await fetch('/api/frame-types');
@@ -653,6 +830,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 document.getElementById('pInstall').value = p.installation_price || 0;
                 document.getElementById('pInstallerShare').value = p.installer_share || 0;
                 document.getElementById('pPurchase').value = p.purchase_price || 0;
+                document.getElementById('pFactor').value = p.markup_factor ?? '';
                 document.getElementById('pSupplier').value = p.supplier_id || '';
                 document.getElementById('pDoorModel').value = p.door_model_id || '';
                 document.getElementById('pAccessoryGroup').value = p.door_price_group_id || '';
@@ -713,6 +891,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 updateVariationHeaders();
                 addVariationRow();
                 document.getElementById('pPricePerSqm').checked = false;
+                document.getElementById('pFactor').value = '';
                 togglePricingTypeUI();
             }
 
@@ -785,6 +964,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 formData.append('pricing_type', document.getElementById('pPricePerSqm').checked ? 'per_sqm' : 'unit');
                 formData.append('price_per_sqm', document.getElementById('pPricePerSqmValue').value);
                 formData.append('min_billable_sqm', document.getElementById('pMinBillableSqm').value);
+                formData.append('markup_factor', document.getElementById('pFactor').value);
             }
 
             const mainFile = document.getElementById('pMainImage').files[0];
