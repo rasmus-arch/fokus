@@ -55,3 +55,13 @@ Inget uppenbart kodfel hittat i själva beräkningslogiken (renderCart()
 summerar installIncVat korrekt). Nästa steg: be Rasmus om ett konkret
 exempel (vilken produkt/variant, var en dörrmodell vald, vilket pris
 förväntades vs syntes) innan vi gräver vidare.
+
+## 7. Byte av dörrmodell i en offert räknar inte om fronter/luckor
+Rasmus 2026-07-24: när man byter dörrmodell på en befintlig offert ska
+alla redan tillagda fronter/luckor räknas om mot den nya modellens priser
+(just nu ligger de troligen kvar med priser från den gamla modellen).
+Ingen kodgranskning gjord än - börja med att hitta var dörrmodell-bytet
+hanteras i offertbyggaren (quote-builder.html) och se om
+front-/luckpriserna verkligen borde uppdateras automatiskt vid byte,
+eller om Rasmus vill ha en bekräftelsedialog ("Räkna om priser?") istället
+för att tyst skriva över eventuella manuella justeringar.
