@@ -688,6 +688,11 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             if (err) dbProducts = [];
         db.query('SELECT id, image_url FROM countertop_colors', async (errCol, dbColors) => {
             if (errCol) dbColors = [];
+            // Hela PDF-uppbyggnaden (produkttabell, försättsblad, docDefinition) körs skyddad -
+            // annars kraschar ett oväntat fel här (t.ex. en trasig/för stor uppladdad bild) tyst
+            // hela Node-processen (unhandled rejection i en async db.query-callback som ingen
+            // fångar upp), vilket visar sig som ett obegripligt 503 istället för ett läsbart fel.
+            try {
             let totalMaterialBeforeGlobalDiscount = 0;
             for (let item of cart) {
                 const rowMaterialTotal = (item.priceIncVat * (1 - (item.discount / 100))) * item.qty; totalMaterialBeforeGlobalDiscount += rowMaterialTotal;
@@ -783,6 +788,10 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             if (termsText) docDefinition.content.push({ text: 'KOMMENTAR / ÖVRIGA VILLKOR', bold: true, color: '#000000', margin: [0, 30, 0, 8] }, ...htmlToPdfmakeNodes(termsText));
             if (isOrder) docDefinition.content.push({ text: 'SIGNATUR', bold: true, color: '#000000', margin: [0, 40, 0, 20] }, { columns: [ { width: '*', text: 'Ort och Datum\n\n__________________________________', alignment: 'left', color: '#000000' }, { width: '*', text: 'Köparens Underskrift\n\n__________________________________', alignment: 'left', color: '#000000' } ] });
             const pdfDoc = printer.createPdfKitDocument(docDefinition); res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `inline; filename="${docTitle}_${order.customer_name}.pdf"`); res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate'); res.setHeader('Pragma', 'no-cache'); pdfDoc.pipe(res); pdfDoc.end();
+            } catch (pdfErr) {
+                console.error('PDF-generering misslyckades för offert', req.params.id, ':', pdfErr);
+                if (!res.headersSent) res.status(500).send('Kunde inte skapa PDF: ' + pdfErr.message);
+            }
         });
         });
         });
