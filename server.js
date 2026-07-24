@@ -748,14 +748,18 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             if (!isOrder && coverPage && coverPage.enabled) {
                 const coverLogoBlock = headerLeftBlock.image ? { image: headerLeftBlock.image, width: 260, alignment: 'center' } : { text: companyName, fontSize: 34, bold: true, color: accentColor, alignment: 'center' };
                 const heroBlock = await buildPdfHeroImageBlock(coverPage.heroImage, 480, 300);
-                const handleCell = await buildPdfImageCell(coverPage.handleImage, 90);
-                const modelCell = await buildPdfImageCell(coverPage.modelImage, 90);
-                const colorCell = await buildPdfImageCell(coverPage.colorImage, 90);
+                // Galleribilderna (handtag/modell/bänkskiva/färg) beskärs INTE till kvadrat -
+                // höjden (90pt) styr storleken och bredden anpassas efter bildens eget
+                // förhållande, med en breddgräns bara som skydd mot extremt avlånga bilder.
+                const galleryColWidth = 110;
+                const handleCell = await buildPdfHeroImageBlock(coverPage.handleImage, galleryColWidth, 90);
+                const modelCell = await buildPdfHeroImageBlock(coverPage.modelImage, galleryColWidth, 90);
+                const colorCell = await buildPdfHeroImageBlock(coverPage.colorImage, galleryColWidth, 90);
                 const countertopItem = cart.find(i => i.colorId);
                 const autoCountertopUrl = countertopItem ? (dbColors.find(c => c.id == countertopItem.colorId) || {}).image_url : null;
-                const countertopCell = await buildPdfImageCell(autoCountertopUrl, 90);
+                const countertopCell = await buildPdfHeroImageBlock(autoCountertopUrl, galleryColWidth, 90);
 
-                const galleryCol = (cell, label) => ({ width: '*', stack: [ (cell && cell.image) ? cell : { text: 'Bild saknas', italics: true, color: '#aaaaaa', fontSize: 8, alignment: 'center', margin: [0, 35, 0, 35] }, { text: label, alignment: 'center', fontSize: 9, bold: true, color: '#444444', margin: [0, 4, 0, 0] } ] });
+                const galleryCol = (cell, label) => ({ width: '*', stack: [ cell ? cell : { text: 'Bild saknas', italics: true, color: '#aaaaaa', fontSize: 8, alignment: 'center', margin: [0, 35, 0, 35] }, { text: label, alignment: 'center', fontSize: 9, bold: true, color: '#444444', margin: [0, 4, 0, 0] } ] });
 
                 coverPageContent = [
                     { text: '', margin: [0, 30, 0, 0] },
