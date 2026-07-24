@@ -250,6 +250,16 @@
                         <input type="file" id="pGalleryImages" multiple accept=".jpg,.jpeg,.png,.webp" class="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-gray-800 file:text-white hover:file:bg-gray-900">
                     </div>
 
+                    <div class="md:col-span-2 bg-gray-50 border border-gray-200 px-4 py-3 rounded">
+                        <h4 class="text-xs font-bold text-gray-700 mb-1">FÖRESLAGNA TILLBEHÖR</h4>
+                        <p class="text-[10px] text-gray-400 mb-2">Visas som förslag för säljaren när den här produkten läggs till i en offert (t.ex. en karusell till ett hörnskåp).</p>
+                        <div id="accessoryChips" class="mb-2 flex flex-wrap gap-2"></div>
+                        <div class="flex gap-2">
+                            <select id="pAccessoryPicker" class="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-white"></select>
+                            <button type="button" onclick="addSuggestedAccessory()" class="bg-gray-800 hover:bg-gray-900 text-white px-3 py-2 rounded text-xs font-medium">Lägg till</button>
+                        </div>
+                    </div>
+
                     <div class="md:col-span-2">
                         <label class="block text-xs font-medium text-gray-700">Beskrivning</label>
                         <textarea id="pDesc" rows="3" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm"></textarea>
@@ -313,6 +323,7 @@
         let currentPage = 1;
         const rowsPerPage = 20;
         let currentGalleryUrls = [];
+        let currentAccessoryIds = [];
 
         document.addEventListener('DOMContentLoaded', () => {
             fetchVatRate();
@@ -608,6 +619,38 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
             });
         }
 
+        // Föreslagna tillbehör: fyller väljaren med alla produkter utom den som redigeras just nu.
+        function populateAccessoryPicker(excludeId) {
+            const sel = document.getElementById('pAccessoryPicker');
+            const options = allProducts.filter(p => !excludeId || p.id !== excludeId);
+            sel.innerHTML = options.length === 0
+                ? '<option value="">Inga andra produkter finns än</option>'
+                : options.map(p => `<option value="${p.id}">${p.name}${p.sku ? ' (' + p.sku + ')' : ''}</option>`).join('');
+        }
+
+        function addSuggestedAccessory() {
+            const sel = document.getElementById('pAccessoryPicker');
+            const id = parseInt(sel.value);
+            if (!id || currentAccessoryIds.includes(id)) return;
+            currentAccessoryIds.push(id);
+            renderAccessoryChips();
+        }
+
+        function removeSuggestedAccessory(id) {
+            currentAccessoryIds = currentAccessoryIds.filter(x => x !== id);
+            renderAccessoryChips();
+        }
+
+        function renderAccessoryChips() {
+            const container = document.getElementById('accessoryChips'); container.innerHTML = '';
+            if (currentAccessoryIds.length === 0) { container.innerHTML = '<p class="text-[10px] text-gray-400 italic">Inga tillbehör kopplade.</p>'; return; }
+            currentAccessoryIds.forEach(id => {
+                const p = allProducts.find(x => x.id === id);
+                const label = p ? p.name : `#${id}`;
+                container.innerHTML += `<span class="inline-flex items-center gap-1.5 bg-purple-100 text-purple-800 text-xs font-medium pl-2.5 pr-1.5 py-1 rounded-full">${label}<button type="button" onclick="removeSuggestedAccessory(${id})" class="hover:text-purple-900"><i class="fas fa-times-circle"></i></button></span>`;
+            });
+        }
+
         function toggleVariationsUI() {
             const hasVar = document.getElementById('pHasVariations').checked;
             if (hasVar) {
@@ -838,6 +881,8 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
 
                 // parseJsonField delas nu via common.js.
                 currentGalleryUrls = parseJsonField(p.gallery, []);
+                currentAccessoryIds = parseJsonField(p.suggested_accessories, []);
+                populateAccessoryPicker(p.id);
 
                 // Ladda varianter om det finns
                 if (p.has_variations === 1) {
@@ -870,6 +915,8 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 document.getElementById('pFrameTypeId').value = '';
                 mainContainer.classList.add('hidden');
                 currentGalleryUrls = [];
+                currentAccessoryIds = [];
+                populateAccessoryPicker(null);
                 document.getElementById('pHasVariations').checked = false;
                 document.getElementById('varName1').value = '';
                 document.getElementById('varName2').value = '';
@@ -882,6 +929,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
 
             toggleVariationsUI();
             renderGalleryPreview();
+            renderAccessoryChips();
         }
 
         document.getElementById('productForm').addEventListener('submit', async (e) => {
@@ -894,6 +942,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
             formData.append('description', document.getElementById('pDesc').value);
             formData.append('remove_main_image', document.getElementById('pRemoveMainImage').value);
             formData.append('retained_gallery', JSON.stringify(currentGalleryUrls));
+            formData.append('suggested_accessories', JSON.stringify(currentAccessoryIds));
             formData.append('height', document.getElementById('pStommeHeight').value || 0);
             formData.append('width', document.getElementById('pStommeWidth').value || 0);
             formData.append('length', document.getElementById('pStommeDepth').value || 0);
