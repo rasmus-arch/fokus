@@ -478,18 +478,18 @@
                         </div>
 
                         <div id="modalSqmDims" class="hidden space-y-3 border-t border-gray-200 pt-4">
-                            <h4 class="text-xs font-bold text-gray-800 mb-1">Ange mått (priset räknas per m²):</h4>
+                            <h4 class="text-xs font-bold text-gray-800 mb-1">Ange mått i meter (priset räknas per m²):</h4>
                             <div class="flex gap-3">
                                 <div class="flex-1">
-                                    <label class="block text-[10px] text-gray-500 uppercase font-bold mb-1">Bredd (mm)</label>
-                                    <input type="number" id="modalSqmWidth" min="0" oninput="updateSqmPricePreview()" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500">
+                                    <label class="block text-[10px] text-gray-500 uppercase font-bold mb-1">Bredd (m)</label>
+                                    <input type="number" id="modalSqmWidth" min="0" step="0.01" oninput="updateSqmPricePreview()" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500">
                                 </div>
                                 <div class="flex-1">
-                                    <label class="block text-[10px] text-gray-500 uppercase font-bold mb-1">Höjd (mm)</label>
-                                    <input type="number" id="modalSqmHeight" min="0" oninput="updateSqmPricePreview()" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500">
+                                    <label class="block text-[10px] text-gray-500 uppercase font-bold mb-1">Höjd (m)</label>
+                                    <input type="number" id="modalSqmHeight" min="0" step="0.01" oninput="updateSqmPricePreview()" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500">
                                 </div>
                             </div>
-                            <p id="modalSqmMinWidthNote" class="text-[10px] text-gray-400"></p>
+                            <p id="modalSqmMinAreaNote" class="text-[10px] text-gray-400"></p>
                         </div>
 
                     </div>
@@ -1223,8 +1223,8 @@
                 document.getElementById('modalSku').innerText = p.sku + ' | ' + (p.category || 'Okategoriserad');
                 document.getElementById('modalSqmWidth').value = '';
                 document.getElementById('modalSqmHeight').value = '';
-                const minW = parseInt(p.min_billable_width) || 0;
-                document.getElementById('modalSqmMinWidthNote').innerText = minW > 0 ? `Minsta debiterbar bredd: ${minW} mm (en smalare beställning debiteras ändå som ${minW} mm)` : '';
+                const minSqm = parseFloat(p.min_billable_sqm) || 0;
+                document.getElementById('modalSqmMinAreaNote').innerText = minSqm > 0 ? `Minsta debiterbar yta: ${minSqm.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m² (en mindre beställning debiteras ändå som ${minSqm.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²)` : '';
                 updateSqmPricePreview();
             } else {
                 sqmDims.classList.add('hidden');
@@ -1267,19 +1267,18 @@
             }
         }
 
-        // Räknar ut och visar priset live medan säljaren skriver in mått för en m²-prissatt
-        // produkt. Bredden som används i beräkningen begränsas nedåt av produktens minsta
-        // debiterbara bredd, så en smal beställning ändå debiteras en rimlig minimibredd.
+        // Räknar ut och visar priset live medan säljaren skriver in mått (i meter) för en
+        // m²-prissatt produkt. Ytan som används i beräkningen begränsas nedåt av produktens
+        // minsta debiterbara yta, så en liten beställning ändå debiteras en rimlig minimiyta.
         function updateSqmPricePreview() {
             const p = currentModalProduct;
-            const widthMm = parseFloat(document.getElementById('modalSqmWidth').value) || 0;
-            const heightMm = parseFloat(document.getElementById('modalSqmHeight').value) || 0;
-            const minWidthMm = parseInt(p.min_billable_width) || 0;
-            const effectiveWidthMm = Math.max(widthMm, minWidthMm);
+            const widthM = parseFloat(document.getElementById('modalSqmWidth').value) || 0;
+            const heightM = parseFloat(document.getElementById('modalSqmHeight').value) || 0;
+            const minSqm = parseFloat(p.min_billable_sqm) || 0;
+            const areaM2 = Math.max(widthM * heightM, minSqm);
             const pricePerSqm = parseFloat(p.price_per_sqm) || 0;
-            const areaM2 = (effectiveWidthMm / 1000) * (heightMm / 1000);
             const price = areaM2 * pricePerSqm;
-            const valid = widthMm > 0 && heightMm > 0;
+            const valid = widthM > 0 && heightM > 0;
 
             document.getElementById('modalPrice').innerText = valid ? price.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr' : '- kr';
             document.getElementById('modalInstall').innerText = (parseFloat(p.installation_price) || 0) > 0 ? (parseFloat(p.installation_price) || 0).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr' : '0 kr';
@@ -1305,15 +1304,15 @@
                 const variantWidth = getVariantWidth(selectedVariation, currentModalProduct);
                 addAutoFrontsForProduct({ ...currentModalProduct, width: variantWidth });
             } else if (currentModalProduct.pricing_type === 'per_sqm') {
-                const widthMm = parseFloat(document.getElementById('modalSqmWidth').value) || 0;
-                const heightMm = parseFloat(document.getElementById('modalSqmHeight').value) || 0;
-                if (widthMm <= 0 || heightMm <= 0) return alert("Ange bredd och höjd.");
-                const minWidthMm = parseInt(currentModalProduct.min_billable_width) || 0;
-                const effectiveWidthMm = Math.max(widthMm, minWidthMm);
-                const areaM2 = (effectiveWidthMm / 1000) * (heightMm / 1000);
+                const widthM = parseFloat(document.getElementById('modalSqmWidth').value) || 0;
+                const heightM = parseFloat(document.getElementById('modalSqmHeight').value) || 0;
+                if (widthM <= 0 || heightM <= 0) return alert("Ange bredd och höjd.");
+                const minSqm = parseFloat(currentModalProduct.min_billable_sqm) || 0;
+                const areaM2 = Math.max(widthM * heightM, minSqm);
                 const price = Math.round(areaM2 * (parseFloat(currentModalProduct.price_per_sqm) || 0) * 100) / 100;
                 const installTot = parseFloat(currentModalProduct.installation_price) || 0; const instShare = parseFloat(currentModalProduct.installer_share) || 0;
-                quoteCart.push({ cartId: `sqm_${currentModalProduct.id}_${Date.now()}`, id: currentModalProduct.id, sku: currentModalProduct.sku, name: `${currentModalProduct.name} (${widthMm}x${heightMm}mm)`, priceIncVat: price, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, isFreeText: true });
+                const dims = `${widthM.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x${heightM.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}m`;
+                quoteCart.push({ cartId: `sqm_${currentModalProduct.id}_${Date.now()}`, id: currentModalProduct.id, sku: currentModalProduct.sku, name: `${currentModalProduct.name} (${dims})`, priceIncVat: price, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, isFreeText: true });
             } else {
                 const cartId = currentModalProduct.id + '_base'; const existing = quoteCart.find(item => item.cartId === cartId);
                 if(existing) { existing.qty += 1; } else {
