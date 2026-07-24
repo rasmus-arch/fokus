@@ -503,13 +503,22 @@ async function findOrphanedUploads() {
     addUrl(companyRow && companyRow.logo_url);
     products.forEach(p => {
         addUrl(p.image_url);
-        try { (JSON.parse(p.gallery || '[]') || []).forEach(addUrl); } catch (e) {}
+        // gallery är en JSON-kolumn - kan komma redan uppackad som en array istället för en
+        // sträng (samma mönster som quote_data). Ett blint JSON.parse() hade annars kunnat
+        // missa bilder i galleriet och göra dem felaktigt flaggade som oanvända.
+        try {
+            const gallery = typeof p.gallery === 'string' ? JSON.parse(p.gallery || '[]') : (p.gallery || []);
+            (gallery || []).forEach(addUrl);
+        } catch (e) {}
     });
     colors.forEach(c => addUrl(c.image_url));
     orderFiles.forEach(f => addUrl(f.file_url));
     quotes.forEach(q => {
         if (!q.quote_data) return;
-        const matches = q.quote_data.match(/\/uploads\/[a-zA-Z0-9._-]+/g);
+        // quote_data är en JSON-kolumn - kan komma som ett redan uppackat objekt istället för
+        // en sträng, samma som i PDF-genereringen ovan. Stränga alltid till text innan regex-sök.
+        const text = typeof q.quote_data === 'string' ? q.quote_data : JSON.stringify(q.quote_data);
+        const matches = text.match(/\/uploads\/[a-zA-Z0-9._-]+/g);
         if (matches) matches.forEach(addUrl);
     });
 
@@ -643,7 +652,17 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
         if (err || results.length === 0) return res.status(404).send('Hittades inte');
         const order = results[0];
         let cart = []; let specs = {}; let selectedConditions = {}; let extraFees = {}; let useRot = true; let coverPage = null;
-        if (order.quote_data) { try { const parsed = JSON.parse(order.quote_data); if (parsed.quoteCart) cart = parsed.quoteCart; if (parsed.kitchenSpecs) specs = parsed.kitchenSpecs; if (parsed.selectedConditions) selectedConditions = parsed.selectedConditions; if (parsed.extraFees) extraFees = parsed.extraFees; if (parsed.useRot !== undefined) useRot = parsed.useRot; if (parsed.coverPage) coverPage = parsed.coverPage; } catch(e) {} }
+        // quote_data är en JSON-kolumn i MySQL - mysql2 packar redan upp den till ett objekt
+        // automatiskt vid SELECT (den är ALDRIG en rå sträng här), så ett blint JSON.parse()
+        // kastar tyst ett fel som fångas av catch(e){} och lämnar allt vid sina tomma
+        // standardvärden. Samma buggmönster som redan fixades på klientsidan tidigare
+        // (parseJsonField) - hanterar nu båda formaten även här på serversidan.
+        if (order.quote_data) {
+            try {
+                const parsed = typeof order.quote_data === 'string' ? JSON.parse(order.quote_data) : order.quote_data;
+                if (parsed.quoteCart) cart = parsed.quoteCart; if (parsed.kitchenSpecs) specs = parsed.kitchenSpecs; if (parsed.selectedConditions) selectedConditions = parsed.selectedConditions; if (parsed.extraFees) extraFees = parsed.extraFees; if (parsed.useRot !== undefined) useRot = parsed.useRot; if (parsed.coverPage) coverPage = parsed.coverPage;
+            } catch(e) {}
+        }
         const isOrder = order.status === 'Order'; const docTitle = isOrder ? 'KÖPEAVTAL' : 'OFFERT'; const dateStr = new Date(order.created_at).toLocaleDateString('sv-SE');
 
         db.query('SELECT * FROM company_settings WHERE id = 1', (err0, companyRes) => {
