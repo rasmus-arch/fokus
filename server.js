@@ -707,14 +707,14 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             // den vanliga tabellen precis som förut. På offerten lyfts den istället ut som en
             // egen färgad totalsumma-banner nedanför, så tabellen slutar på "Summa montering...".
             const totalsRows = [
-                [ { text: 'Produktkostnad innan rabatt:', color: '#000000' }, { text: totalMaterialBeforeGlobalDiscount.toLocaleString('sv-SE') + ' kr', alignment: 'right', color: '#000000' } ],
-                [ { text: 'Rabatt:', color: '#000000' }, { text: `- ${globalDiscountAmount.toLocaleString('sv-SE')} kr`, alignment: 'right', color: '#000000' } ],
-                [ { text: 'Summa produktkostnad:', bold: true, color: '#000000' }, { text: totalMaterialIncVat.toLocaleString('sv-SE') + ' kr', alignment: 'right', bold: true, color: '#000000' } ],
-                [ { text: 'Rot-berättigad monteringskostnad:', color: '#000000' }, { text: totalRotInstallIncVat.toLocaleString('sv-SE') + ' kr', alignment: 'right', color: '#000000' } ],
-                [ { text: 'ROT-avdrag (30%):', color: '#000000' }, { text: useRot ? `- ${rotDeduction.toLocaleString('sv-SE')} kr` : '0 kr', alignment: 'right', color: '#000000' } ],
-                [ { text: 'Summa montering efter rotavdrag:', bold: true, color: '#000000' }, { text: (totalAssemblyCost - rotDeduction).toLocaleString('sv-SE') + ' kr', alignment: 'right', bold: true, color: '#000000' } ]
+                [ { text: 'Produktkostnad innan rabatt:', color: '#000000' }, { text: totalMaterialBeforeGlobalDiscount.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
+                [ { text: 'Rabatt:', color: '#000000' }, { text: `- ${globalDiscountAmount.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`, alignment: 'right', color: '#000000' } ],
+                [ { text: 'Summa produktkostnad:', bold: true, color: '#000000' }, { text: totalMaterialIncVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', bold: true, color: '#000000' } ],
+                [ { text: 'Rot-berättigad monteringskostnad:', color: '#000000' }, { text: totalRotInstallIncVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
+                [ { text: 'ROT-avdrag (30%):', color: '#000000' }, { text: useRot ? `- ${rotDeduction.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr` : '0 kr', alignment: 'right', color: '#000000' } ],
+                [ { text: 'Summa montering efter rotavdrag:', bold: true, color: '#000000' }, { text: (totalAssemblyCost - rotDeduction).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', bold: true, color: '#000000' } ]
             ];
-            if (isOrder) totalsRows.push([ { text: 'Totalt att betala:', fontSize: 12, bold: true, color: '#000000' }, { text: finalToPay.toLocaleString('sv-SE') + ' kr', fontSize: 12, bold: true, alignment: 'right', color: '#000000' } ]);
+            if (isOrder) totalsRows.push([ { text: 'Totalt att betala:', fontSize: 12, bold: true, color: '#000000' }, { text: finalToPay.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', fontSize: 12, bold: true, alignment: 'right', color: '#000000' } ]);
 
             // Valfritt försättsblad, bara för OFFERT: stor logga, en säljande rubrik, en
             // hero-bild (t.ex. ritningen på köket) och en rad med bilder på handtag/modell/
@@ -756,14 +756,14 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
                     { text: 'PRODUKTER, MATERIAL & VALDA TJÄNSTER', bold: true, color: isOrder ? '#000000' : accentColor, margin: [0, 0, 0, 8] },
                     { table: { headerRows: 1, widths: [isOrder ? 50 : imgSize + 5, '*', 40], body: tableBody }, layout: 'lightHorizontalLines' },
                     { columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 40, 0, 0], table: { widths: ['*', 'auto'], body: totalsRows }, layout: 'noBorders' } ] },
-                    ...(!isOrder ? [{ columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 8, 0, 0], table: { widths: ['*', 'auto'], body: [ [ { text: 'Totalt att betala:', fontSize: 13, bold: true, color: '#ffffff', margin: [10, 10, 0, 10] }, { text: finalToPay.toLocaleString('sv-SE') + ' kr', fontSize: 13, bold: true, alignment: 'right', color: '#ffffff', margin: [0, 10, 10, 10] } ] ] }, layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => accentColor } } ] }] : [])
+                    ...(!isOrder ? [{ columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 8, 0, 0], table: { widths: ['*', 'auto'], body: [ [ { text: 'Totalt att betala:', fontSize: 13, bold: true, color: '#ffffff', margin: [10, 10, 0, 10] }, { text: finalToPay.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', fontSize: 13, bold: true, alignment: 'right', color: '#ffffff', margin: [0, 10, 10, 10] } ] ] }, layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => accentColor } } ] }] : [])
                 ], styles: { th: { bold: true, fillColor: '#000000', color: '#ffffff', padding: 6 }, thOffer: { bold: true, fillColor: accentColor, color: '#ffffff', padding: 6 } }
             };
 
             const termsText = order.public_comment || company.agreement_text || '';
             if (termsText) docDefinition.content.push({ text: 'KOMMENTAR / ÖVRIGA VILLKOR', bold: true, color: '#000000', margin: [0, 30, 0, 8] }, ...htmlToPdfmakeNodes(termsText));
             if (isOrder) docDefinition.content.push({ text: 'SIGNATUR', bold: true, color: '#000000', margin: [0, 40, 0, 20] }, { columns: [ { width: '*', text: 'Ort och Datum\n\n__________________________________', alignment: 'left', color: '#000000' }, { width: '*', text: 'Köparens Underskrift\n\n__________________________________', alignment: 'left', color: '#000000' } ] });
-            const pdfDoc = printer.createPdfKitDocument(docDefinition); res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `inline; filename="${docTitle}_${order.customer_name}.pdf"`); pdfDoc.pipe(res); pdfDoc.end();
+            const pdfDoc = printer.createPdfKitDocument(docDefinition); res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `inline; filename="${docTitle}_${order.customer_name}.pdf"`); res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate'); res.setHeader('Pragma', 'no-cache'); pdfDoc.pipe(res); pdfDoc.end();
         });
         });
         });
@@ -798,7 +798,7 @@ app.get('/api/orders/:id/assembly/pdf', requireAuth, (req, res) => {
                 ], styles: { th: { bold: true, fillColor: '#000000', color: 'white', padding: 5 } }
             };
             if (order.public_comment) docDefinition.content.push( { text: 'KOMMENTAR / ÖVRIGA VILLKOR', bold: true, color: '#000000', margin: [0, 30, 0, 8] }, ...htmlToPdfmakeNodes(order.public_comment) );
-            const pdfDoc = printer.createPdfKitDocument(docDefinition); res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `inline; filename="Monteringsspec_${order.id}.pdf"`); pdfDoc.pipe(res); pdfDoc.end();
+            const pdfDoc = printer.createPdfKitDocument(docDefinition); res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `inline; filename="Monteringsspec_${order.id}.pdf"`); res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate'); res.setHeader('Pragma', 'no-cache'); pdfDoc.pipe(res); pdfDoc.end();
           });
         });
     });

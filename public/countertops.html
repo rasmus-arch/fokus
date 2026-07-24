@@ -311,7 +311,7 @@
                     </div>
                     <div class="flex justify-between items-center border-t border-gray-100 pt-1 mt-1">
                         <span class="text-[10px] uppercase font-bold text-gray-400">Pris / Lpm</span>
-                        <span class="text-sm font-bold text-blue-700">${parseFloat(p.price_per_lm).toLocaleString('sv-SE')} kr</span>
+                        <span class="text-sm font-bold text-blue-700">${parseFloat(p.price_per_lm).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr</span>
                     </div>
                     <div class="absolute top-2 right-2 hidden group-hover:flex gap-2 bg-white px-1 shadow-sm rounded">
                         <button onclick="openModal('price', ${p.id})" class="text-gray-400 hover:text-blue-600"><i class="fas fa-edit"></i></button>
@@ -394,7 +394,7 @@
                             <p class="text-xs text-gray-500">Tjocklek: <span class="font-mono text-gray-700">${e.thickness} mm</span></p>
                         </div>
                         <div class="flex items-center gap-4">
-                            <span class="text-sm font-bold text-blue-700">${parseFloat(e.price_per_lm).toLocaleString('sv-SE')} kr / m</span>
+                            <span class="text-sm font-bold text-blue-700">${parseFloat(e.price_per_lm).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr / m</span>
                             <div class="flex gap-2">
                                 <button onclick="openModal('edge', ${e.id})" class="text-gray-400 hover:text-blue-600 hidden group-hover:block"><i class="fas fa-edit"></i></button>
                                 <button onclick="deleteData('edges', ${e.id})" class="text-gray-400 hover:text-red-600 hidden group-hover:block"><i class="fas fa-trash"></i></button>
@@ -419,7 +419,7 @@
                         <td class="p-3 font-semibold text-gray-800">${s.name}</td>
                         <td class="p-3 text-gray-600 text-xs">${matName}</td>
                         <td class="p-3"><span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">${isLm ? 'Per löpmeter' : 'Fast Pris'}</span></td>
-                        <td class="p-3 text-right font-bold text-blue-700">${parseFloat(s.price).toLocaleString('sv-SE')} kr</td>
+                        <td class="p-3 text-right font-bold text-blue-700">${parseFloat(s.price).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr</td>
                         <td class="p-3 text-right">
                             <button onclick="openModal('service', ${s.id})" class="text-gray-400 hover:text-blue-600 px-1"><i class="fas fa-edit"></i></button>
                             <button onclick="deleteData('services', ${s.id})" class="text-gray-400 hover:text-red-600 px-1"><i class="fas fa-trash"></i></button>

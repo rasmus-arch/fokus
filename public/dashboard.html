@@ -138,7 +138,7 @@
                 container.innerHTML += `
                     <li class="flex justify-between items-center text-xs md:text-sm border-b border-gray-50 pb-2 last:border-0 last:pb-0">
                         <span class="font-medium text-gray-700 truncate pr-2">${labelFn(r)}</span>
-                        <span class="text-gray-600 font-bold whitespace-nowrap">${parseFloat(r.revenue).toLocaleString()} kr</span>
+                        <span class="text-gray-600 font-bold whitespace-nowrap">${parseFloat(r.revenue).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr</span>
                     </li>
                 `;
             });
@@ -164,12 +164,12 @@
                 const res = await fetch('/api/statistics/fun-facts');
                 const data = await res.json();
 
-                document.getElementById('funTotalRevenue').innerText = (parseFloat(data.totalRevenue) || 0).toLocaleString() + ' kr';
-                document.getElementById('funYearRevenue').innerText = (parseFloat(data.yearRevenue) || 0).toLocaleString('sv-SE') + ' kr';
+                document.getElementById('funTotalRevenue').innerText = (parseFloat(data.totalRevenue) || 0).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
+                document.getElementById('funYearRevenue').innerText = (parseFloat(data.yearRevenue) || 0).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
                 document.getElementById('revenueYearLabel').innerText = new Date().getFullYear();
 
                 if (data.biggestOrder) {
-                    document.getElementById('funBiggestOrder').innerText = (parseFloat(data.biggestOrder.total) || 0).toLocaleString() + ' kr';
+                    document.getElementById('funBiggestOrder').innerText = (parseFloat(data.biggestOrder.total) || 0).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
                     document.getElementById('funBiggestOrderSub').innerText = `${data.biggestOrder.quote_name} (${data.biggestOrder.customer_name})`;
                 } else {
                     document.getElementById('funBiggestOrder').innerText = '- kr';
