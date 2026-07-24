@@ -38,6 +38,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ALLA (även montörer) ser Ordrar och Montage
     menuHtml += `<a href="/orders.html" class="${baseClass} ${isActive('order') ? activeClass : inactiveClass}"><i class="fas fa-truck-loading w-6"></i> Ordrar</a>`;
     menuHtml += `<a href="/montage.html" class="${baseClass} ${isActive('montage') ? activeClass : inactiveClass}"><i class="fas fa-calendar-alt w-6"></i> Montage</a>`;
+    menuHtml += `<a href="/knowledge-base.html" class="${baseClass} ${isActive('knowledge-base') ? activeClass : inactiveClass}"><i class="fas fa-book-open w-6"></i> Kunskapsbank</a>`;
 
     // Administration: allt annat, i bokstavsordning. Endast Superadmin/Admin.
     if (role === 'Superadmin' || role === 'Admin') {
