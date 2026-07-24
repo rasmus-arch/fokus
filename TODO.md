@@ -2,19 +2,19 @@
 
 Anteckningar från Rasmus 2026-07-24 kväll, att ta upp nästa session.
 
-## 1. Auto-spara offerter
-Offertbyggaren ska inte ha en manuell "Spara"-knapp. Varje ändring/klick ska
-sparas direkt istället (dvs. anropa spara-endpointen löpande, inte bara vid
-knapptryck). Gäller `quote-builder.html` + `saveQuote()`.
+## 1. Auto-spara offerter - KLART (commit f7724b2)
+Offertbyggaren sparar nu löpande (debounce 800ms) istället för via en
+manuell "Spara"-knapp, som är borttagen. Statusindikator i headern.
 
-## 2. Köpeavtal/offert-PDF saknar information
-Enligt Rasmus innehåller varken köpeavtalet eller offerten just nu bänkskiva,
-lucka eller ytbehandling - trots att vi kopplade ihop auto-ifyllningen av
-"Material bänkskiva"/"Färg bänkskiva"/"Modell lucka" i offertbyggaren
-(commit 96937d2). Måste undersökas: sitter felet i själva PDF-genereringen
-(server.js, SPECIFIKATION-blocket) eller är det data som inte sparas/når
-fram dit? Kolla att `kitchenSpecs` faktiskt persisteras och läses korrekt
-i `/api/quotes/:id/pdf`.
+## 2. Köpeavtal/offert-PDF saknar information - trolig grundorsak fixad (commit f7724b2)
+Root cause: "Skapa PDF" var bara en vanlig länk som läste senast SPARADE
+data. Om man aldrig hann klicka "Spara" efter att ha lagt till en bänkskiva/
+valt dörrmodell innan man öppnade PDF:en, saknades specifikationerna. Nu
+sparar PDF-knappen (utan debounce) och väntar in det innan dokumentet
+öppnas, och auto-spara (punkt 1) gör att data sällan hinner bli osparad
+över huvud taget. Bekräfta med Rasmus att detta faktiskt löste hans
+observerade problem nästa gång han testar - om det kvarstår, gräv djupare
+i SPECIFIKATION-blocket i server.js.
 
 ## 3. Bygg om PDF-layouten
 Vill göra om:
