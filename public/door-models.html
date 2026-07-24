@@ -72,12 +72,9 @@
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                             <div>
                                 <label class="block text-[10px] font-medium text-gray-600 uppercase">Typ</label>
-                                <select id="rowType" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
-                                    <option value="lucka">Lucka</option>
-                                    <option value="ladfront">Lådfront</option>
-                                    <option value="grytfront">Grytfront</option>
-                                    <option value="ovrigt">Övrigt</option>
-                                </select>
+                                <input type="text" id="rowType" list="rowTypeList" placeholder="t.ex. Lucka, Lucka vitrin, Grytfront..." class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                                <datalist id="rowTypeList"></datalist>
+                                <p class="text-[10px] text-gray-400 mt-0.5">Fri text - skriv ett nytt namn för att lägga till en ny typ, eller välj bland förslagen. "lucka" och "ladfront" (exakt så, gemener) styr automatisk lucka/lådfront-beräkning från stomtyper - övriga namn är fria.</p>
                             </div>
                             <div>
                                 <label class="block text-[10px] font-medium text-gray-600 uppercase">Höjd min (mm)</label>
@@ -127,7 +124,7 @@
                         <h4 class="text-xs font-bold text-gray-700 mb-2 uppercase">Importera prislista (CSV) - alternativ till manuell inmatning</h4>
                         <p class="text-[11px] text-gray-500 mb-2">
                             Kolumner (semikolon-separerat, med rubrikrad): <code>Typ;HöjdMin;HöjdMax;BreddMin;BreddMax;InköpsPris;Faktor;Pris;MontagePris;MontörDel</code><br>
-                            Typ ska vara <code>lucka</code>, <code>ladfront</code>, <code>grytfront</code> eller <code>ovrigt</code>. Lämna InköpsPris/Faktor tomma om du bara vill ange Pris direkt. MontagePris/MontörDel är valfria (0 om de saknas).
+                            Typ är fri text (t.ex. <code>lucka</code>, <code>ladfront</code>, <code>Lucka vitrin</code>, <code>Grytfront</code>) - skriv exakt <code>lucka</code>/<code>ladfront</code> (gemener) för de rader som ska prissättas automatiskt via stomtyper, annars valfritt namn. Lämna InköpsPris/Faktor tomma om du bara vill ange Pris direkt. MontagePris/MontörDel är valfria (0 om de saknas).
                         </p>
                         <input type="file" id="csvInput" accept=".csv" class="text-sm">
                     </div>
@@ -320,6 +317,17 @@
             const res = await fetch(`/api/door-models/${currentModelId}/prices`);
             currentPrices = await res.json();
             renderPrices();
+            updateRowTypeDatalist();
+        }
+
+        // Föreslår typer i "Typ"-fältet: dels de klassiska (lucka/ladfront/grytfront/ovrigt),
+        // dels alla typer som redan använts i den här modellens/prisgruppens prislista -
+        // så återkommande fria namn (t.ex. "Lucka vitrin") är lätta att återanvända utan att skriva fel.
+        function updateRowTypeDatalist() {
+            const base = ['lucka', 'ladfront', 'grytfront', 'ovrigt'];
+            const used = currentPrices.map(p => p.component_type);
+            const all = [...new Set([...base, ...used])];
+            document.getElementById('rowTypeList').innerHTML = all.map(t => `<option value="${t}"></option>`).join('');
         }
 
         function renderPrices() {
@@ -441,7 +449,7 @@
                 skipEmptyLines: true,
                 complete: async function (results) {
                     const rows = results.data.map(r => ({
-                        component_type: (r['Typ'] || '').toLowerCase().trim(),
+                        component_type: (r['Typ'] || '').trim(),
                         height_min: parseInt(r['HöjdMin']) || 0,
                         height_max: parseInt(r['HöjdMax']) || 100000,
                         width_min: parseInt(r['BreddMin']) || 0,
