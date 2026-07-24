@@ -297,13 +297,18 @@ app.post('/api/products/bulk', requireAuth, requireAdmin, async (req, res) => {
         else if(!p.variations) p.variations = '[]';
     }
 
-    const values = products.map(p => [
-        p.name, p.description, p.sku, p.cc_measurement||'', p.height||0, p.length||0, p.width||0, p.brand||'', p.category||'Okategoriserad', 
-        p.image_url, p.gallery, p.installation_price||0, p.installer_share||0, p.standard_price||0, p.purchase_price||0, 
-        p.has_variations ? 1 : 0, p.variations
-    ]);
-    
-    const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, has_variations, variations) VALUES ? ON DUPLICATE KEY UPDATE name=VALUES(name), standard_price=VALUES(standard_price), image_url=IF(VALUES(image_url) != '', VALUES(image_url), image_url), gallery=IF(VALUES(gallery) != '[]', VALUES(gallery), gallery), has_variations=VALUES(has_variations), variations=VALUES(variations)`;
+    const values = products.map(p => {
+        // Pris per m² gäller bara vanliga produkter utan varianter (samma regel som i den
+        // manuella produktredigeringen - luckor/lådfronter har sitt eget prissystem).
+        const pricingType = (p.pricing_type === 'per_sqm' && !p.has_variations) ? 'per_sqm' : 'unit';
+        return [
+            p.name, p.description, p.sku, p.cc_measurement||'', p.height||0, p.length||0, p.width||0, p.brand||'', p.category||'Okategoriserad',
+            p.image_url, p.gallery, p.installation_price||0, p.installer_share||0, p.standard_price||0, p.purchase_price||0,
+            p.has_variations ? 1 : 0, p.variations, pricingType, pricingType === 'per_sqm' ? (p.price_per_sqm||0) : null, pricingType === 'per_sqm' ? (p.min_billable_sqm||0) : null
+        ];
+    });
+
+    const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, has_variations, variations, pricing_type, price_per_sqm, min_billable_sqm) VALUES ? ON DUPLICATE KEY UPDATE name=VALUES(name), standard_price=VALUES(standard_price), image_url=IF(VALUES(image_url) != '', VALUES(image_url), image_url), gallery=IF(VALUES(gallery) != '[]', VALUES(gallery), gallery), has_variations=VALUES(has_variations), variations=VALUES(variations), pricing_type=VALUES(pricing_type), price_per_sqm=VALUES(price_per_sqm), min_billable_sqm=VALUES(min_billable_sqm)`;
     
     db.query(sql, [values], (err, result) => {
         if (err) return res.status(500).json({message: err.message});

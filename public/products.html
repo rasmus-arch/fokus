@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
 
@@ -18,15 +19,25 @@
                 <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Produkthanterare</h2>
                 <p class="text-xs md:text-sm text-gray-500 mt-1">Hantera sortiment, priser och importera CSV</p>
             </div>
-            <div class="flex w-full sm:w-auto gap-2">
+            <div class="flex w-full sm:w-auto gap-2 flex-wrap justify-end">
                 <input type="file" id="csvFileInput" accept=".csv" class="hidden">
                 <button onclick="document.getElementById('csvFileInput').click()" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
                     <i class="fas fa-file-csv mr-2 text-green-400"></i> Importera CSV
+                </button>
+                <input type="file" id="excelFileInput" accept=".xlsx" class="hidden">
+                <button onclick="document.getElementById('excelFileInput').click()" class="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
+                    <i class="fas fa-file-excel mr-2"></i> Importera Excel
                 </button>
                 <button onclick="openProductModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
                     <i class="fas fa-plus mr-2"></i> Ny Produkt
                 </button>
             </div>
+        </div>
+
+        <div class="flex flex-wrap gap-3 mb-6 -mt-2 text-xs text-gray-500 items-center">
+            <span class="font-medium">Excel-mallar för import:</span>
+            <a href="/mallar/Mall_Enkla_produkter.xlsx" download class="text-blue-600 hover:underline flex items-center"><i class="fas fa-download mr-1"></i> Enkla produkter</a>
+            <a href="/mallar/Mall_Variabla_produkter.xlsx" download class="text-blue-600 hover:underline flex items-center"><i class="fas fa-download mr-1"></i> Variabla produkter (med varianter)</a>
         </div>
 
         <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden flex flex-col min-h-[50vh]">
@@ -341,6 +352,133 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
             }
         }
     });
+    e.target.value = '';
+});
+
+// Excel-import (.xlsx) via de nedladdningsbara mallarna "Enkla produkter"/"Variabla produkter".
+// Läser fliken vars namn matchar mallen och bygger samma formattedProducts-struktur som
+// CSV-importen ovan, så samma /api/products/bulk-endpoint återanvänds.
+document.getElementById('excelFileInput').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+        const data = await file.arrayBuffer();
+        const wb = XLSX.read(data, { type: 'array' });
+        const simpleSheetName = wb.SheetNames.find(n => n.trim().toLowerCase() === 'enkla produkter');
+        const variableSheetName = wb.SheetNames.find(n => n.trim().toLowerCase() === 'variabla produkter');
+        let formattedProducts = [];
+
+        if (simpleSheetName) {
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[simpleSheetName], { defval: '' });
+            rows.forEach(row => {
+                const name = String(row['Namn*'] || '').trim();
+                if (!name) return; // tom rad eller en kvarglömd exempelrad utan namn
+                const pricingLabel = String(row['Prissättning (Styckpris/Per m²)'] || '').trim().toLowerCase();
+                const isPerSqm = pricingLabel.startsWith('per m');
+                formattedProducts.push({
+                    name,
+                    sku: String(row['Artikelnummer (SKU)'] || '').trim(),
+                    description: String(row['Beskrivning'] || '').trim(),
+                    category: String(row['Kategori'] || '').trim(),
+                    brand: String(row['Varumärke'] || '').trim(),
+                    has_variations: false,
+                    variations: [],
+                    pricing_type: isPerSqm ? 'per_sqm' : 'unit',
+                    standard_price: parseFloat(row['Försäljningspris Material (kr, inkl moms)']) || 0,
+                    price_per_sqm: parseFloat(row['Pris per m² (kr, inkl moms)']) || 0,
+                    min_billable_sqm: parseFloat(row['Minsta debiterbar yta (m²)']) || 0,
+                    installation_price: parseFloat(row['Försäljningspris Montage (kr, inkl moms)']) || 0,
+                    installer_share: parseFloat(row['Montörens del av montage (kr)']) || 0,
+                    purchase_price: parseFloat(row['Inköpspris (kr)']) || 0,
+                    height: parseFloat(row['Stommens höjd (mm)']) || 0,
+                    width: parseFloat(row['Stommens bredd (mm)']) || 0,
+                    length: parseFloat(row['Stommens djup (mm)']) || 0
+                });
+            });
+        } else if (variableSheetName) {
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[variableSheetName], { defval: '' });
+            const groups = {};
+            rows.forEach(row => {
+                const groupId = String(row['Produkt-ID*'] || '').trim();
+                if (!groupId) return;
+                const rowType = String(row['Rad-typ*'] || '').trim().toLowerCase();
+                if (!groups[groupId]) groups[groupId] = { parent: null, variants: [] };
+                if (rowType === 'produkt') {
+                    groups[groupId].parent = {
+                        name: String(row['Namn (Produkt-rad)'] || '').trim(),
+                        description: String(row['Beskrivning (Produkt-rad)'] || '').trim(),
+                        category: String(row['Kategori (Produkt-rad)'] || '').trim(),
+                        brand: String(row['Varumärke (Produkt-rad)'] || '').trim(),
+                        attr1Name: String(row['Variabel 1 namn (Produkt-rad)'] || '').trim() || 'Alternativ 1',
+                        attr2Name: String(row['Variabel 2 namn (Produkt-rad)'] || '').trim()
+                    };
+                } else if (rowType === 'variant') {
+                    const sku = String(row['Variant-SKU* (Variant-rad)'] || '').trim();
+                    if (!sku) return;
+                    groups[groupId].variants.push({
+                        sku,
+                        attr1_value: String(row['Variabel 1 värde (Variant-rad)'] || '').trim(),
+                        attr2_value: String(row['Variabel 2 värde (Variant-rad)'] || '').trim(),
+                        purchase_price: parseFloat(row['Inköpspris (Variant-rad)']) || 0,
+                        factor: row['Prisfaktor (Variant-rad)'] === '' ? null : parseFloat(row['Prisfaktor (Variant-rad)']),
+                        price: parseFloat(row['Försäljningspris Material (Variant-rad)']) || 0,
+                        install_price: parseFloat(row['Försäljningspris Montage (Variant-rad)']) || 0,
+                        installer_share: parseFloat(row['Montörens del av montage (Variant-rad)']) || 0
+                    });
+                }
+            });
+
+            Object.values(groups).forEach(g => {
+                if (!g.parent || g.variants.length === 0) return;
+                formattedProducts.push({
+                    name: g.parent.name || 'Okänd produkt',
+                    sku: '',
+                    description: g.parent.description,
+                    category: g.parent.category,
+                    brand: g.parent.brand,
+                    has_variations: true,
+                    variations: g.variants.map(v => ({
+                        sku: v.sku,
+                        attr1_name: g.parent.attr1Name,
+                        attr1_value: v.attr1_value,
+                        attr2_name: g.parent.attr2Name,
+                        attr2_value: v.attr2_value,
+                        purchase_price: v.purchase_price,
+                        factor: v.factor,
+                        price: v.price,
+                        install_price: v.install_price,
+                        installer_share: v.installer_share
+                    }))
+                });
+            });
+        } else {
+            alert('Hittade varken fliken "Enkla produkter" eller "Variabla produkter" i filen. Använd en av de nedladdningsbara mallarna ovan.');
+            e.target.value = '';
+            return;
+        }
+
+        if (formattedProducts.length === 0) {
+            alert('Inga rader att importera hittades. Kom ihåg att radera (eller skriva över) exempelraderna, och kontrollera att Namn/Produkt-ID är ifyllda.');
+            e.target.value = '';
+            return;
+        }
+
+        if (!confirm(`Hittade ${formattedProducts.length} produkt(er) att importera. Fortsätta?`)) { e.target.value = ''; return; }
+
+        try {
+            const res = await fetch('/api/products/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formattedProducts)
+            });
+            const data = await res.json();
+            alert(data.message);
+            fetchProducts();
+        } catch (err) { alert('Fel vid Excel-import.'); }
+    } catch (err) {
+        alert('Kunde inte läsa Excel-filen: ' + err.message);
+    }
     e.target.value = '';
 });
         });
