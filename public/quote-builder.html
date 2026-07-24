@@ -213,6 +213,12 @@
                         <div class="flex justify-between font-medium text-green-600 border-b pb-1.5"><span>ROT-avdrag (-30%)</span><span id="sumRot">- 0.00 kr</span></div>
                         <div class="flex justify-between text-base font-bold text-gray-900 pt-1"><span>Att betala</span><span id="sumTotal">0.00 kr</span></div>
                     </div>
+
+                    <div class="bg-gray-50 border border-gray-200 p-2 rounded text-[11px] mt-3">
+                        <p class="text-[9px] uppercase text-gray-400 font-semibold mb-1">Beställningsunderlag</p>
+                        <div class="flex justify-between text-gray-600"><span><i class="fas fa-grip-lines-vertical mr-1 text-gray-400"></i>Gångjärn (uppskattat)</span><span id="sumHinges" class="font-bold">0 st</span></div>
+                        <div class="flex justify-between text-gray-600 mt-0.5"><span><i class="fas fa-circle-dot mr-1 text-gray-400"></i>Handtag/knoppar (lådfronter)</span><span id="sumHandles" class="font-bold">0 st</span></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1347,7 +1353,30 @@
             try {
                 const res = await fetch(`/api/door-models/${selectedDoorModelId}/prices`);
                 doorModelPriceItems = await res.json();
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error(e); return; }
+            recalcFrontsAfterModelChange();
+        }
+
+        // Räknar om redan tillagda luckor/lådfronter (rader med sparade komponent-mått) mot den
+        // nya dörrmodellens prislista. Frågar först, eftersom det skriver över eventuella manuella
+        // prisjusteringar på de raderna.
+        function recalcFrontsAfterModelChange() {
+            const frontItems = quoteCart.filter(item => item.componentType && item.pieceHeight);
+            if (frontItems.length === 0) return;
+            if (!confirm(`Räkna om priset på ${frontItems.length} redan tillagda luckor/lådfronter mot den nya dörrmodellen? Eventuella manuella prisjusteringar på de raderna skrivs då över.`)) return;
+
+            frontItems.forEach(item => {
+                const matchRow = lookupFrontPriceRow({ component_type: item.componentType, width: item.pieceWidth, height: item.pieceHeight });
+                if (!matchRow) {
+                    item.sku = 'PRIS SAKNAS';
+                    item.priceIncVat = 0; item.installIncVat = 0; item.companyShare = 0; item.installerShare = 0;
+                } else {
+                    const installTot = parseFloat(matchRow.installation_price) || 0; const instShare = parseFloat(matchRow.installer_share) || 0;
+                    item.priceIncVat = parseFloat(matchRow.price); item.installIncVat = installTot;
+                    item.companyShare = installTot - instShare; item.installerShare = instShare;
+                }
+            });
+            renderCart();
         }
 
         // Räknar ut fronternas mått (bredd/höjd i mm) utifrån stommens mått och front_layout-konfigurationen.
@@ -1421,11 +1450,14 @@
                 const matchRow = lookupFrontPriceRow(piece);
                 const roundedH = Math.round(piece.height); const roundedW = Math.round(piece.width);
                 const label = `${piece.label} till ${product.name} (${roundedW}x${roundedH}mm)`;
+                // componentType/pieceWidth/pieceHeight sparas strukturerat (inte bara i visningstexten)
+                // så priset kan räknas om automatiskt vid dörrmodellbyte, och så gångjärns-/
+                // handtagsräknaren kan räkna raderna utan att tolka fritext.
                 if (!matchRow) {
-                    quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'PRIS SAKNAS', name: `${label} - INGET PRIS HITTAT, kontrollera prislistan`, priceIncVat: 0, installIncVat: 0, companyShare: 0, installerShare: 0, qty: 1, discount: 0, isFreeText: true });
+                    quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'PRIS SAKNAS', name: `${label} - INGET PRIS HITTAT, kontrollera prislistan`, priceIncVat: 0, installIncVat: 0, companyShare: 0, installerShare: 0, qty: 1, discount: 0, isFreeText: true, componentType: piece.component_type, pieceWidth: piece.width, pieceHeight: piece.height });
                 } else {
                     const installTot = parseFloat(matchRow.installation_price) || 0; const instShare = parseFloat(matchRow.installer_share) || 0;
-                    quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'AUTO-' + piece.component_type.toUpperCase(), name: label, priceIncVat: parseFloat(matchRow.price), installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, isFreeText: true });
+                    quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'AUTO-' + piece.component_type.toUpperCase(), name: label, priceIncVat: parseFloat(matchRow.price), installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, isFreeText: true, componentType: piece.component_type, pieceWidth: piece.width, pieceHeight: piece.height });
                 }
             });
         }
@@ -1504,10 +1536,10 @@
             const label = `${typeLabels[type] || type} - ${model ? model.name : ''} (${width}x${height}mm)`;
 
             if (!matchRow) {
-                quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'PRIS SAKNAS', name: `${label} - INGET PRIS HITTAT, kontrollera prislistan`, priceIncVat: 0, installIncVat: 0, companyShare: 0, installerShare: 0, qty, discount: 0, isFreeText: true });
+                quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'PRIS SAKNAS', name: `${label} - INGET PRIS HITTAT, kontrollera prislistan`, priceIncVat: 0, installIncVat: 0, companyShare: 0, installerShare: 0, qty, discount: 0, isFreeText: true, componentType: type, pieceWidth: width, pieceHeight: height });
             } else {
                 const installTot = parseFloat(matchRow.installation_price) || 0; const instShare = parseFloat(matchRow.installer_share) || 0;
-                quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'MANUELL-' + type.toUpperCase(), name: label, priceIncVat: parseFloat(matchRow.price), installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty, discount: 0, isFreeText: true });
+                quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'MANUELL-' + type.toUpperCase(), name: label, priceIncVat: parseFloat(matchRow.price), installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty, discount: 0, isFreeText: true, componentType: type, pieceWidth: width, pieceHeight: height });
             }
             document.getElementById('manualFrontModal').classList.add('hidden');
             renderCart();
@@ -1769,6 +1801,21 @@
             document.getElementById('sumTotal').innerText = finalToPay.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
             document.getElementById('sumCompanyCut').innerText = totalCompanyCut.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
             document.getElementById('sumInstallerCut').innerText = totalInstallerCut.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
+
+            // Gångjärn: en lucka under 1100mm behöver 2 gångjärn, 1100mm och uppåt behöver 3.
+            // Handtag/knoppar: en per lådfront. Räknas bara på rader med sparade komponent-mått
+            // (componentType/pieceHeight), dvs fronter tillagda via skåp-auto eller lös lucka/front.
+            let hingeCount = 0, handleCount = 0;
+            quoteCart.forEach(item => {
+                if (item.componentType === 'lucka' && item.pieceHeight) {
+                    hingeCount += (item.pieceHeight < 1100 ? 2 : 3) * item.qty;
+                } else if (item.componentType === 'ladfront') {
+                    handleCount += item.qty;
+                }
+            });
+            document.getElementById('sumHinges').innerText = hingeCount + ' st';
+            document.getElementById('sumHandles').innerText = handleCount + ' st';
+
             scheduleAutoSave();
         }
 
