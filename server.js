@@ -977,6 +977,33 @@ app.post('/api/settings/webhook-token/regenerate', requireAuth, requireAdmin, (r
     });
 });
 
+// "Kom igång"-checklista: samlar ihop grundläggande setup-status på ett ställe så att
+// man snabbt ser vad som saknas innan systemet börjar användas skarpt (t.ex. vid en ny
+// installation åt en annan kökshandlare).
+app.get('/api/onboarding-status', requireAuth, requireAdmin, (req, res) => {
+    db.query('SELECT company_name, logo_url, agreement_text, vat_rate FROM company_settings WHERE id = 1', (err, companyRows) => {
+        const company = (companyRows && companyRows[0]) || {};
+        db.query('SELECT COUNT(*) as c FROM products', (err2, productRows) => {
+            db.query('SELECT COUNT(*) as c FROM door_models', (err3, doorRows) => {
+                db.query('SELECT COUNT(*) as c FROM suppliers', (err4, supplierRows) => {
+                    db.query('SELECT COUNT(*) as c FROM users', (err5, userRows) => {
+                        res.json({
+                            company_name: !!(company.company_name && company.company_name.trim()),
+                            logo: !!(company.logo_url && company.logo_url.trim()),
+                            agreement_text: !!(company.agreement_text && company.agreement_text.trim()),
+                            vat_rate: company.vat_rate !== null && company.vat_rate !== undefined,
+                            products: (productRows && productRows[0] ? productRows[0].c : 0) > 0,
+                            door_models: (doorRows && doorRows[0] ? doorRows[0].c : 0) > 0,
+                            suppliers: (supplierRows && supplierRows[0] ? supplierRows[0].c : 0) > 0,
+                            extra_users: (userRows && userRows[0] ? userRows[0].c : 0) > 1
+                        });
+                    });
+                });
+            });
+        });
+    });
+});
+
 // Facebook/Meta Lead Ads-uppgifter - separat skyddad endpoint av samma anledning som
 // webhook-token ovan: hålls borta från den publika /api/settings.
 app.get('/api/settings/facebook', requireAuth, requireAdmin, (req, res) => {
