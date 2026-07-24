@@ -1601,6 +1601,7 @@
                             <div class="flex items-center text-[11px]"><label class="text-gray-400 mr-0.5">Rabatt:</label><input type="number" value="${item.discount}" onchange="updateDiscount(${index}, this.value)" class="w-9 border rounded py-0.5 text-center text-red-500 font-bold">%</div>
                             <div class="text-right flex-1 font-semibold text-gray-800">${rowMaterialTotal.toLocaleString('sv-SE', {minimumFractionDigits:2, maximumFractionDigits:2})} kr</div>
                         </div>
+                        ${rowInstallTotal > 0 ? `<div class="flex justify-between items-center mt-1 pt-1 border-t border-dashed border-gray-200 text-[10px] text-purple-700"><span><i class="fas fa-tools mr-1"></i>Montage</span><span class="font-semibold">${rowInstallTotal.toLocaleString('sv-SE', {minimumFractionDigits:2, maximumFractionDigits:2})} kr</span></div>` : ''}
                     </div>`;
             });
 
