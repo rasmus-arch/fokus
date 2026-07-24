@@ -23,6 +23,7 @@
             <div>
                 <h2 class="text-lg md:text-xl font-semibold text-gray-800">Offertbyggare</h2>
                 <p class="text-xs md:text-sm text-gray-500"><span class="font-bold text-blue-600" id="headerQuoteName">Laddar...</span></p>
+                <p class="text-xs md:text-sm text-gray-500 mt-0.5">Kund: <span id="headerCustomerName" class="font-medium text-gray-700">-</span> <button type="button" onclick="editCurrentCustomer()" class="ml-1 text-blue-600 hover:text-blue-800" title="Ändra kund"><i class="fas fa-edit"></i></button></p>
             </div>
             <div class="flex w-full sm:w-auto gap-3 items-center">
                 <span id="saveStatus" class="text-xs text-gray-400 italic whitespace-nowrap"></span>
@@ -107,7 +108,7 @@
                                     <label class="font-semibold text-gray-800 block border-b border-gray-200 pb-1">Startavgift (kr)</label>
                                     <div class="grid grid-cols-2 gap-2 md:gap-3 pt-1">
                                         <div><label class="block text-[10px] text-gray-400 uppercase">Material</label><input type="number" id="startFeeProduct" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-gray-800"></div>
-                                        <div><label class="block text-[10px] text-gray-400 uppercase">Montage (Ej ROT)</label><input type="number" id="startFeeNonRot" value="1800" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-gray-800"></div>
+                                        <div><label class="block text-[10px] text-gray-400 uppercase">Montage (Ej ROT)</label><input type="number" id="startFeeNonRot" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-gray-800"></div>
                                         <div><label class="block text-[10px] text-blue-500 uppercase">ROT (K-kök)</label><input type="number" id="startFeeRotComp" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-blue-200 bg-blue-50 rounded text-blue-800"></div>
                                         <div><label class="block text-[10px] text-purple-500 uppercase">ROT (Montör)</label><input type="number" id="startFeeRotInst" value="0" min="0" onchange="renderCart()" class="mt-1 w-full px-2 py-1 border border-purple-200 bg-purple-50 rounded text-purple-800"></div>
                                     </div>
@@ -491,10 +492,39 @@
         </div>
     </div>
 
+    <div id="customerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 overflow-y-auto">
+        <div class="bg-white p-5 md:p-6 rounded-lg shadow-xl w-full max-w-md my-auto">
+            <h3 class="text-lg font-bold mb-4 border-b pb-2 text-gray-700">Ändra kund</h3>
+            <form id="customerForm" class="space-y-3">
+                <input type="hidden" id="cId">
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label class="block text-xs font-medium text-gray-700">Namn *</label><input type="text" id="cName" required class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div><label class="block text-xs font-medium text-gray-700">Personnummer</label><input type="text" id="cPersonnummer" placeholder="ÅÅMMDD-XXXX" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                </div>
+                <div><label class="block text-xs font-medium text-gray-700">Gatuadress</label><input type="text" id="cAddress" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                <div><label class="block text-xs font-medium text-gray-700">Gatuadress rad 2</label><input type="text" id="cAddress2" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label class="block text-xs font-medium text-gray-700">Lgh-nummer</label><input type="text" id="cApartment" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div><label class="block text-xs font-medium text-gray-700">BRF:s org.nr</label><input type="text" id="cBrfOrg" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                </div>
+                <div><label class="block text-xs font-medium text-gray-700">Fastighetsbeteckning</label><input type="text" id="cProperty" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div><label class="block text-xs font-medium text-gray-700">Email *</label><input type="email" id="cEmail" required class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div><label class="block text-xs font-medium text-gray-700">Telefonnummer</label><input type="text" id="cPhone" class="mt-1 w-full px-3 py-1.5 border border-gray-300 rounded text-sm"></div>
+                </div>
+                <div class="flex justify-end gap-2 pt-4 mt-2 border-t border-gray-100">
+                    <button type="button" onclick="document.getElementById('customerModal').classList.add('hidden')" class="px-4 py-2 bg-gray-200 rounded text-sm font-medium hover:bg-gray-300">Avbryt</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700">Spara kund</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="/common.js"></script>
     <script src="/menu.js"></script>
     <script>
         let products = []; let quoteCart = []; const quoteId = new URLSearchParams(window.location.search).get('id');
+        let currentCustomer = null;
         let ctConfig = { materials: [], colors: [], prices: [], services: [], edges: [] };
         let doorModels = []; let selectedDoorModelId = ''; let doorModelPriceItems = [];
 
@@ -1403,15 +1433,17 @@
             try {
                 const res = await fetch(`/api/quotes/${quoteId}`);
                 if (res.ok) {
-                    const data = await res.json(); 
+                    const data = await res.json();
                     document.getElementById('headerQuoteName').innerText = `Offert: ${data.quote_name}`;
+                    currentCustomer = { id: data.customer_id, name: data.customer_name, personnummer: data.personnummer, address: data.address, address2: data.address2, apartment_number: data.apartment_number, brf_org_nr: data.brf_org_nr, property_designation: data.property_designation, email: data.email, phone: data.phone };
+                    document.getElementById('headerCustomerName').innerText = data.customer_name || '-';
                     document.getElementById('globalDiscount').value = data.global_discount || 0; document.getElementById('globalDiscountType').value = data.discount_type || '%'; document.getElementById('internalComment').value = data.internal_comment || ''; document.getElementById('publicComment').value = data.public_comment || '';
                     if (data.quote_data) {
                         const qd = parseJsonField(data.quote_data, {}); if (qd.quoteCart) quoteCart = qd.quoteCart;
                         if (qd.selectedConditions) { for (const key in qd.selectedConditions) { if(selectedConditions[key]) { selectedConditions[key].responsibility = qd.selectedConditions[key].responsibility || ''; selectedConditions[key].qty = qd.selectedConditions[key].qty || 1; selectedConditions[key].customPrice = qd.selectedConditions[key].customPrice || 0; } } }
                         if (qd.useRot !== undefined) document.getElementById('useRotCheckbox').checked = qd.useRot;
                         if (qd.kitchenSpecs) { document.getElementById('qsMaterial').value = qd.kitchenSpecs.material || ''; document.getElementById('qsColor').value = qd.kitchenSpecs.color || ''; document.getElementById('qsDoor').value = qd.kitchenSpecs.door || ''; if (qd.kitchenSpecs.doorModelId) { document.getElementById('qsDoorModelId').value = qd.kitchenSpecs.doorModelId; onDoorModelChange(); } }
-                        if (qd.extraFees) { const sfnr = qd.extraFees.startFeeNonRot; document.getElementById('startFeeProduct').value = qd.extraFees.startFeeProduct || 0; document.getElementById('startFeeNonRot').value = (sfnr !== undefined && sfnr !== null && sfnr !== '') ? sfnr : 1800; document.getElementById('startFeeRotComp').value = qd.extraFees.startFeeRotComp || 0; document.getElementById('startFeeRotInst').value = qd.extraFees.startFeeRotInst || 0; document.getElementById('colorSelect').value = qd.extraFees.colorSelect || ''; document.getElementById('colorCustom').value = qd.extraFees.colorCustom || ''; document.getElementById('feeColor').value = qd.extraFees.feeColor || 0; toggleCustomColor(); }
+                        if (qd.extraFees) { document.getElementById('startFeeProduct').value = qd.extraFees.startFeeProduct || 0; document.getElementById('startFeeNonRot').value = qd.extraFees.startFeeNonRot || 0; document.getElementById('startFeeRotComp').value = qd.extraFees.startFeeRotComp || 0; document.getElementById('startFeeRotInst').value = qd.extraFees.startFeeRotInst || 0; document.getElementById('colorSelect').value = qd.extraFees.colorSelect || ''; document.getElementById('colorCustom').value = qd.extraFees.colorCustom || ''; document.getElementById('feeColor').value = qd.extraFees.feeColor || 0; toggleCustomColor(); }
                     }
                     const pdfBtn = document.getElementById('btnQuotePdf'); pdfBtn.href = apiLinkWithToken(`/api/quotes/${quoteId}/pdf`); pdfBtn.classList.remove('hidden');
                 }
@@ -1420,6 +1452,48 @@
             quoteLoaded = true;
             document.getElementById('saveStatus').innerText = '';
         }
+
+        // ==========================================
+        // ÄNDRA KUND (samma mönster som leads.html)
+        // ==========================================
+        function editCurrentCustomer() {
+            if (!currentCustomer || !currentCustomer.id) return alert('Ingen kund kopplad till den här offerten än.');
+            document.getElementById('customerModal').classList.remove('hidden');
+            document.getElementById('cId').value = currentCustomer.id;
+            document.getElementById('cName').value = currentCustomer.name || '';
+            document.getElementById('cPersonnummer').value = currentCustomer.personnummer || '';
+            document.getElementById('cAddress').value = currentCustomer.address || '';
+            document.getElementById('cAddress2').value = currentCustomer.address2 || '';
+            document.getElementById('cApartment').value = currentCustomer.apartment_number || '';
+            document.getElementById('cBrfOrg').value = currentCustomer.brf_org_nr || '';
+            document.getElementById('cProperty').value = currentCustomer.property_designation || '';
+            document.getElementById('cEmail').value = currentCustomer.email || '';
+            document.getElementById('cPhone').value = currentCustomer.phone || '';
+        }
+
+        document.getElementById('customerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('cId').value;
+            const data = {
+                name: document.getElementById('cName').value,
+                personnummer: document.getElementById('cPersonnummer').value,
+                address: document.getElementById('cAddress').value,
+                address2: document.getElementById('cAddress2').value,
+                apartment_number: document.getElementById('cApartment').value,
+                brf_org_nr: document.getElementById('cBrfOrg').value,
+                property_designation: document.getElementById('cProperty').value,
+                email: document.getElementById('cEmail').value,
+                phone: document.getElementById('cPhone').value
+            };
+            const res = await fetch(`/api/customers/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            if (res.ok) {
+                currentCustomer = { ...currentCustomer, ...data };
+                document.getElementById('headerCustomerName').innerText = data.name || '-';
+                document.getElementById('customerModal').classList.add('hidden');
+            } else {
+                alert('Kunde inte spara kunduppgifterna.');
+            }
+        });
 
         // ==========================================
         // AUTO-SPARA
