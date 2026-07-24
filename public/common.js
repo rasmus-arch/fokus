@@ -76,3 +76,38 @@ async function confirmAndDelete(confirmText, url, onSuccess) {
         alert('Något gick fel.');
     }
 }
+
+// Vissa MySQL-drivrutinskonfigurationer packar redan upp JSON-kolumner till objekt/arrayer
+// istället för att lämna dem som strängar - hantera båda formaten istället för att anta att
+// det alltid är en sträng som behöver JSON.parse(). Tidigare kopierad separat i products.html,
+// quote-builder.html och knowledge-base.html.
+function parseJsonField(val, fallback) {
+    if (val === null || val === undefined || val === '') return fallback;
+    if (typeof val !== 'string') return val;
+    try { return JSON.parse(val); } catch (e) { return fallback; }
+}
+
+// Delad momsfaktor + hämtning, tidigare kopierad separat i products.html och door-models.html.
+// Faktor-fält (inköpspris x faktor x moms) på flera sidor räknar mot samma VAT_FACTOR.
+let VAT_FACTOR = 1.25;
+async function fetchVatRate() {
+    try {
+        const res = await fetch('/api/settings');
+        const s = await res.json();
+        VAT_FACTOR = 1 + (parseFloat(s.vat_rate ?? 25) / 100);
+    } catch (e) { console.error(e); }
+    return VAT_FACTOR;
+}
+
+// Enkel HTML-escaping för text som interpolers i innerHTML-mallar (produktnamn, kundnamn,
+// leaddata från externa webbformulär osv). Använd runt värden som kan innehålla < > & " '
+// för att undvika att data av misstag tolkas som HTML/script.
+function escapeHtml(val) {
+    if (val === null || val === undefined) return '';
+    return String(val)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}

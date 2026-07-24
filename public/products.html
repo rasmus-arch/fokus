@@ -773,14 +773,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
 
         // Räknar fram försäljningspris = inköpspris x faktor x momsfaktor, samma konvention som lucka/lådfront-prisrader i door-models.html.
         // Rör inte priset om faktor lämnas tomt (då är priset manuellt satt).
-        let VAT_FACTOR = 1.25;
-        async function fetchVatRate() {
-            try {
-                const res = await fetch('/api/settings');
-                const s = await res.json();
-                VAT_FACTOR = 1 + (parseFloat(s.vat_rate ?? 25) / 100);
-            } catch (e) { console.error(e); }
-        }
+        // VAT_FACTOR/fetchVatRate delas nu via common.js.
         function recalcVariantRowPrice(inputEl) {
             const row = inputEl.closest('tr');
             const purchase = parseFloat(row.querySelector('.v-purchase').value) || 0;
@@ -843,15 +836,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 if (p.image_url) { document.getElementById('currentMainImagePreview').src = p.image_url; mainContainer.classList.remove('hidden'); } 
                 else { mainContainer.classList.add('hidden'); }
 
-                // Vissa MySQL-drivrutinskonfigurationer packar redan upp JSON-kolumner till
-                // objekt/arrayer istället för att lämna dem som strängar - hantera båda formaten
-                // istället för att anta att det alltid är en sträng som behöver JSON.parse().
-                function parseJsonField(val, fallback) {
-                    if (val === null || val === undefined || val === '') return fallback;
-                    if (typeof val !== 'string') return val;
-                    try { return JSON.parse(val); } catch(e) { return fallback; }
-                }
-
+                // parseJsonField delas nu via common.js.
                 currentGalleryUrls = parseJsonField(p.gallery, []);
 
                 // Ladda varianter om det finns

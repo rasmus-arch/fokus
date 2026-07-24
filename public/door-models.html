@@ -166,15 +166,7 @@
         let priceGroups = [];
         let currentModelId = null;
         let currentPrices = [];
-        let VAT_FACTOR = 1.25;
-
-        async function fetchVatRate() {
-            try {
-                const res = await fetch('/api/settings');
-                const s = await res.json();
-                VAT_FACTOR = 1 + (parseFloat(s.vat_rate ?? 25) / 100);
-            } catch (e) { console.error(e); }
-        }
+        // VAT_FACTOR/fetchVatRate delas nu via common.js.
 
         async function fetchModels() {
             const res = await fetch('/api/door-models');

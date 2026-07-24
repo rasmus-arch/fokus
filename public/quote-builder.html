@@ -590,13 +590,7 @@
         let parsedVariations = [];
         let selectedVariation = null;
 
-        // Vissa MySQL-drivrutinskonfigurationer packar redan upp JSON-kolumner till
-        // objekt/arrayer istället för att lämna dem som strängar - hantera båda formaten.
-        function parseJsonField(val, fallback) {
-            if (val === null || val === undefined || val === '') return fallback;
-            if (typeof val !== 'string') return val;
-            try { return JSON.parse(val); } catch(e) { return fallback; }
-        }
+        // parseJsonField delas nu via common.js.
 
         let filteredProducts = [];
         let currentPage = 1;
@@ -1172,14 +1166,7 @@
                     </div>`;
             });
 
-            if (pagination) {
-                pagination.innerHTML = `
-                    <span>Visar ${start + 1}-${Math.min(end, filteredProducts.length)} av ${filteredProducts.length}</span>
-                    <div class="space-x-1">
-                        <button onclick="changePage(-1)" class="px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 transition" ${currentPage === 1 ? 'disabled' : ''}>Föregående</button>
-                        <button onclick="changePage(1)" class="px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 transition" ${currentPage >= totalPages ? 'disabled' : ''}>Nästa</button>
-                    </div>`;
-            }
+            if (pagination) renderPagination(pagination, currentPage, filteredProducts.length, itemsPerPage, 'changePage');
         }
 
         function changePage(dir) {

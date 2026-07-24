@@ -116,12 +116,7 @@
         let allArticles = [];
         let currentImages = [];
         let currentPdfs = [];
-
-        function parseJsonField(val, fallback) {
-            if (val === null || val === undefined || val === '') return fallback;
-            if (typeof val !== 'string') return val;
-            try { return JSON.parse(val); } catch (e) { return fallback; }
-        }
+        // parseJsonField delas nu via common.js.
 
         async function fetchArticles() {
             try {
