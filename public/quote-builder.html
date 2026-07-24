@@ -511,6 +511,16 @@
         </div>
     </div>
 
+    <div id="accessorySuggestModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[60] p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm">
+            <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="font-bold text-gray-800 text-sm"><i class="fas fa-lightbulb text-amber-400 mr-1.5"></i>Föreslagna tillbehör</h3>
+                <button onclick="closeAccessorySuggestModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="accessorySuggestList" class="p-4 space-y-2 max-h-80 overflow-y-auto"></div>
+        </div>
+    </div>
+
     <div id="freeTextModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
         <div class="bg-white p-5 rounded-lg shadow-xl w-full max-w-md relative">
             <h3 class="font-bold text-gray-800 mb-3 border-b pb-2">Lägg till Fritext-rad</h3>
@@ -1313,7 +1323,54 @@
                 }
                 addAutoFrontsForProduct(currentModalProduct);
             }
+            const addedProduct = currentModalProduct;
             renderCart(); closeProductModal();
+            showAccessorySuggestions(addedProduct);
+        }
+
+        // Visar en kort lista med föreslagna tillbehör (satta på produkten i produktregistret)
+        // direkt efter att en produkt lagts till, så säljaren inte glömmer t.ex. en karusell
+        // till ett hörnskåp.
+        function showAccessorySuggestions(product) {
+            const ids = parseJsonField(product.suggested_accessories, []);
+            if (!Array.isArray(ids) || ids.length === 0) return;
+            const accessories = ids.map(id => products.find(p => p.id === id)).filter(Boolean);
+            if (accessories.length === 0) return;
+
+            const list = document.getElementById('accessorySuggestList');
+            list.innerHTML = accessories.map(p => {
+                const price = p.has_variations === 1 ? 'Variabelt pris' : (p.pricing_type === 'per_sqm' ? (parseFloat(p.price_per_sqm)||0).toLocaleString('sv-SE') + ' kr/m²' : (parseFloat(p.standard_price)||0).toLocaleString('sv-SE') + ' kr');
+                return `
+                    <div class="flex items-center justify-between gap-2 border border-gray-200 rounded p-2">
+                        <div class="min-w-0">
+                            <p class="text-xs font-semibold text-gray-800 truncate">${p.name}</p>
+                            <p class="text-[10px] text-gray-400">${price}</p>
+                        </div>
+                        <button onclick="addAccessoryFromSuggestion(${p.id})" class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-2.5 py-1.5 rounded">Lägg till</button>
+                    </div>`;
+            }).join('');
+            document.getElementById('accessorySuggestModal').classList.remove('hidden');
+        }
+
+        function closeAccessorySuggestModal() { document.getElementById('accessorySuggestModal').classList.add('hidden'); }
+
+        // Enkla produkter (utan varianter/m²-pris) läggs till direkt i korgen. Variant- eller
+        // m²-produkter öppnar istället den vanliga produktmodalen, eftersom vi inte kan gissa
+        // vilken variant eller vilket mått säljaren vill ha.
+        function addAccessoryFromSuggestion(productId) {
+            const p = products.find(x => x.id === productId);
+            if (!p) return;
+            if (p.has_variations === 1 || p.pricing_type === 'per_sqm') {
+                closeAccessorySuggestModal();
+                openProductModal(p);
+                return;
+            }
+            const cartId = p.id + '_base'; const existing = quoteCart.find(item => item.cartId === cartId);
+            if (existing) { existing.qty += 1; } else {
+                const installTot = parseFloat(p.installation_price) || 0; const instShare = parseFloat(p.installer_share) || 0;
+                quoteCart.push({ cartId: cartId, id: p.id, sku: p.sku, name: p.name, priceIncVat: parseFloat(p.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0 });
+            }
+            renderCart();
         }
 
         // Vissa produkter (t.ex. skåp med Legrabox/Basic-lådor) har bredden som en variant-egenskap
