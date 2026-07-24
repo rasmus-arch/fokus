@@ -16,18 +16,42 @@ sparar PDF-knappen (utan debounce) och väntar in det innan dokumentet
 observerade problem nästa gång han testar - om det kvarstår, gräv djupare
 i SPECIFIKATION-blocket i server.js.
 
-## 3. Bygg om PDF-layouten
-Vill göra om:
-- Kunduppgifter (hur de visas på köpeavtal/offert)
-- Dokumentinfo
-- Hur produkter visas i produktlistan på PDF:en
+## 3. Bygg om PDF-layouten - delvis klart (commit b5a5c7b)
+Klart: kunduppgifter (Namn/Pers.nr/Adress/Telefon/E-post visas alltid,
+Adress rad 2/Lgh-nr/BRF/Fastighetsbet bara när ifyllda), Dokumentinfo →
+"Datum", footer med företagsnamn/org.nr/momstext, ordernummer under
+KÖPEAVTAL-rubriken.
 
-Inga detaljer om exakt hur ännu - be Rasmus specificera önskat utseende
-innan implementation.
+Kvarstår: hur produkter visas i produktlistan på PDF:en. Rasmus har inte
+specificerat vad som är fel/önskat där än - fråga honom innan
+implementation.
 
 ## 4. Nya köpvillkor
-Byt ut nuvarande köpvillkor/avtalstext (company_settings.agreement_text,
-redigeras under Inställningar → Företagsinfo) mot en ny text som Rasmus
-skrivit med hjälp av Gemini. Vänta på att han klistrar in/skickar den nya
-texten, lägg in den via inställningssidan (eller direkt i databasen om han
-föredrar det).
+Rasmus klistrar in den nya avtalstexten (skriven i Gemini) själv under
+Inställningar → Företagsinfo. Ingen åtgärd behövs från oss om han inte
+ber om hjälp med det.
+
+## 5. "Kundläge"-knapp som döljer priser
+Ny knapp i footern (överallt) eller längst ner i sidomenyn, typ
+"Kundläge", som döljer priser i gränssnittet - tänkt för att kunna vända
+skärmen mot kunden och visa t.ex. produktbilder utan att visa priser.
+Inga detaljer om exakt vilka vyer/priser som ska döljas än - fråga
+Rasmus vad som ska synas/döljas i kundläge innan implementation.
+
+## 6. Möjlig kvarstående bugg: montagepris beräknas inte automatiskt
+Rasmus rapporterade att montagepriset "verkar inte räknas ut automatiskt
+när man lägger till produkter i offerten". Kodgranskning (utan konkret
+repro) visar två separata mekanismer som styr montagepris för produkter:
+- Vanlig produkt utan varianter: `products.installation_price`/
+  `installer_share` måste vara manuellt ifyllt i produktregistret -
+  ingen automatisk beräkning finns för själva skåpstommen.
+- Produkt med varianter: install-pris kommer från den valda variantens
+  `install_price`/`installer_share` (satt i variant-tabellen).
+- Skåp med frontkonfiguration (frame_type, "lucka"/"lådfront"): kräver
+  att en **dörrmodell är vald** under Specifikationer i offertbyggaren -
+  annars visas ett alert och inga fronter (eller deras montagepris)
+  läggs till alls.
+Inget uppenbart kodfel hittat i själva beräkningslogiken (renderCart()
+summerar installIncVat korrekt). Nästa steg: be Rasmus om ett konkret
+exempel (vilken produkt/variant, var en dörrmodell vald, vilket pris
+förväntades vs syntes) innan vi gräver vidare.
