@@ -575,7 +575,12 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             const logoPath = path.join(__dirname, 'public', company.logo_url.replace(/^\/?(public\/)?/, ''));
             if (fs.existsSync(logoPath)) { const ext = path.extname(logoPath).toLowerCase(); const mime = ext === '.png' ? 'image/png' : 'image/jpeg'; headerLeftBlock = { image: `data:${mime};base64,${fs.readFileSync(logoPath).toString('base64')}`, width: 140 }; }
             let ytbehandling = extraFees.colorSelect || '-'; if (extraFees.colorSelect === 'Valfri NCS-kod' && extraFees.colorCustom) ytbehandling = `NCS: ${extraFees.colorCustom}`;
-            const tableBody = [ [{ text: '', style: 'th', alignment: 'center' }, { text: 'Artikel / Beskrivning', style: 'th' }, { text: 'Antal', style: 'th', alignment: 'center' }] ];
+            // OFFERT ska kännas säljande (färg, större bilder, framhävd totalsumma) medan
+            // KÖPEAVTAL avsiktligt behåller sitt nuktrala, avtalsmässiga utseende oförändrat.
+            const accentColor = '#2563eb';
+            const thStyle = isOrder ? 'th' : 'thOffer';
+            const imgSize = isOrder ? 45 : 68;
+            const tableBody = [ [{ text: '', style: thStyle, alignment: 'center' }, { text: 'Artikel / Beskrivning', style: thStyle }, { text: 'Antal', style: thStyle, alignment: 'center' }] ];
         
         db.query('SELECT id, sku, image_url FROM products', async (err, dbProducts) => {
             if (err) dbProducts = [];
@@ -587,10 +592,10 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
                 let pdfImageCell;
                 if (item.colorId) {
                     const dbColor = dbColors.find(c => c.id == item.colorId);
-                    pdfImageCell = await buildPdfImageCell(dbColor ? dbColor.image_url : null);
+                    pdfImageCell = await buildPdfImageCell(dbColor ? dbColor.image_url : null, imgSize);
                 } else {
                     const dbProd = dbProducts.find(p => p.sku === item.sku || p.id == item.id);
-                    pdfImageCell = await buildPdfImageCell(dbProd ? dbProd.image_url : null);
+                    pdfImageCell = await buildPdfImageCell(dbProd ? dbProd.image_url : null, imgSize);
                 }
                 tableBody.push([ pdfImageCell, [{ text: item.name, bold: true, color: '#000000', margin: [0, 5] }, { text: `Art.nr: ${item.sku}`, fontSize: 8, color: '#444444' }], { text: item.qty.toString(), alignment: 'center', margin: [0, 15], color: '#000000' } ]);
             }
@@ -615,17 +620,32 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             let totalMaterialIncVat = Math.max(0, totalMaterialBeforeGlobalDiscount - globalDiscountAmount);
             const rotDeduction = useRot ? (totalRotInstallIncVat * 0.30) : 0; const totalAssemblyCost = totalRotInstallIncVat + totalNonRotInstallIncVat; const finalToPay = totalMaterialIncVat + totalAssemblyCost - rotDeduction;
 
+            // Totalsumma-raderna: på köpeavtalet visas "Totalt att betala" som sista raden i
+            // den vanliga tabellen precis som förut. På offerten lyfts den istället ut som en
+            // egen färgad totalsumma-banner nedanför, så tabellen slutar på "Summa montering...".
+            const totalsRows = [
+                [ { text: 'Produktkostnad innan rabatt:', color: '#000000' }, { text: totalMaterialBeforeGlobalDiscount.toLocaleString('sv-SE') + ' kr', alignment: 'right', color: '#000000' } ],
+                [ { text: 'Rabatt:', color: '#000000' }, { text: `- ${globalDiscountAmount.toLocaleString('sv-SE')} kr`, alignment: 'right', color: '#000000' } ],
+                [ { text: 'Summa produktkostnad:', bold: true, color: '#000000' }, { text: totalMaterialIncVat.toLocaleString('sv-SE') + ' kr', alignment: 'right', bold: true, color: '#000000' } ],
+                [ { text: 'Rot-berättigad monteringskostnad:', color: '#000000' }, { text: totalRotInstallIncVat.toLocaleString('sv-SE') + ' kr', alignment: 'right', color: '#000000' } ],
+                [ { text: 'ROT-avdrag (30%):', color: '#000000' }, { text: useRot ? `- ${rotDeduction.toLocaleString('sv-SE')} kr` : '0 kr', alignment: 'right', color: '#000000' } ],
+                [ { text: 'Summa montering efter rotavdrag:', bold: true, color: '#000000' }, { text: (totalAssemblyCost - rotDeduction).toLocaleString('sv-SE') + ' kr', alignment: 'right', bold: true, color: '#000000' } ]
+            ];
+            if (isOrder) totalsRows.push([ { text: 'Totalt att betala:', fontSize: 12, bold: true, color: '#000000' }, { text: finalToPay.toLocaleString('sv-SE') + ' kr', fontSize: 12, bold: true, alignment: 'right', color: '#000000' } ]);
+
             const docDefinition = {
                 defaultStyle: { font: 'Helvetica', fontSize: 10, color: '#000000' },
                 footer: { text: `${companyName} - Org.nr ${company.org_number || '-'} - Registrerat för moms och F-skatt`, alignment: 'center', fontSize: 8, color: '#666666', margin: [40, 10, 40, 0] },
                 content: [
-                    { columns: [ headerLeftBlock, { text: [ { text: docTitle + '\n', fontSize: 22, bold: true, color: '#000000' }, order.order_number ? { text: `Ordernr: ${order.order_number}`, fontSize: 11, color: '#444444' } : '' ], alignment: 'right', margin: [0, 10, 0, 0] } ] },
-                    { canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 1, lineColor: '#000000' }], margin: [0, 15, 0, 20] },
+                    { columns: [ headerLeftBlock, { text: [ { text: docTitle + '\n', fontSize: 22, bold: true, color: isOrder ? '#000000' : accentColor }, order.order_number ? { text: `Ordernr: ${order.order_number}`, fontSize: 11, color: '#444444' } : '' ], alignment: 'right', margin: [0, 10, 0, 0] } ] },
+                    { canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 1, lineColor: isOrder ? '#000000' : accentColor }], margin: [0, 15, 0, isOrder ? 20 : 10] },
+                    ...(!isOrder ? [{ text: `Tack för att du valt ${companyName}! Nedan hittar du vårt förslag på ditt nya kök, framtaget speciellt för dig.`, italics: true, color: '#555555', fontSize: 10, margin: [0, 0, 0, 15] }] : []),
                     { columns: [ { width: '*', text: [ {text: 'KUNDUPPGIFTER\n', bold: true, color: '#000000', fontSize: 11}, `Namn: ${order.customer_name || '-'}\n`, `Pers.nr: ${order.personnummer || '-'}\n`, `Adress: ${order.address || '-'}\n`, order.address2 ? `Adress 2: ${order.address2}\n` : '', order.apartment_number ? `Lgh.nr: ${order.apartment_number}\n` : '', order.brf_org_nr ? `BRF Org.nr: ${order.brf_org_nr}\n` : '', order.property_designation ? `Fastighetsbet: ${order.property_designation}\n` : '', `Telefon: ${order.phone || '-'}\nE-post: ${order.email || '-'}` ]}, { width: '*', text: [ {text: 'DATUM\n', bold: true, color: '#000000', fontSize: 11}, dateStr ]}, { width: '*', text: [ {text: 'SPECIFIKATION\n', bold: true, color: '#000000', fontSize: 11}, `Bänkskiva: ${specs.material || '-'} (${specs.color || '-'}) \nLucka: ${specs.door || '-'}\nYtbehandling: ${ytbehandling}` ]} ], columnGap: 20, margin: [0, 0, 0, 30] },
-                    { text: 'PRODUKTER, MATERIAL & VALDA TJÄNSTER', bold: true, color: '#000000', margin: [0, 0, 0, 8] },
-                    { table: { headerRows: 1, widths: [50, '*', 40], body: tableBody }, layout: 'lightHorizontalLines' },
-                    { columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 40, 0, 0], table: { widths: ['*', 'auto'], body: [ [ { text: 'Produktkostnad innan rabatt:', color: '#000000' }, { text: totalMaterialBeforeGlobalDiscount.toLocaleString('sv-SE') + ' kr', alignment: 'right', color: '#000000' } ], [ { text: 'Rabatt:', color: '#000000' }, { text: `- ${globalDiscountAmount.toLocaleString('sv-SE')} kr`, alignment: 'right', color: '#000000' } ], [ { text: 'Summa produktkostnad:', bold: true, color: '#000000' }, { text: totalMaterialIncVat.toLocaleString('sv-SE') + ' kr', alignment: 'right', bold: true, color: '#000000' } ], [ { text: 'Rot-berättigad monteringskostnad:', color: '#000000' }, { text: totalRotInstallIncVat.toLocaleString('sv-SE') + ' kr', alignment: 'right', color: '#000000' } ], [ { text: 'ROT-avdrag (30%):', color: '#000000' }, { text: useRot ? `- ${rotDeduction.toLocaleString('sv-SE')} kr` : '0 kr', alignment: 'right', color: '#000000' } ], [ { text: 'Summa montering efter rotavdrag:', bold: true, color: '#000000' }, { text: (totalAssemblyCost - rotDeduction).toLocaleString('sv-SE') + ' kr', alignment: 'right', bold: true, color: '#000000' } ], [ { text: 'Totalt att betala:', fontSize: 12, bold: true, color: '#000000' }, { text: finalToPay.toLocaleString('sv-SE') + ' kr', fontSize: 12, bold: true, alignment: 'right', color: '#000000' } ] ] }, layout: 'noBorders' } ] }
-                ], styles: { th: { bold: true, fillColor: '#000000', color: '#ffffff', padding: 6 } }
+                    { text: 'PRODUKTER, MATERIAL & VALDA TJÄNSTER', bold: true, color: isOrder ? '#000000' : accentColor, margin: [0, 0, 0, 8] },
+                    { table: { headerRows: 1, widths: [isOrder ? 50 : imgSize + 5, '*', 40], body: tableBody }, layout: 'lightHorizontalLines' },
+                    { columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 40, 0, 0], table: { widths: ['*', 'auto'], body: totalsRows }, layout: 'noBorders' } ] },
+                    ...(!isOrder ? [{ columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 8, 0, 0], table: { widths: ['*', 'auto'], body: [ [ { text: 'Totalt att betala:', fontSize: 13, bold: true, color: '#ffffff', margin: [10, 10, 0, 10] }, { text: finalToPay.toLocaleString('sv-SE') + ' kr', fontSize: 13, bold: true, alignment: 'right', color: '#ffffff', margin: [0, 10, 10, 10] } ] ] }, layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => accentColor } } ] }] : [])
+                ], styles: { th: { bold: true, fillColor: '#000000', color: '#ffffff', padding: 6 }, thOffer: { bold: true, fillColor: accentColor, color: '#ffffff', padding: 6 } }
             };
 
             const termsText = order.public_comment || company.agreement_text || '';
