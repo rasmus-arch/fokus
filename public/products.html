@@ -280,9 +280,7 @@ document.getElementById('csvFileInput').addEventListener('change', function(e) {
     if (!file) return;
 
     Papa.parse(file, {
-        // Ingen delimiter angiven - PapaParse känner då av själv om filen använder semikolon
-        // (vanligt vid export från svenska Excel/Sheets) eller komma (vanligt vid export i
-        // engelsk/amerikansk lokal), istället för att bara anta semikolon.
+        delimiter: ";", // Tvingar semikolon
         header: true,
         skipEmptyLines: true,
         complete: async function(results) {
