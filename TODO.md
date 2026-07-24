@@ -65,3 +65,16 @@ hanteras i offertbyggaren (quote-builder.html) och se om
 front-/luckpriserna verkligen borde uppdateras automatiskt vid byte,
 eller om Rasmus vill ha en bekräftelsedialog ("Räkna om priser?") istället
 för att tyst skriva över eventuella manuella justeringar.
+
+## 8. Köpeavtalet ska stylas likadant som offerten
+Rasmus 2026-07-24: köpeavtals-PDF:en ska ha samma utseende som
+offert-PDF:en (färg, bildstorlekar, framhävd totalsumma osv.).
+Detta är en medveten omsvängning av ett tidigare beslut - i server.js
+(GET /api/quotes/:id/pdf, runt rad 721-734) finns en kommentar som
+explicit säger att OFFERT ska kännas säljande medan KÖPEAVTAL avsiktligt
+behåller ett neutralt, avtalsmässigt utseende, styrt av `isOrder`-flaggan
+(order.status === 'Order'). Båda dokumenten byggs av samma docDefinition/
+kod, så det bör räcka att ta bort/justera de ställen där stilen villkoras
+på `isOrder` - men dubbelkolla med Rasmus om han menar ALLT (inkl.
+signaturfältet som bara läggs till för köpeavtalet) eller bara den visuella
+stylingen.
