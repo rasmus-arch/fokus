@@ -89,7 +89,7 @@
                         </div>
                     </div>
 
-                    <div class="p-3 md:p-4 space-y-3 shrink-0" id="quoteItemsList"></div>
+                    <div class="shrink-0 border-b border-gray-200 max-h-[45vh] overflow-y-auto" id="quoteItemsList"></div>
 
                     <div class="bg-white border-t border-gray-200 shrink-0">
                         <div class="p-3 md:p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition" onclick="toggleConditions()">
@@ -1799,37 +1799,56 @@
             const startFeeProduct = parseFloat(document.getElementById('startFeeProduct').value) || 0; const startFeeNonRot = parseFloat(document.getElementById('startFeeNonRot').value) || 0; const startFeeRotComp = parseFloat(document.getElementById('startFeeRotComp').value) || 0; const startFeeRotInst = parseFloat(document.getElementById('startFeeRotInst').value) || 0; const colorFee = parseFloat(document.getElementById('feeColor').value) || 0;
             const useRot = document.getElementById('useRotCheckbox').checked;
             
-            list.innerHTML = quoteCart.length === 0 ? '<p class="text-center text-gray-400 py-6 italic text-xs">Korgen är tom.</p>' : '';
             let totalMaterialBeforeGlobalDiscount = 0, totalRotInstallIncVat = 0, totalNonRotInstallIncVat = 0, totalCompanyCut = 0, totalInstallerCut = 0;
 
+            // Kompakt, grupperad radvy istället för ett kort per rad - så man ser fler av
+            // (ibland närmare 50) raderna samtidigt utan att scrolla förbi varje enskild rad.
+            // Luckor/lådfronter grupperas för sig (componentType satt av addAutoFrontsForProduct/
+            // addManualFrontRow), övrigt (produkter, bänkskivor, fritext) i en egen grupp.
+            const frontEntries = []; const otherEntries = [];
             quoteCart.forEach((item, index) => {
                 const rowMaterialTotal = (item.priceIncVat * (1 - (item.discount / 100))) * item.qty; const rowInstallTotal = item.installIncVat * item.qty;
-                totalMaterialBeforeGlobalDiscount += rowMaterialTotal; totalRotInstallIncVat += rowInstallTotal; 
+                totalMaterialBeforeGlobalDiscount += rowMaterialTotal; totalRotInstallIncVat += rowInstallTotal;
                 totalCompanyCut += (item.companyShare || 0) * item.qty; totalInstallerCut += (item.installerShare || 0) * item.qty;
-
-                let drawingBtn = '';
-                if (item.drawingSvg) {
-                    drawingBtn = `<button onclick="viewCartDrawing(${index})" class="mt-1 text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold hover:bg-blue-200 transition"><i class="fas fa-image mr-1"></i> Visa ritning</button>`;
-                }
-
-                list.innerHTML += `
-                    <div class="bg-white p-2.5 rounded border border-gray-200 text-xs shadow-sm">
-                        <div class="flex justify-between items-start mb-1">
-                            <div class="w-10/12">
-                                <h5 class="font-bold text-gray-800 leading-tight">${item.name}</h5>
-                                <span class="text-[9px] text-gray-400 font-mono">${item.sku}</span>
-                                ${drawingBtn}
-                            </div>
-                            <button onclick="removeRow(${index})" class="text-red-400 hover:text-red-600 px-1"><i class="fas fa-times"></i></button>
-                        </div>
-                        <div class="flex justify-between items-center mt-1.5 gap-1.5">
-                            <div class="flex items-center border rounded bg-gray-50"><button onclick="updateQty(${index}, ${item.qty - 1})" class="px-1.5 py-0.5 hover:bg-gray-200">-</button><span class="w-6 text-center font-medium">${item.qty}</span><button onclick="updateQty(${index}, ${item.qty + 1})" class="px-1.5 py-0.5 hover:bg-gray-200">+</button></div>
-                            <div class="flex items-center text-[11px]"><label class="text-gray-400 mr-0.5">Rabatt:</label><input type="number" value="${item.discount}" onchange="updateDiscount(${index}, this.value)" class="w-9 border rounded py-0.5 text-center text-red-500 font-bold">%</div>
-                            <div class="text-right flex-1 font-semibold text-gray-800">${rowMaterialTotal.toLocaleString('sv-SE', {minimumFractionDigits:2, maximumFractionDigits:2})} kr</div>
-                        </div>
-                        ${rowInstallTotal > 0 ? `<div class="flex justify-between items-center mt-1 pt-1 border-t border-dashed border-gray-200 text-[10px] text-purple-700"><span><i class="fas fa-tools mr-1"></i>Montage</span><span class="font-semibold">${rowInstallTotal.toLocaleString('sv-SE', {minimumFractionDigits:2, maximumFractionDigits:2})} kr</span></div>` : ''}
-                    </div>`;
+                const entry = { item, index, rowMaterialTotal, rowInstallTotal };
+                (item.componentType ? frontEntries : otherEntries).push(entry);
             });
+
+            function renderRow(entry) {
+                const { item, index, rowMaterialTotal, rowInstallTotal } = entry;
+                const drawingBtn = item.drawingSvg ? `<button onclick="viewCartDrawing(${index})" class="ml-1 text-blue-500 hover:text-blue-700" title="Visa ritning"><i class="fas fa-image"></i></button>` : '';
+                const installBadge = rowInstallTotal > 0 ? `<span class="ml-1.5 text-[9px] text-purple-600 whitespace-nowrap" title="Montage"><i class="fas fa-tools"></i> ${rowInstallTotal.toLocaleString('sv-SE', {maximumFractionDigits:0})} kr</span>` : '';
+                return `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 align-middle">
+                        <td class="py-1 pl-2 pr-1 min-w-0">
+                            <div class="flex items-center min-w-0"><span class="truncate" title="${item.name}">${item.name}</span>${drawingBtn}</div>
+                            <div class="text-[9px] text-gray-400 font-mono truncate">${item.sku}${installBadge}</div>
+                        </td>
+                        <td class="py-1 px-1 whitespace-nowrap">
+                            <div class="flex items-center border rounded bg-gray-50 w-fit"><button onclick="updateQty(${index}, ${item.qty - 1})" class="px-1 hover:bg-gray-200 text-xs">-</button><span class="w-5 text-center text-[11px] font-medium">${item.qty}</span><button onclick="updateQty(${index}, ${item.qty + 1})" class="px-1 hover:bg-gray-200 text-xs">+</button></div>
+                        </td>
+                        <td class="py-1 px-1 whitespace-nowrap"><input type="number" value="${item.discount}" onchange="updateDiscount(${index}, this.value)" class="w-9 border rounded py-0.5 text-center text-red-500 font-bold text-[11px]">%</td>
+                        <td class="py-1 pl-1 pr-2 text-right font-semibold text-gray-800 whitespace-nowrap">${rowMaterialTotal.toLocaleString('sv-SE', {minimumFractionDigits:2, maximumFractionDigits:2})} kr</td>
+                        <td class="py-1 pr-1 text-right"><button onclick="removeRow(${index})" class="text-red-400 hover:text-red-600 px-1"><i class="fas fa-times"></i></button></td>
+                    </tr>`;
+            }
+
+            function renderGroup(title, entries) {
+                if (entries.length === 0) return '';
+                const subtotal = entries.reduce((sum, e) => sum + e.rowMaterialTotal, 0);
+                return `
+                    <details open class="group">
+                        <summary class="list-none flex items-center justify-between gap-2 px-2 py-1.5 bg-gray-100 border-b border-gray-200 cursor-pointer select-none sticky top-0 z-[1]">
+                            <span class="text-[10px] font-bold uppercase text-gray-600"><i class="fas fa-chevron-down mr-1 text-[9px] group-open:rotate-0 -rotate-90 transition-transform inline-block"></i>${title} (${entries.length})</span>
+                            <span class="text-[10px] font-semibold text-gray-500">${subtotal.toLocaleString('sv-SE', {minimumFractionDigits:2, maximumFractionDigits:2})} kr</span>
+                        </summary>
+                        <table class="w-full text-xs"><tbody>${entries.map(renderRow).join('')}</tbody></table>
+                    </details>`;
+            }
+
+            list.innerHTML = quoteCart.length === 0
+                ? '<p class="text-center text-gray-400 py-6 italic text-xs">Korgen är tom.</p>'
+                : renderGroup('Produkter & bänkskivor', otherEntries) + renderGroup('Luckor & lådfronter', frontEntries);
 
             conditionsList.forEach(cond => {
                 const current = selectedConditions[cond.id];
