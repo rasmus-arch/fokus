@@ -211,7 +211,7 @@ const uploadMiddleware = upload.fields([{ name: 'mainImage', maxCount: 1 }, { na
 app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
     uploadMiddleware(req, res, async function (err) {
         if (err) return res.status(400).json({ message: 'Uppladdningsfel' });
-        const { id, name, description, sku, cc_measurement, height, length, width, brand, category, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, door_price_group_id, remove_main_image, retained_gallery, has_variations, variations, pricing_type, price_per_sqm, min_billable_sqm } = req.body;
+        const { id, name, description, sku, cc_measurement, height, length, width, brand, category, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, door_price_group_id, remove_main_image, retained_gallery, has_variations, variations, pricing_type, price_per_sqm, min_billable_sqm, markup_factor } = req.body;
         // Tomt SKU sparas som NULL istället för '' - annars krockar flera produkter utan eget SKU
         // (t.ex. variantprodukter) mot den unika SKU-kolumnen.
         const skuValue = (sku && sku.trim() !== '') ? sku.trim() : null;
@@ -229,6 +229,9 @@ app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
         const finalPricingType = (pricing_type === 'per_sqm' && has_variations !== 'true') ? 'per_sqm' : 'unit';
         const finalPricePerSqm = finalPricingType === 'per_sqm' ? (parseFloat(price_per_sqm) || 0) : null;
         const finalMinBillableSqm = finalPricingType === 'per_sqm' ? (parseFloat(min_billable_sqm) || 0) : null;
+        // Faktor är bara meningsfull för produkter utan varianter (variantprodukter har sin egen
+        // faktor per variant i variations-JSON:en).
+        const finalMarkupFactor = (has_variations === 'true' || markup_factor === undefined || markup_factor === '') ? null : (parseFloat(markup_factor) || null);
 
         if (id) {
             let finalGallery = [];
@@ -238,8 +241,8 @@ app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
             // OBS: front_layout skrivs medvetet inte över här längre - stomtyper (frame_types) har
             // ersatt inline-konfiguration för nya/redigerade produkter. Gamla produkters front_layout
             // lämnas orört som legacy-fallback (se COALESCE i GET /api/products).
-            let sql = `UPDATE products SET name=?, description=?, sku=?, cc_measurement=?, height=?, length=?, width=?, brand=?, category=?, installation_price=?, installer_share=?, standard_price=?, purchase_price=?, supplier_id=?, frame_type_id=?, door_model_id=?, door_price_group_id=?, gallery=?, has_variations=?, variations=?, pricing_type=?, price_per_sqm=?, min_billable_sqm=?`;
-            let params = [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, door_price_group_id || null, JSON.stringify(finalGallery), has_variations === 'true' ? 1 : 0, finalVariations, finalPricingType, finalPricePerSqm, finalMinBillableSqm];
+            let sql = `UPDATE products SET name=?, description=?, sku=?, cc_measurement=?, height=?, length=?, width=?, brand=?, category=?, installation_price=?, installer_share=?, standard_price=?, purchase_price=?, supplier_id=?, frame_type_id=?, door_model_id=?, door_price_group_id=?, gallery=?, has_variations=?, variations=?, pricing_type=?, price_per_sqm=?, min_billable_sqm=?, markup_factor=?`;
+            let params = [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, door_price_group_id || null, JSON.stringify(finalGallery), has_variations === 'true' ? 1 : 0, finalVariations, finalPricingType, finalPricePerSqm, finalMinBillableSqm, finalMarkupFactor];
 
             if (remove_main_image === 'true') { sql += `, image_url=''`; }
             else if (mainFile) { sql += `, image_url=?`; params.push('/uploads/' + mainFile.filename); }
@@ -253,8 +256,8 @@ app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
         } else {
             const finalMain = mainFile ? '/uploads/' + mainFile.filename : '';
             const finalGallery = galleryFiles.map(f => '/uploads/' + f.filename);
-            const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, door_price_group_id, has_variations, variations, pricing_type, price_per_sqm, min_billable_sqm) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-            db.query(sql, [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, finalMain, JSON.stringify(finalGallery), installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, door_price_group_id || null, has_variations === 'true' ? 1 : 0, finalVariations, finalPricingType, finalPricePerSqm, finalMinBillableSqm], (err) => {
+            const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, supplier_id, frame_type_id, door_model_id, door_price_group_id, has_variations, variations, pricing_type, price_per_sqm, min_billable_sqm, markup_factor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            db.query(sql, [name, description, skuValue, cc_measurement, height||0, length||0, width||0, brand, category, finalMain, JSON.stringify(finalGallery), installation_price||0, installer_share||0, standard_price||0, purchase_price||0, supplier_id || null, frame_type_id || null, door_model_id || null, door_price_group_id || null, has_variations === 'true' ? 1 : 0, finalVariations, finalPricingType, finalPricePerSqm, finalMinBillableSqm, finalMarkupFactor], (err) => {
                 if (err) return res.status(500).json({ message: 'Kunde inte spara produkten: ' + err.message });
                 res.json({ message: 'Sparad!' });
             });
@@ -301,14 +304,15 @@ app.post('/api/products/bulk', requireAuth, requireAdmin, async (req, res) => {
         // Pris per m² gäller bara vanliga produkter utan varianter (samma regel som i den
         // manuella produktredigeringen - luckor/lådfronter har sitt eget prissystem).
         const pricingType = (p.pricing_type === 'per_sqm' && !p.has_variations) ? 'per_sqm' : 'unit';
+        const markupFactor = (p.has_variations || p.markup_factor === undefined || p.markup_factor === '' || p.markup_factor === null) ? null : (parseFloat(p.markup_factor) || null);
         return [
             p.name, p.description, p.sku, p.cc_measurement||'', p.height||0, p.length||0, p.width||0, p.brand||'', p.category||'Okategoriserad',
             p.image_url, p.gallery, p.installation_price||0, p.installer_share||0, p.standard_price||0, p.purchase_price||0,
-            p.has_variations ? 1 : 0, p.variations, pricingType, pricingType === 'per_sqm' ? (p.price_per_sqm||0) : null, pricingType === 'per_sqm' ? (p.min_billable_sqm||0) : null
+            p.has_variations ? 1 : 0, p.variations, pricingType, pricingType === 'per_sqm' ? (p.price_per_sqm||0) : null, pricingType === 'per_sqm' ? (p.min_billable_sqm||0) : null, markupFactor
         ];
     });
 
-    const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, has_variations, variations, pricing_type, price_per_sqm, min_billable_sqm) VALUES ? ON DUPLICATE KEY UPDATE name=VALUES(name), standard_price=VALUES(standard_price), image_url=IF(VALUES(image_url) != '', VALUES(image_url), image_url), gallery=IF(VALUES(gallery) != '[]', VALUES(gallery), gallery), has_variations=VALUES(has_variations), variations=VALUES(variations), pricing_type=VALUES(pricing_type), price_per_sqm=VALUES(price_per_sqm), min_billable_sqm=VALUES(min_billable_sqm)`;
+    const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, has_variations, variations, pricing_type, price_per_sqm, min_billable_sqm, markup_factor) VALUES ? ON DUPLICATE KEY UPDATE name=VALUES(name), standard_price=VALUES(standard_price), image_url=IF(VALUES(image_url) != '', VALUES(image_url), image_url), gallery=IF(VALUES(gallery) != '[]', VALUES(gallery), gallery), has_variations=VALUES(has_variations), variations=VALUES(variations), pricing_type=VALUES(pricing_type), price_per_sqm=VALUES(price_per_sqm), min_billable_sqm=VALUES(min_billable_sqm), markup_factor=VALUES(markup_factor)`;
     
     db.query(sql, [values], (err, result) => {
         if (err) return res.status(500).json({message: err.message});
