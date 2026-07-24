@@ -17,21 +17,28 @@ try {
 }
 
 const app = express();
+
+// GLOBAL REGEL: ingenting i den här appen ska någonsin cachas - varken av webbläsaren,
+// en mellanliggande proxy/CDN (t.ex. LiteSpeed Cache) eller Express egna ETag/Last-Modified-
+// mekanism för statiska filer. Detta satt allra först, före både API-routes och statiska filer,
+// så det gäller bokstavligen allt som lämnar servern. Bakgrunden är två separata cache-buggar
+// i samma session: dels att gamla HTML/JS-versioner visades trots ny kod på servern, dels att
+// sparade produktändringar (t.ex. varianter) inte syntes förrän man tvingade en cache-miss.
+app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+});
+
 // verify sparar undan råa request-bytes - krävs för att kunna signaturverifiera
 // Facebooks webhook (X-Hub-Signature-256) mot den exakta body som skickades.
 app.use(express.json({ limit: '50mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
-
-// API-svar ska aldrig cachas av mellanliggande proxyer/CDN (t.ex. LiteSpeed Cache) eller
-// webbläsaren - annars kan man spara en ändring men ändå få tillbaka gammal data på nästa
-// GET-anrop, trots att databasen har rätt värden (samma klass av cache-problem som orsakade
-// att gamla sid-versioner visades trots nya deployer).
-app.use('/api', (req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    next();
-});
+// etag/lastModified avstängt - annars skickar Express ändå ett ETag/Last-Modified-svar som
+// kan trigga villkorade förfrågningar (304) via en cache som ligger mellan servern och
+// webbläsaren, trots Cache-Control-headern ovan.
+app.use(express.static(path.join(__dirname, 'public'), { etag: false, lastModified: false }));
 
 const { createSession, deleteSession, purgeExpiredSessions, requireAuth, requireRole } = initSessions(db);
 purgeExpiredSessions(); // rensa gamla sessioner vid serverstart, samma mönster som offert-papperskorgen
