@@ -33,6 +33,18 @@
                 </div>
                 <input type="file" id="sLogo" accept="image/*" class="block w-full text-sm text-gray-600">
                 <p class="text-xs text-gray-400">Används på offerter/köpeavtal (PDF) och inloggningssidan.</p>
+
+                <div class="pt-3 border-t border-gray-100 space-y-3">
+                    <p class="text-xs text-gray-500">Accentfärger hämtade från loggan, används i den säljande OFFERT-PDF:en (rubriker, tabellhuvud, totalsumma). Justera vid behov.</p>
+                    <div class="flex items-center gap-3">
+                        <input type="color" id="sPdfColorPrimary" value="#2E5339" class="w-10 h-10 border border-gray-300 rounded cursor-pointer">
+                        <div><label class="block text-xs font-medium text-gray-700">Primärfärg (grön)</label><p class="text-[11px] text-gray-400">Rubriker, tabellhuvud, totalsumma-banner</p></div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <input type="color" id="sPdfColorAccent" value="#E8A33D" class="w-10 h-10 border border-gray-300 rounded cursor-pointer">
+                        <div><label class="block text-xs font-medium text-gray-700">Accentfärg (guld)</label><p class="text-[11px] text-gray-400">Dekorativa detaljer på försättsbladet</p></div>
+                    </div>
+                </div>
             </div>
 
             <div class="bg-white p-6 rounded-lg shadow-sm lg:col-span-2 space-y-4">
@@ -154,6 +166,23 @@
                 </button>
             </form>
         </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm mt-6 space-y-3 max-w-3xl">
+            <h3 class="text-lg font-medium text-gray-700 border-b pb-2 mb-2">Städa oanvända uppladdningar</h3>
+            <p class="text-xs text-gray-500">Hittar bildfiler i uppladdningsmappen som inte längre är kopplade till något (t.ex. bilder för produkter eller bänkskivefärger som senare tagits bort). Ingenting raderas automatiskt - granska listan och bocka för det du vill radera. Filer nyare än 15 minuter visas aldrig här, som en extra säkerhetsmarginal.</p>
+            <button type="button" onclick="scanOrphanedUploads()" id="scanUploadsBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium">
+                <i class="fas fa-search mr-1"></i> Sök oanvända filer
+            </button>
+            <div id="uploadsScanResult" class="hidden pt-2 space-y-3">
+                <div class="flex items-center justify-between">
+                    <label class="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" id="selectAllOrphans" onchange="toggleAllOrphans(this.checked)"> Markera alla</label>
+                    <button type="button" onclick="deleteSelectedOrphans()" id="deleteOrphansBtn" disabled class="bg-red-50 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed text-red-600 px-3 py-1.5 rounded-md text-xs font-medium">
+                        <i class="fas fa-trash mr-1"></i> Radera valda (<span id="selectedOrphansCount">0</span>)
+                    </button>
+                </div>
+                <div id="orphansList" class="border border-gray-200 rounded-md divide-y divide-gray-100 max-h-96 overflow-y-auto"></div>
+            </div>
+        </div>
     </main>
 
     <script src="/common.js"></script>
@@ -196,6 +225,8 @@
                 document.getElementById('sEmail').value = s.email || '';
                 document.getElementById('sAddress').value = s.address || '';
                 document.getElementById('sVatRate').value = (s.vat_rate != null) ? s.vat_rate : 25;
+                document.getElementById('sPdfColorPrimary').value = s.pdf_color_primary || '#2E5339';
+                document.getElementById('sPdfColorAccent').value = s.pdf_color_accent || '#E8A33D';
                 const rawAgreement = s.agreement_text || '';
                 // Gammal ren klartext (inga taggar) - bevara radbrytningar när den visas i editorn.
                 document.getElementById('sAgreementText').innerHTML = rawAgreement.includes('<') ? rawAgreement : escapeHtml(rawAgreement).replace(/\n/g, '<br>');
@@ -277,6 +308,74 @@
 
         loadFbSettings();
 
+        // ==========================================
+        // STÄDA OANVÄNDA UPPLADDNINGAR
+        // ==========================================
+        let lastOrphanScan = [];
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        async function scanOrphanedUploads() {
+            const btn = document.getElementById('scanUploadsBtn');
+            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Söker...';
+            try {
+                const res = await fetch('/api/maintenance/uploads-scan');
+                const data = await res.json();
+                if (!res.ok) { alert(data.message || 'Kunde inte söka.'); return; }
+                lastOrphanScan = data.orphaned || [];
+                renderOrphansList();
+                document.getElementById('uploadsScanResult').classList.remove('hidden');
+            } catch (e) { alert('Kunde inte söka efter oanvända filer.'); }
+            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-search mr-1"></i> Sök oanvända filer'; }
+        }
+
+        function renderOrphansList() {
+            const container = document.getElementById('orphansList');
+            document.getElementById('selectAllOrphans').checked = false;
+            if (lastOrphanScan.length === 0) {
+                container.innerHTML = '<p class="text-xs text-gray-400 italic p-3">Inga oanvända filer hittades. 🎉</p>';
+                updateOrphanSelectionCount();
+                return;
+            }
+            container.innerHTML = lastOrphanScan.map(f => `
+                <label class="flex items-center gap-3 p-2.5 text-xs hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" class="orphan-checkbox" value="${f.filename}" onchange="updateOrphanSelectionCount()">
+                    <img src="${f.url}" class="w-10 h-10 object-cover rounded border border-gray-200 bg-gray-50" onerror="this.style.visibility='hidden'">
+                    <span class="flex-1 min-w-0 truncate text-gray-600 font-mono">${f.filename}</span>
+                    <span class="text-gray-400 whitespace-nowrap">${formatFileSize(f.size)}</span>
+                    <span class="text-gray-400 whitespace-nowrap">${new Date(f.mtime).toLocaleDateString('sv-SE')}</span>
+                </label>
+            `).join('');
+            updateOrphanSelectionCount();
+        }
+
+        function toggleAllOrphans(checked) {
+            document.querySelectorAll('.orphan-checkbox').forEach(cb => cb.checked = checked);
+            updateOrphanSelectionCount();
+        }
+
+        function updateOrphanSelectionCount() {
+            const count = document.querySelectorAll('.orphan-checkbox:checked').length;
+            document.getElementById('selectedOrphansCount').innerText = count;
+            document.getElementById('deleteOrphansBtn').disabled = count === 0;
+        }
+
+        async function deleteSelectedOrphans() {
+            const filenames = Array.from(document.querySelectorAll('.orphan-checkbox:checked')).map(cb => cb.value);
+            if (filenames.length === 0) return;
+            if (!confirm(`Radera ${filenames.length} fil(er) permanent? Detta går inte att ångra.`)) return;
+            try {
+                const res = await fetch('/api/maintenance/uploads-cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filenames }) });
+                const data = await res.json();
+                alert(data.message);
+                scanOrphanedUploads();
+            } catch (e) { alert('Kunde inte radera filerna.'); }
+        }
+
         document.getElementById('settingsForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             // Om HTML-källkodsläget är öppet, synka in det till editorn innan vi läser innerHTML
@@ -290,6 +389,8 @@
             formData.append('address', document.getElementById('sAddress').value);
             formData.append('vat_rate', document.getElementById('sVatRate').value);
             formData.append('agreement_text', document.getElementById('sAgreementText').innerHTML);
+            formData.append('pdf_color_primary', document.getElementById('sPdfColorPrimary').value);
+            formData.append('pdf_color_accent', document.getElementById('sPdfColorAccent').value);
 
             const logoFile = document.getElementById('sLogo').files[0];
             if (logoFile) formData.append('logo', logoFile);
