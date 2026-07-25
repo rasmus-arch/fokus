@@ -300,6 +300,27 @@ app.put('/api/frame-types/:id', requireAuth, requireAdmin, (req, res) => {
 });
 app.delete('/api/frame-types/:id', requireAuth, requireAdmin, (req, res) => db.query('UPDATE frame_types SET active = 0 WHERE id = ?', [req.params.id], dbResult(res, 'Stomtyp inaktiverad!')));
 
+// ==========================================
+// RITNINGSMODULER (drawing_modules) - modulbibliotek för den enkla ritfunktionen
+// i offertbyggaren (trelådshurts, skåp med lucka, passbit osv).
+// ==========================================
+const DRAWING_MODULE_FIELDS = ['name', 'product_id', 'shape', 'frame_thickness', 'width_internal', 'width_external', 'depth', 'depth_internal', 'height_internal', 'height_external'];
+app.get('/api/drawing-modules', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM drawing_modules WHERE active = 1 ORDER BY name ASC', (err, results) => res.json(results || [])));
+app.post('/api/drawing-modules', requireAuth, requireAdmin, (req, res) => {
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ message: 'Namn saknas.' });
+    const values = DRAWING_MODULE_FIELDS.map(f => req.body[f] === undefined || req.body[f] === '' ? null : req.body[f]);
+    db.query(`INSERT INTO drawing_modules (${DRAWING_MODULE_FIELDS.join(', ')}) VALUES (${DRAWING_MODULE_FIELDS.map(() => '?').join(', ')})`, values, dbResult(res, 'Modul skapad!', result => ({ id: result.insertId })));
+});
+app.put('/api/drawing-modules/:id', requireAuth, requireAdmin, (req, res) => {
+    const { name, active } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ message: 'Namn saknas.' });
+    const values = DRAWING_MODULE_FIELDS.map(f => req.body[f] === undefined || req.body[f] === '' ? null : req.body[f]);
+    db.query(`UPDATE drawing_modules SET ${DRAWING_MODULE_FIELDS.map(f => f + '=?').join(', ')}, active=? WHERE id=?`,
+        [...values, active === false || active === 'false' ? 0 : 1, req.params.id], dbResult(res, 'Modul uppdaterad!'));
+});
+app.delete('/api/drawing-modules/:id', requireAuth, requireAdmin, (req, res) => db.query('UPDATE drawing_modules SET active = 0 WHERE id = ?', [req.params.id], dbResult(res, 'Modul inaktiverad!')));
+
 app.post('/api/products/bulk', requireAuth, requireAdmin, async (req, res) => {
     const products = req.body;
     if (!products || products.length === 0) return res.status(400).json({ message: 'Inga produkter skickades in.' });
