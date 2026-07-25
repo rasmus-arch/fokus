@@ -309,13 +309,19 @@ app.get('/api/drawing-modules', requireAuth, requireStaff, (req, res) => db.quer
 app.post('/api/drawing-modules', requireAuth, requireAdmin, (req, res) => {
     const { name } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ message: 'Namn saknas.' });
-    const values = DRAWING_MODULE_FIELDS.map(f => req.body[f] === undefined || req.body[f] === '' ? null : req.body[f]);
+    const values = DRAWING_MODULE_FIELDS.map(f => {
+        if (req.body[f] !== undefined && req.body[f] !== '') return req.body[f];
+        return f === 'shape' ? 'door' : null; // shape är NOT NULL i databasen - kan inte skickas som null
+    });
     db.query(`INSERT INTO drawing_modules (${DRAWING_MODULE_FIELDS.join(', ')}) VALUES (${DRAWING_MODULE_FIELDS.map(() => '?').join(', ')})`, values, dbResult(res, 'Modul skapad!', result => ({ id: result.insertId })));
 });
 app.put('/api/drawing-modules/:id', requireAuth, requireAdmin, (req, res) => {
     const { name, active } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ message: 'Namn saknas.' });
-    const values = DRAWING_MODULE_FIELDS.map(f => req.body[f] === undefined || req.body[f] === '' ? null : req.body[f]);
+    const values = DRAWING_MODULE_FIELDS.map(f => {
+        if (req.body[f] !== undefined && req.body[f] !== '') return req.body[f];
+        return f === 'shape' ? 'door' : null; // shape är NOT NULL i databasen - kan inte skickas som null
+    });
     db.query(`UPDATE drawing_modules SET ${DRAWING_MODULE_FIELDS.map(f => f + '=?').join(', ')}, active=? WHERE id=?`,
         [...values, active === false || active === 'false' ? 0 : 1, req.params.id], dbResult(res, 'Modul uppdaterad!'));
 });
