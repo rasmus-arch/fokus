@@ -1443,7 +1443,19 @@
             if (!frontLayout || !frontLayout.type) return pieces;
 
             if (frontLayout.type === 'door') {
-                pieces.push({ label: 'Lucka', component_type: 'lucka', width: W - 4, height: H - 6 });
+                // Max bredd på en lucka är 600 mm - blir skåpet bredare delas luckan i så många
+                // lika breda luckor som behövs för att ingen ska bli bredare än 600 mm
+                // (t.ex. 700 mm skåp -> 2 luckor à 350 mm, 1300 mm skåp -> 3 luckor à ~433 mm).
+                const totalDoorWidth = W - 4;
+                const doorCount = Math.max(1, Math.ceil(totalDoorWidth / 600));
+                const doorWidth = totalDoorWidth / doorCount;
+                if (doorCount === 1) {
+                    pieces.push({ label: 'Lucka', component_type: 'lucka', width: doorWidth, height: H - 6 });
+                } else {
+                    for (let i = 1; i <= doorCount; i++) {
+                        pieces.push({ label: `Lucka ${i}`, component_type: 'lucka', width: doorWidth, height: H - 6 });
+                    }
+                }
             } else if (frontLayout.type === 'drawers') {
                 const count = frontLayout.count;
                 const width = W - 4;
