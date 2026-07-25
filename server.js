@@ -304,7 +304,7 @@ app.delete('/api/frame-types/:id', requireAuth, requireAdmin, (req, res) => db.q
 // RITNINGSMODULER (drawing_modules) - modulbibliotek för den enkla ritfunktionen
 // i offertbyggaren (trelådshurts, skåp med lucka, passbit osv).
 // ==========================================
-const DRAWING_MODULE_FIELDS = ['name', 'product_id', 'shape', 'frame_thickness', 'width_internal', 'width_external', 'depth', 'depth_internal', 'height_internal', 'height_external'];
+const DRAWING_MODULE_FIELDS = ['name', 'product_id', 'shape', 'drawer_count', 'frame_thickness', 'width_internal', 'width_external', 'depth', 'depth_internal', 'height_internal', 'height_external'];
 app.get('/api/drawing-modules', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM drawing_modules WHERE active = 1 ORDER BY name ASC', (err, results) => res.json(results || [])));
 app.post('/api/drawing-modules', requireAuth, requireAdmin, (req, res) => {
     const { name } = req.body;
