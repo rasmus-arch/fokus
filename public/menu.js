@@ -55,13 +55,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     menuHtml += `
             </nav>
-            <div class="p-4 border-t border-gray-800">
-                <div class="text-xs text-gray-500 mb-3 px-2">Inloggad som: <span class="text-white font-semibold">${role}</span></div>
+            <div class="p-4 border-t border-gray-800 space-y-2">
+                <button id="kundlageToggleBtn" onclick="toggleKundlage()" type="button"></button>
+                <div class="text-xs text-gray-500 px-2">Inloggad som: <span class="text-white font-semibold">${role}</span></div>
                 <button onclick="fetch('/api/logout', {method:'POST'}).finally(() => { localStorage.clear(); window.location.href='/index.html'; })" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded transition flex items-center justify-center"><i class="fas fa-sign-out-alt mr-2"></i> Logga ut</button>
             </div>
         </div>
     `;
-    
+
     const container = document.getElementById('sidebar-container');
     if(container) container.innerHTML = menuHtml;
+    // Kundläge-knappens text/färg sätts av common.js (som laddas före menu.js), så själva
+    // knappinnehållet fylls i här, efter att den faktiska <button>-elementet finns i DOM:en.
+    const kundlageBtn = document.getElementById('kundlageToggleBtn');
+    if (kundlageBtn && window.updateKundlageButton) updateKundlageButton(kundlageBtn);
 });

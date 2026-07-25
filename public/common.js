@@ -111,3 +111,41 @@ function escapeHtml(val) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
+
+// ==========================================
+// KUNDLÄGE - global på/av-knapp (i sidomenyn) som döljer ALLA priser i gränssnittet, tänkt
+// för att kunna vända skärmen mot kunden (t.ex. i offertbyggaren) utan att visa belopp.
+// Sidor markerar sina prisfält med klassen "kundlage-price" - det är det enda varje sida
+// själv behöver göra, resten (toggle-knappen, tillståndet, CSS:en) sköts härifrån.
+// ==========================================
+(function () {
+    const style = document.createElement('style');
+    style.textContent = 'body.kundlage-active .kundlage-price { filter: blur(7px); user-select: none; }';
+    document.head.appendChild(style);
+
+    function isKundlageActive() { return localStorage.getItem('kundlage') === 'true'; }
+
+    function applyKundlageClass() {
+        document.body.classList.toggle('kundlage-active', isKundlageActive());
+    }
+
+    function toggleKundlage() {
+        localStorage.setItem('kundlage', (!isKundlageActive()).toString());
+        applyKundlageClass();
+        const btn = document.getElementById('kundlageToggleBtn');
+        if (btn) updateKundlageButton(btn);
+    }
+    window.toggleKundlage = toggleKundlage;
+
+    function updateKundlageButton(btn) {
+        const active = isKundlageActive();
+        btn.innerHTML = active
+            ? '<i class="fas fa-eye-slash mr-2"></i> Kundläge: PÅ'
+            : '<i class="fas fa-eye mr-2"></i> Kundläge: AV';
+        btn.className = 'w-full py-2 rounded transition flex items-center justify-center text-sm font-medium ' + (active ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-200');
+    }
+    window.updateKundlageButton = updateKundlageButton;
+
+    const apply = () => applyKundlageClass();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
+})();
