@@ -462,8 +462,8 @@
                 <h3 class="font-bold text-lg"><i class="fas fa-draw-polygon text-purple-400 mr-2"></i> Ritning</h3>
                 <div class="flex items-center gap-2 flex-wrap">
                     <div class="flex bg-gray-800 rounded overflow-hidden text-xs font-medium">
-                        <button type="button" onclick="setDrawingViewMode('plan')" id="drawingViewPlanBtn" class="px-3 py-1.5 bg-purple-600"><i class="fas fa-border-all mr-1"></i> Planvy</button>
-                        <button type="button" onclick="setDrawingViewMode('elevation')" id="drawingViewElevationBtn" class="px-3 py-1.5"><i class="fas fa-square mr-1"></i> Rakvy</button>
+                        <button type="button" onclick="setDrawingViewMode('elevation')" id="drawingViewElevationBtn" class="px-3 py-1.5 bg-purple-600"><i class="fas fa-square mr-1"></i> Framifrån</button>
+                        <button type="button" onclick="setDrawingViewMode('plan')" id="drawingViewPlanBtn" class="px-3 py-1.5"><i class="fas fa-border-all mr-1"></i> Uppifrån</button>
                     </div>
                     <button type="button" onclick="addDrawingWall()" class="text-xs bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded font-medium"><i class="fas fa-plus mr-1"></i> Vägg</button>
                     <button onclick="document.getElementById('drawingModal').classList.add('hidden')" class="text-gray-300 hover:text-white ml-1"><i class="fas fa-times text-xl"></i></button>
@@ -473,7 +473,7 @@
             <div class="flex flex-col md:flex-row flex-1 overflow-hidden min-h-[60vh]">
                 <div class="w-full md:w-52 shrink-0 border-b md:border-b-0 md:border-r border-gray-200 p-3 overflow-y-auto bg-gray-50 max-h-40 md:max-h-none">
                     <p class="text-[10px] text-gray-400 uppercase font-bold mb-1">Modulbibliotek</p>
-                    <p class="text-[11px] text-gray-400 italic mb-2">Dra en modul till en vägg till höger. Klicka på en placerad modul för att ange mått.</p>
+                    <p class="text-[11px] text-gray-400 italic mb-2">Dra en modul till väggskåps- eller bänkskåpsraden på önskad vägg. Klicka på en placerad modul för att ange mått. Bygg i "Framifrån", växla till "Uppifrån" för att se planritningen och vrida väggar i vinkel.</p>
                     <div id="drawingModuleLibrary" class="space-y-1.5"></div>
                 </div>
                 <div id="drawingWallsContainer" class="flex-1 p-4 overflow-auto bg-gray-100 space-y-6"></div>
@@ -488,6 +488,13 @@
                 <button onclick="closeDrawingPropsModal()" class="text-gray-300 hover:text-white"><i class="fas fa-times"></i></button>
             </header>
             <div class="p-4 space-y-3">
+                <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Nivå</label>
+                    <select id="dpLevel" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                        <option value="base">Bänkskåp (golv)</option>
+                        <option value="wall">Väggskåp (ovan bänkskiva)</option>
+                    </select>
+                </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div><label class="block text-[11px] text-gray-500 mb-1">Tjocklek stomme</label><input type="number" id="dpFrameThickness" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"></div>
                     <div><label class="block text-[11px] text-gray-500 mb-1">Invändig bredd</label><input type="number" id="dpWidthInternal" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"></div>
@@ -651,7 +658,7 @@
         let coverPageData = { enabled: false, heroImage: null, handleImage: null, modelImage: null, colorImage: null };
         let ctConfig = { materials: [], colors: [], prices: [], services: [], edges: [] };
         let doorModels = []; let selectedDoorModelId = ''; let doorModelPriceItems = [];
-        let drawingWalls = []; let drawingModuleLibraryData = []; let drawingViewMode = 'plan'; let currentDrawingPlacement = null; let dragState = null;
+        let drawingWalls = []; let drawingModuleLibraryData = []; let drawingViewMode = 'elevation'; let currentDrawingPlacement = null; let dragState = null;
 
         let currentModalProduct = null;
         let parsedVariations = [];
@@ -2006,7 +2013,18 @@
         }
 
         function addDrawingWall() {
-            drawingWalls.push({ id: 'wall_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: `Vägg ${drawingWalls.length + 1}`, modules: [] });
+            // turnDeg = väggens riktning i "Uppifrån"-vyn (0/90/180/270°) - varje ny vägg vrids
+            // automatiskt 90° från föregående som standard (passar ett vanligt L/U-format kök),
+            // men går att ändra manuellt med rotationsknappen där.
+            drawingWalls.push({ id: 'wall_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: `Vägg ${drawingWalls.length + 1}`, turnDeg: (drawingWalls.length * 90) % 360, modules: [] });
+            renderDrawingWalls();
+            scheduleAutoSave();
+        }
+
+        function rotateDrawingWall(wallId) {
+            const wall = drawingWalls.find(w => w.id === wallId);
+            if (!wall) return;
+            wall.turnDeg = ((wall.turnDeg ?? 0) + 90) % 360;
             renderDrawingWalls();
             scheduleAutoSave();
         }
@@ -2039,10 +2057,155 @@
             return { w: Math.max(30, width * DRAWING_SCALE), h: Math.max(30, heightMm * DRAWING_SCALE), name, dimLabel: `${Math.round(width)}x${Math.round(heightMm)}` };
         }
 
-        function renderDrawingWalls() {
-            const container = document.getElementById('drawingWallsContainer');
-            if (drawingWalls.length === 0) { container.innerHTML = '<p class="text-sm text-gray-400 italic">Inga väggar ännu. Klicka "+ Vägg" för att börja rita.</p>'; return; }
+        function drawingModuleDefault(placement, field) {
+            const mod = drawingModuleLibraryData.find(m => m.id === placement.moduleId);
+            return mod ? parseFloat(mod[field]) : null;
+        }
+
+        // Enkla linjer inuti blocket som gör att formen går att känna igen (t.ex. att en
+        // trelådshurts syns som tre lådor) - bara relevant i "Framifrån" (man ser fronter rakt
+        // framifrån). I "Uppifrån" visas bara ytan/måtten, inga fronter, eftersom man då tittar
+        // rakt ner och inte ser luckor/lådfronter.
+        function drawingModuleFrontVisual(mod) {
+            const shape = mod.shape || 'other';
+            if (shape === 'drawers') {
+                const count = Math.max(1, parseInt(mod.drawer_count) || 3);
+                let html = '';
+                for (let i = 0; i < count; i++) {
+                    if (i > 0) html += `<div class="absolute left-0 right-0 border-t border-purple-300" style="top:${(100 / count) * i}%"></div>`;
+                    html += `<div class="absolute bg-purple-400 rounded" style="left:50%; top:${(100 / count) * (i + 0.5)}%; width:40%; height:2px; margin-left:-20%; margin-top:-1px;"></div>`;
+                }
+                return html;
+            }
+            if (shape === 'door') {
+                return `<div class="absolute top-0 bottom-0 border-l border-purple-300" style="left:12%"></div><div class="absolute bg-purple-400 rounded" style="left:16%; top:46%; width:2px; height:16%;"></div>`;
+            }
+            if (shape === 'filler') {
+                return `<div class="absolute inset-0" style="background:repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(168,85,247,0.25) 4px, rgba(168,85,247,0.25) 5px);"></div>`;
+            }
+            if (shape === 'open') {
+                return `<div class="absolute left-0 right-0 border-t border-dashed border-purple-300" style="top:33%"></div><div class="absolute left-0 right-0 border-t border-dashed border-purple-300" style="top:66%"></div>`;
+            }
+            if (shape === 'corner') {
+                return `<div class="absolute inset-0" style="background:linear-gradient(135deg, transparent 47%, rgba(217,119,6,0.4) 50%, transparent 53%);"></div>`;
+            }
+            return '';
+        }
+
+        // "Uppifrån" (planritning): väggarna kedjas ihop efter varandra och vrids enligt varje
+        // väggs turnDeg, så en L- eller U-formad köksplanering går att bygga genom att rotera
+        // väggarna med knapparna ovanför ritningen. Bänkskåp (heldragna) och väggskåp (streckade,
+        // ligger mot väggen) ritas som två parallella band per vägg. Hörnskåp får en egen
+        // diagonal fyllning för att synas som markören för var väggarna möts.
+        function renderDrawingPlanCanvas(container) {
             container.innerHTML = '';
+
+            if (drawingWalls.length === 0) {
+                container.innerHTML = '<p class="text-sm text-gray-400 italic">Inga väggar ännu. Lägg till moduler i "Framifrån"-läget först, växla sedan hit för att se planritningen uppifrån.</p>';
+                return;
+            }
+
+            const rotateBar = document.createElement('div');
+            rotateBar.className = 'flex flex-wrap gap-2 mb-3';
+            drawingWalls.forEach((wall, i) => {
+                const deg = wall.turnDeg ?? ((i * 90) % 360);
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'text-[11px] bg-white border border-gray-300 rounded px-2 py-1 hover:bg-gray-50 font-medium text-gray-600';
+                btn.innerHTML = `${escapeHtml(wall.name)} (${deg}°) <i class="fas fa-rotate-right ml-1 text-gray-400"></i>`;
+                btn.onclick = () => rotateDrawingWall(wall.id);
+                rotateBar.appendChild(btn);
+            });
+            container.appendChild(rotateBar);
+
+            const canvas = document.createElement('div');
+            canvas.className = 'relative';
+            canvas.style.width = '1800px';
+            canvas.style.height = '1400px';
+
+            let x = 700, y = 500;
+            drawingWalls.forEach((wall, i) => {
+                const deg = wall.turnDeg ?? ((i * 90) % 360);
+                const baseModules = wall.modules.filter(m => (m.level || 'base') === 'base');
+                const wallModules = wall.modules.filter(m => m.level === 'wall');
+                const widthOf = m => (parseFloat(m.widthExternal) || drawingModuleDefault(m, 'width_external') || 600) * DRAWING_SCALE;
+                const baseLenPx = baseModules.reduce((s, m) => s + widthOf(m), 0);
+                const wallLenPx = wallModules.reduce((s, m) => s + widthOf(m), 0);
+                const lengthPx = Math.max(baseLenPx, wallLenPx, 300 * DRAWING_SCALE);
+                const depthBasePx = Math.max(300 * DRAWING_SCALE, ...baseModules.map(m => (parseFloat(m.depth) || drawingModuleDefault(m, 'depth') || 600) * DRAWING_SCALE));
+                const depthWallPx = wallModules.length ? Math.max(200 * DRAWING_SCALE, ...wallModules.map(m => (parseFloat(m.depth) || drawingModuleDefault(m, 'depth') || 350) * DRAWING_SCALE)) : 0;
+
+                const group = document.createElement('div');
+                group.className = 'absolute';
+                group.style.left = x + 'px';
+                group.style.top = y + 'px';
+                group.style.transformOrigin = '0 0';
+                group.style.transform = `rotate(${deg}deg)`;
+
+                const label = document.createElement('div');
+                label.className = 'absolute text-[10px] font-bold text-gray-500 whitespace-nowrap';
+                label.style.left = '0px';
+                label.style.top = '-16px';
+                label.textContent = wall.name;
+                group.appendChild(label);
+
+                let offsetWall = 0;
+                wallModules.forEach(placement => {
+                    const w = widthOf(placement);
+                    group.appendChild(planModuleRect(placement, offsetWall, 0, w, depthWallPx, true));
+                    offsetWall += w;
+                });
+                let offsetBase = 0;
+                baseModules.forEach(placement => {
+                    const w = widthOf(placement);
+                    group.appendChild(planModuleRect(placement, offsetBase, depthWallPx, w, depthBasePx, false));
+                    offsetBase += w;
+                });
+
+                canvas.appendChild(group);
+
+                const rad = deg * Math.PI / 180;
+                x += lengthPx * Math.cos(rad);
+                y += lengthPx * Math.sin(rad);
+            });
+
+            const wrap = document.createElement('div');
+            wrap.className = 'overflow-auto border border-gray-200 rounded bg-gray-50';
+            wrap.style.maxHeight = '55vh';
+            wrap.appendChild(canvas);
+            container.appendChild(wrap);
+        }
+
+        function planModuleRect(placement, left, top, w, h, isWallLevel) {
+            const mod = drawingModuleLibraryData.find(m => m.id === placement.moduleId) || {};
+            const isCorner = mod.shape === 'corner';
+            const div = document.createElement('div');
+            div.className = 'absolute flex items-center justify-center text-center leading-tight overflow-hidden ' +
+                (isWallLevel
+                    ? 'border border-dashed border-purple-300 bg-purple-50/50 text-purple-400'
+                    : (isCorner ? 'border-2 border-amber-500 bg-amber-100 text-amber-800' : 'border-2 border-purple-400 bg-purple-50 text-purple-800'));
+            div.style.left = left + 'px';
+            div.style.top = top + 'px';
+            div.style.width = Math.max(20, w) + 'px';
+            div.style.height = Math.max(20, h) + 'px';
+            div.style.fontSize = '8px';
+            div.style.fontWeight = 'bold';
+            div.textContent = mod.name || 'Modul';
+            div.title = mod.name || 'Modul';
+            return div;
+        }
+
+        const DRAWING_LEVELS = [
+            { key: 'wall', label: 'Väggskåp (ovan bänkskiva)', emptyText: 'Släpp väggskåp här' },
+            { key: 'base', label: 'Bänkskåp (golv)', emptyText: 'Släpp bänkskåp här' }
+        ];
+
+        // "Framifrån": redigeringsläget. Varje vägg har två rader att släppa moduler i -
+        // väggskåp överst, bänkskåp underst - så att väggskåp visuellt hamnar ovanför
+        // bänkskåpen, precis som i ett riktigt kök.
+        function renderDrawingElevationBoxes(container) {
+            container.innerHTML = '';
+            if (drawingWalls.length === 0) { container.innerHTML = '<p class="text-sm text-gray-400 italic">Inga väggar ännu. Klicka "+ Vägg" för att börja rita.</p>'; return; }
             drawingWalls.forEach(wall => {
                 const wallBox = document.createElement('div');
                 wallBox.className = 'bg-white border border-gray-300 rounded-lg shadow-sm';
@@ -2057,23 +2220,47 @@
                 header.appendChild(delBtn);
                 wallBox.appendChild(header);
 
-                const dropzone = document.createElement('div');
-                dropzone.className = 'drawing-wall-dropzone flex items-end gap-1 p-3 min-h-[110px] overflow-x-auto';
-                dropzone.dataset.wallId = wall.id;
-                if (wall.modules.length === 0) dropzone.innerHTML = '<p class="text-[11px] text-gray-300 italic">Släpp moduler här</p>';
-                wall.modules.forEach(placement => {
-                    const { w, h, name, dimLabel } = drawingBlockSize(placement);
-                    const block = document.createElement('div');
-                    block.className = 'shrink-0 bg-purple-50 border-2 border-purple-400 rounded-sm flex flex-col items-center justify-center relative cursor-grab select-none touch-none';
-                    block.style.width = w + 'px';
-                    block.style.height = h + 'px';
-                    block.innerHTML = `<span class="text-[9px] font-bold text-purple-800 text-center px-0.5 leading-tight">${escapeHtml(name)}</span><span class="text-[8px] text-purple-500">${dimLabel}mm</span>`;
-                    block.addEventListener('pointerdown', (ev) => startDrawingDrag(ev, null, { wallId: wall.id, placementId: placement.id }));
-                    dropzone.appendChild(block);
+                DRAWING_LEVELS.forEach(levelDef => {
+                    const levelWrap = document.createElement('div');
+                    levelWrap.className = 'border-b border-gray-100 last:border-b-0';
+                    const levelLabel = document.createElement('p');
+                    levelLabel.className = 'text-[9px] uppercase tracking-wide text-gray-400 px-3 pt-2';
+                    levelLabel.textContent = levelDef.label;
+                    levelWrap.appendChild(levelLabel);
+
+                    const dropzone = document.createElement('div');
+                    dropzone.className = 'drawing-level-row flex items-end gap-1 p-3 min-h-[90px] overflow-x-auto';
+                    dropzone.dataset.wallId = wall.id;
+                    dropzone.dataset.level = levelDef.key;
+                    const levelModules = wall.modules.filter(m => (m.level || 'base') === levelDef.key);
+                    if (levelModules.length === 0) dropzone.innerHTML = `<p class="text-[11px] text-gray-300 italic">${levelDef.emptyText}</p>`;
+                    levelModules.forEach(placement => {
+                        const { w, h, name, dimLabel } = drawingBlockSize(placement);
+                        const mod = drawingModuleLibraryData.find(m => m.id === placement.moduleId) || {};
+                        const isCorner = mod.shape === 'corner';
+                        const block = document.createElement('div');
+                        block.className = 'shrink-0 rounded-sm flex flex-col items-center justify-center relative cursor-grab select-none touch-none overflow-hidden ' +
+                            (isCorner ? 'bg-amber-50 border-2 border-amber-500' : 'bg-purple-50 border-2 border-purple-400');
+                        block.style.width = w + 'px';
+                        block.style.height = h + 'px';
+                        block.innerHTML = drawingModuleFrontVisual(mod) +
+                            `<span class="relative text-[9px] font-bold ${isCorner ? 'text-amber-800' : 'text-purple-800'} text-center px-0.5 leading-tight">${escapeHtml(name)}</span>` +
+                            `<span class="relative text-[8px] ${isCorner ? 'text-amber-500' : 'text-purple-500'}">${dimLabel}mm</span>`;
+                        block.addEventListener('pointerdown', (ev) => startDrawingDrag(ev, null, { wallId: wall.id, placementId: placement.id }));
+                        dropzone.appendChild(block);
+                    });
+                    levelWrap.appendChild(dropzone);
+                    wallBox.appendChild(levelWrap);
                 });
-                wallBox.appendChild(dropzone);
+
                 container.appendChild(wallBox);
             });
+        }
+
+        function renderDrawingWalls() {
+            const container = document.getElementById('drawingWallsContainer');
+            if (drawingViewMode === 'plan') renderDrawingPlanCanvas(container);
+            else renderDrawingElevationBoxes(container);
         }
 
         // Pointer-events-baserad drag: fungerar likadant för mus och touch (iPad). Ett litet
@@ -2115,19 +2302,20 @@
 
             if (!moved) { if (existing) openDrawingPropsModal(existing.placementId); return; }
             const target = document.elementFromPoint(ev.clientX, ev.clientY);
-            const dropzone = target ? target.closest('.drawing-wall-dropzone') : null;
-            if (!dropzone) { if (existing) renderDrawingWalls(); return; }
-            const wallId = dropzone.dataset.wallId;
-            if (libraryModule) addDrawingPlacement(wallId, libraryModule.id);
-            else if (existing) moveDrawingPlacement(existing.wallId, existing.placementId, wallId);
+            const row = target ? target.closest('.drawing-level-row') : null;
+            if (!row) { if (existing) renderDrawingWalls(); return; }
+            const wallId = row.dataset.wallId, level = row.dataset.level;
+            if (libraryModule) addDrawingPlacement(wallId, libraryModule.id, level);
+            else if (existing) moveDrawingPlacement(existing.wallId, existing.placementId, wallId, level);
         }
 
-        function addDrawingPlacement(wallId, moduleId) {
+        function addDrawingPlacement(wallId, moduleId, level) {
             const wall = drawingWalls.find(w => w.id === wallId);
             const mod = drawingModuleLibraryData.find(m => m.id === moduleId);
             if (!wall || !mod) return;
             const placement = {
                 id: 'dp_' + Date.now() + '_' + Math.floor(Math.random() * 1000), moduleId: mod.id, cartId: null,
+                level: level || 'base',
                 frameThickness: mod.frame_thickness, widthInternal: mod.width_internal, widthExternal: mod.width_external,
                 depth: mod.depth, depthInternal: mod.depth_internal, heightInternal: mod.height_internal, heightExternal: mod.height_external
             };
@@ -2138,14 +2326,17 @@
             scheduleAutoSave();
         }
 
-        function moveDrawingPlacement(fromWallId, placementId, toWallId) {
-            if (fromWallId === toWallId) return;
+        // Flyttar en placerad modul till en annan vägg och/eller nivå (bänkskåp/väggskåp).
+        // Ingen tidig retur vid oförändrad vägg längre - det är precis så man byter nivå inom
+        // samma vägg (drar blocket från bänkskåpsraden upp till väggskåpsraden eller tvärtom).
+        function moveDrawingPlacement(fromWallId, placementId, toWallId, toLevel) {
             const fromWall = drawingWalls.find(w => w.id === fromWallId);
             const toWall = drawingWalls.find(w => w.id === toWallId);
             if (!fromWall || !toWall) return;
             const idx = fromWall.modules.findIndex(m => m.id === placementId);
             if (idx === -1) return;
             const [placement] = fromWall.modules.splice(idx, 1);
+            placement.level = toLevel || placement.level || 'base';
             toWall.modules.push(placement);
             renderDrawingWalls();
             scheduleAutoSave();
@@ -2207,6 +2398,7 @@
             const { placement } = found;
             const mod = drawingModuleLibraryData.find(m => m.id === placement.moduleId);
             document.getElementById('drawingPropsTitle').textContent = mod ? mod.name : 'Modul';
+            document.getElementById('dpLevel').value = placement.level || 'base';
             document.getElementById('dpFrameThickness').value = placement.frameThickness ?? '';
             document.getElementById('dpWidthInternal').value = placement.widthInternal ?? '';
             document.getElementById('dpWidthExternal').value = placement.widthExternal ?? '';
@@ -2227,6 +2419,7 @@
             const found = findDrawingPlacement(currentDrawingPlacement.placementId);
             if (!found) return;
             const p = found.placement;
+            p.level = document.getElementById('dpLevel').value;
             p.frameThickness = document.getElementById('dpFrameThickness').value || null;
             p.widthInternal = document.getElementById('dpWidthInternal').value || null;
             p.widthExternal = document.getElementById('dpWidthExternal').value || null;
