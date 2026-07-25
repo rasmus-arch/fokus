@@ -1,3 +1,14 @@
+// Mobil hamburgermeny - av/på-knappen och bakgrundsöverlägget ligger utanför <nav> så de
+// alltid går att nå oavsett hur sidopanelen är positionerad.
+function toggleMobileMenu() {
+    document.getElementById('sidebarPanel').classList.toggle('-translate-x-full');
+    document.getElementById('mobileMenuBackdrop').classList.toggle('hidden');
+}
+function closeMobileMenu() {
+    document.getElementById('sidebarPanel').classList.add('-translate-x-full');
+    document.getElementById('mobileMenuBackdrop').classList.add('hidden');
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
     const role = localStorage.getItem('userRole');
     const token = localStorage.getItem('userToken');
@@ -22,10 +33,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (s && s.logo_url) logoHtml = `<img src="${s.logo_url}" alt="${s.company_name || 'Logotyp'}" class="h-10 mx-auto object-contain" onerror="this.outerHTML='Logga saknas'">`;
     } catch (e) {}
 
+    // Mobil: sidomenyn ligger normalt utanför skärmen (-translate-x-full) och glider in som en
+    // overlay ovanpå innehållet när hamburgerknappen trycks. Från lg och uppåt beter den sig
+    // precis som förut (statisk, alltid synlig, ingen overlay/backdrop).
     let menuHtml = `
-        <div class="bg-gray-900 text-white w-64 min-h-screen flex flex-col transition-all duration-300">
+        <button id="mobileMenuToggle" onclick="toggleMobileMenu()" type="button" class="lg:hidden fixed top-3 left-3 z-[60] bg-gray-900 text-white w-10 h-10 rounded-lg shadow-lg flex items-center justify-center">
+            <i class="fas fa-bars"></i>
+        </button>
+        <div id="mobileMenuBackdrop" onclick="closeMobileMenu()" class="lg:hidden hidden fixed inset-0 bg-black bg-opacity-50 z-40"></div>
+        <div id="sidebarPanel" class="bg-gray-900 text-white w-64 h-screen flex flex-col fixed inset-y-0 left-0 z-50 -translate-x-full lg:translate-x-0 lg:static transition-transform duration-200 ease-in-out overflow-y-auto">
             <div class="p-5 bg-gray-800 text-xl font-bold tracking-widest text-center border-b border-gray-700">${logoHtml}</div>
-            <nav class="flex-1 p-4 space-y-2">
+            <nav class="flex-1 p-4 space-y-2" onclick="closeMobileMenu()">
     `;
 
     // Huvudmenyn i fast ordning: Översikt, Kundregister, Offerter, Ordrar, Montage
