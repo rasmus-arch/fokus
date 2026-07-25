@@ -538,9 +538,9 @@ app.put('/api/quotes/:id/status', requireAuth, requireStaff, (req, res) => {
     } else db.query('UPDATE quotes SET status = ?, installer_id = ? WHERE id = ?', [status, installer_id || null, quoteId], () => res.json({message: 'Uppdaterad!'}));
 });
 app.put('/api/quotes/:id', requireAuth, requireStaff, (req, res) => {
-    const { quoteCart, selectedConditions, kitchenSpecs, extraFees, globalDiscount, discountType, useRot, internal_comment, public_comment, coverPage } = req.body;
+    const { quoteCart, selectedConditions, kitchenSpecs, extraFees, globalDiscount, discountType, useRot, internal_comment, public_comment, coverPage, drawingWalls } = req.body;
     db.query('UPDATE quotes SET global_discount = ?, discount_type = ?, quote_data = ?, internal_comment = ?, public_comment = ? WHERE id = ?',
-        [globalDiscount || 0, discountType || '%', JSON.stringify({ selectedConditions, kitchenSpecs, extraFees, quoteCart, useRot, coverPage }), internal_comment || null, public_comment || null, req.params.id], (err) => {
+        [globalDiscount || 0, discountType || '%', JSON.stringify({ selectedConditions, kitchenSpecs, extraFees, quoteCart, useRot, coverPage, drawingWalls }), internal_comment || null, public_comment || null, req.params.id], (err) => {
         if (err) return res.status(500).json({ message: "Fel vid sparning." });
         db.query('DELETE FROM quote_items WHERE quote_id = ?', [req.params.id], () => {
             if (!quoteCart || quoteCart.length === 0) return res.json({ message: 'Offerten har sparats.' });
