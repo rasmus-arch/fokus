@@ -134,6 +134,7 @@
             if (!name) return;
             const res = await fetch('/api/drawing-modules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
             const data = await res.json();
+            if (!res.ok) { alert(data.message || `Något gick fel (status ${res.status}).`); return; }
             document.getElementById('newModuleName').value = '';
             await fetchModules();
             if (data.id) selectModule(data.id);
