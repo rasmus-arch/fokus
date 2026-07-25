@@ -66,6 +66,7 @@
                     <div class="flex gap-1.5">
                         <button onclick="openCountertopModal()" class="text-[11px] bg-blue-600 hover:bg-blue-500 px-2.5 py-1.5 rounded border border-blue-500 font-medium shadow-sm transition"><i class="fas fa-layer-group mr-1"></i> Bänkskiva</button>
                         <button onclick="openManualFrontModal()" class="text-[11px] bg-gray-700 hover:bg-gray-600 px-2.5 py-1.5 rounded border border-gray-600 font-medium transition"><i class="fas fa-door-open mr-1"></i> Lucka/Front</button>
+                        <button onclick="openDrawingModal()" class="text-[11px] bg-purple-600 hover:bg-purple-500 px-2.5 py-1.5 rounded border border-purple-500 font-medium shadow-sm transition"><i class="fas fa-draw-polygon mr-1"></i> Ritning</button>
                         <button onclick="document.getElementById('freeTextModal').classList.remove('hidden')" class="text-[11px] bg-gray-700 hover:bg-gray-600 px-2.5 py-1.5 rounded border border-gray-600 font-medium transition">+ Fritext</button>
                     </div>
                 </div>
@@ -455,6 +456,55 @@
         </div>
     </div>
 
+    <div id="drawingModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-2 md:p-4 overflow-y-auto">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-6xl flex flex-col my-auto relative border border-gray-300 max-h-[95vh]">
+            <header class="p-4 bg-gray-900 text-white flex flex-wrap justify-between items-center gap-2 rounded-t-lg shrink-0">
+                <h3 class="font-bold text-lg"><i class="fas fa-draw-polygon text-purple-400 mr-2"></i> Ritning</h3>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <div class="flex bg-gray-800 rounded overflow-hidden text-xs font-medium">
+                        <button type="button" onclick="setDrawingViewMode('plan')" id="drawingViewPlanBtn" class="px-3 py-1.5 bg-purple-600"><i class="fas fa-border-all mr-1"></i> Planvy</button>
+                        <button type="button" onclick="setDrawingViewMode('elevation')" id="drawingViewElevationBtn" class="px-3 py-1.5"><i class="fas fa-square mr-1"></i> Rakvy</button>
+                    </div>
+                    <button type="button" onclick="addDrawingWall()" class="text-xs bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded font-medium"><i class="fas fa-plus mr-1"></i> Vägg</button>
+                    <button onclick="document.getElementById('drawingModal').classList.add('hidden')" class="text-gray-300 hover:text-white ml-1"><i class="fas fa-times text-xl"></i></button>
+                </div>
+            </header>
+
+            <div class="flex flex-col md:flex-row flex-1 overflow-hidden min-h-[60vh]">
+                <div class="w-full md:w-52 shrink-0 border-b md:border-b-0 md:border-r border-gray-200 p-3 overflow-y-auto bg-gray-50 max-h-40 md:max-h-none">
+                    <p class="text-[10px] text-gray-400 uppercase font-bold mb-1">Modulbibliotek</p>
+                    <p class="text-[11px] text-gray-400 italic mb-2">Dra en modul till en vägg till höger. Klicka på en placerad modul för att ange mått.</p>
+                    <div id="drawingModuleLibrary" class="space-y-1.5"></div>
+                </div>
+                <div id="drawingWallsContainer" class="flex-1 p-4 overflow-auto bg-gray-100 space-y-6"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="drawingPropsModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-[60] p-4">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-md border border-gray-300">
+            <header class="p-3 bg-gray-900 text-white flex justify-between items-center rounded-t-lg">
+                <h3 class="font-bold text-sm" id="drawingPropsTitle">Modul</h3>
+                <button onclick="closeDrawingPropsModal()" class="text-gray-300 hover:text-white"><i class="fas fa-times"></i></button>
+            </header>
+            <div class="p-4 space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-[11px] text-gray-500 mb-1">Tjocklek stomme</label><input type="number" id="dpFrameThickness" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div><label class="block text-[11px] text-gray-500 mb-1">Invändig bredd</label><input type="number" id="dpWidthInternal" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div><label class="block text-[11px] text-gray-500 mb-1">Utvändig bredd</label><input type="number" id="dpWidthExternal" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div><label class="block text-[11px] text-gray-500 mb-1">Djup</label><input type="number" id="dpDepth" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div><label class="block text-[11px] text-gray-500 mb-1">Invändigt djup</label><input type="number" id="dpDepthInternal" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div><label class="block text-[11px] text-gray-500 mb-1">Invändig höjd</label><input type="number" id="dpHeightInternal" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"></div>
+                    <div><label class="block text-[11px] text-gray-500 mb-1">Utvändig höjd</label><input type="number" id="dpHeightExternal" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"></div>
+                </div>
+                <div class="flex justify-between items-center pt-2 border-t border-gray-100">
+                    <button onclick="deleteDrawingPlacement()" class="text-red-600 hover:text-red-800 text-xs font-medium"><i class="fas fa-trash mr-1"></i> Ta bort</button>
+                    <button onclick="saveDrawingPlacementProps()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-medium">Spara</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="productModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-2 md:p-4">
         <div class="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[95vh] flex flex-col overflow-hidden relative">
             <button onclick="closeProductModal()" class="absolute top-3 right-3 text-gray-400 hover:text-gray-700 z-10 bg-white bg-opacity-80 rounded-full w-8 h-8 flex items-center justify-center shadow"><i class="fas fa-times text-xl"></i></button>
@@ -601,6 +651,7 @@
         let coverPageData = { enabled: false, heroImage: null, handleImage: null, modelImage: null, colorImage: null };
         let ctConfig = { materials: [], colors: [], prices: [], services: [], edges: [] };
         let doorModels = []; let selectedDoorModelId = ''; let doorModelPriceItems = [];
+        let drawingWalls = []; let drawingModuleLibraryData = []; let drawingViewMode = 'plan'; let currentDrawingPlacement = null; let dragState = null;
 
         let currentModalProduct = null;
         let parsedVariations = [];
@@ -1628,6 +1679,7 @@
                     document.getElementById('globalDiscount').value = data.global_discount || 0; document.getElementById('globalDiscountType').value = data.discount_type || '%'; document.getElementById('internalComment').value = data.internal_comment || ''; document.getElementById('publicComment').value = data.public_comment || '';
                     if (data.quote_data) {
                         const qd = parseJsonField(data.quote_data, {}); if (qd.quoteCart) quoteCart = qd.quoteCart;
+                        if (Array.isArray(qd.drawingWalls)) drawingWalls = qd.drawingWalls;
                         if (qd.selectedConditions) { for (const key in qd.selectedConditions) { if(selectedConditions[key]) { selectedConditions[key].responsibility = qd.selectedConditions[key].responsibility || ''; selectedConditions[key].qty = qd.selectedConditions[key].qty || 1; selectedConditions[key].customPrice = qd.selectedConditions[key].customPrice || 0; } } }
                         if (qd.useRot !== undefined) document.getElementById('useRotCheckbox').checked = qd.useRot;
                         if (qd.kitchenSpecs) { document.getElementById('qsMaterial').value = qd.kitchenSpecs.material || ''; document.getElementById('qsColor').value = qd.kitchenSpecs.color || ''; document.getElementById('qsDoor').value = qd.kitchenSpecs.door || ''; if (qd.kitchenSpecs.doorModelId) { document.getElementById('qsDoorModelId').value = qd.kitchenSpecs.doorModelId; onDoorModelChange(); } }
@@ -1747,7 +1799,7 @@
         }
 
         function buildQuotePayload() {
-            return { quoteCart, selectedConditions, kitchenSpecs: { material: document.getElementById('qsMaterial').value, color: document.getElementById('qsColor').value, door: document.getElementById('qsDoor').value, doorModelId: document.getElementById('qsDoorModelId').value }, extraFees: { startFeeProduct: document.getElementById('startFeeProduct').value, startFeeNonRot: document.getElementById('startFeeNonRot').value, startFeeRotComp: document.getElementById('startFeeRotComp').value, startFeeRotInst: document.getElementById('startFeeRotInst').value, colorSelect: document.getElementById('colorSelect').value, colorCustom: document.getElementById('colorCustom').value, feeColor: document.getElementById('feeColor').value }, globalDiscount: document.getElementById('globalDiscount').value, discountType: document.getElementById('globalDiscountType').value, useRot: document.getElementById('useRotCheckbox').checked, internal_comment: document.getElementById('internalComment').value, public_comment: document.getElementById('publicComment').value, coverPage: coverPageData };
+            return { quoteCart, selectedConditions, kitchenSpecs: { material: document.getElementById('qsMaterial').value, color: document.getElementById('qsColor').value, door: document.getElementById('qsDoor').value, doorModelId: document.getElementById('qsDoorModelId').value }, extraFees: { startFeeProduct: document.getElementById('startFeeProduct').value, startFeeNonRot: document.getElementById('startFeeNonRot').value, startFeeRotComp: document.getElementById('startFeeRotComp').value, startFeeRotInst: document.getElementById('startFeeRotInst').value, colorSelect: document.getElementById('colorSelect').value, colorCustom: document.getElementById('colorCustom').value, feeColor: document.getElementById('feeColor').value }, globalDiscount: document.getElementById('globalDiscount').value, discountType: document.getElementById('globalDiscountType').value, useRot: document.getElementById('useRotCheckbox').checked, internal_comment: document.getElementById('internalComment').value, public_comment: document.getElementById('publicComment').value, coverPage: coverPageData, drawingWalls };
         }
 
         // silent=true används av auto-sparningen (ingen alert, bara en liten statustext).
@@ -1802,7 +1854,14 @@
         function updateConditionPrice(id, val) { selectedConditions[id].customPrice = parseFloat(val) || 0; renderConditions(); renderCart(); }
         function updateQty(index, newQty) { if(newQty < 1) quoteCart.splice(index, 1); else quoteCart[index].qty = parseInt(newQty); renderCart(); }
         function updateDiscount(index, newDiscount) { let val = parseFloat(newDiscount) || 0; quoteCart[index].discount = Math.min(100, Math.max(0, val)); renderCart(); }
-        function removeRow(index) { quoteCart.splice(index, 1); renderCart(); }
+        // Rader som kommer från ritningen har drawingPlacementId - tas raden bort direkt i korgen
+        // ska blocket i ritningen försvinna också, annars hamnar de i otakt med varandra.
+        function removeRow(index) {
+            const item = quoteCart[index];
+            if (item && item.drawingPlacementId) removeDrawingPlacementByCartId(item.cartId);
+            quoteCart.splice(index, 1);
+            renderCart();
+        }
         function toggleCustomColor() { const s = document.getElementById('colorSelect'); const c = document.getElementById('colorCustom'); if(s.value === 'Valfri NCS-kod') c.classList.remove('hidden'); else { c.classList.add('hidden'); c.value = ''; } }
 
         function renderCart() {
@@ -1905,6 +1964,286 @@
             document.getElementById('sumHandles').innerText = handleCount + ' st';
 
             scheduleAutoSave();
+        }
+
+        // ==========================================
+        // RITNING - enkel drag-och-släpp-ritning med moduler ur biblioteket (Ritningsmoduler).
+        // Modulerna dras ut på "väggar" (horisontella rader) och kan visas antingen som en
+        // planvy uppifrån (bredd x djup) eller en rak vy framifrån (bredd x höjd) - samma
+        // underliggande väggdata, bara olika mått som styr rektanglarnas höjd i ritningen.
+        // Placering görs med Pointer Events istället för native HTML5 drag-and-drop, eftersom
+        // det senare inte fungerar med touch (iPad).
+        // ==========================================
+        const DRAWING_SHAPE_ICONS = { door: 'fa-door-closed', drawers: 'fa-box-open', filler: 'fa-grip-lines-vertical', corner: 'fa-vector-square', open: 'fa-border-none', other: 'fa-square' };
+        const DRAWING_DRAG_THRESHOLD = 6;
+        const DRAWING_SCALE = 0.12; // mm -> px i ritytan
+
+        async function fetchDrawingModuleLibrary() {
+            try {
+                const res = await fetch('/api/drawing-modules');
+                drawingModuleLibraryData = await res.json();
+                renderDrawingModuleLibrary();
+            } catch (e) { console.error(e); }
+        }
+
+        function renderDrawingModuleLibrary() {
+            const wrap = document.getElementById('drawingModuleLibrary');
+            if (drawingModuleLibraryData.length === 0) { wrap.innerHTML = '<p class="text-[11px] text-gray-400 italic">Inga moduler upplagda ännu - lägg till under "Ritningsmoduler" i menyn.</p>'; return; }
+            wrap.innerHTML = '';
+            drawingModuleLibraryData.forEach(m => {
+                const card = document.createElement('div');
+                card.className = 'bg-white border border-gray-300 rounded px-2 py-2 text-xs font-medium text-gray-700 flex items-center gap-2 cursor-grab shadow-sm select-none touch-none';
+                card.innerHTML = `<i class="fas ${DRAWING_SHAPE_ICONS[m.shape] || 'fa-square'} text-purple-600"></i> <span class="truncate">${escapeHtml(m.name)}</span>`;
+                card.addEventListener('pointerdown', (ev) => startDrawingDrag(ev, m, null));
+                wrap.appendChild(card);
+            });
+        }
+
+        async function openDrawingModal() {
+            document.getElementById('drawingModal').classList.remove('hidden');
+            if (drawingModuleLibraryData.length === 0) await fetchDrawingModuleLibrary();
+            renderDrawingWalls();
+        }
+
+        function addDrawingWall() {
+            drawingWalls.push({ id: 'wall_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: `Vägg ${drawingWalls.length + 1}`, modules: [] });
+            renderDrawingWalls();
+            scheduleAutoSave();
+        }
+
+        function removeDrawingWall(wallId) {
+            const wall = drawingWalls.find(w => w.id === wallId);
+            if (!wall) return;
+            if (wall.modules.length > 0 && !confirm(`Ta bort väggen "${wall.name}" och alla ${wall.modules.length} moduler i den? Eventuella kopplade offertrader tas då också bort.`)) return;
+            wall.modules.slice().forEach(m => removeDrawingPlacement(wallId, m.id, false));
+            drawingWalls = drawingWalls.filter(w => w.id !== wallId);
+            renderDrawingWalls();
+            renderCart();
+            scheduleAutoSave();
+        }
+
+        function setDrawingViewMode(mode) {
+            drawingViewMode = mode;
+            document.getElementById('drawingViewPlanBtn').className = 'px-3 py-1.5' + (mode === 'plan' ? ' bg-purple-600' : '');
+            document.getElementById('drawingViewElevationBtn').className = 'px-3 py-1.5' + (mode === 'elevation' ? ' bg-purple-600' : '');
+            renderDrawingWalls();
+        }
+
+        function drawingBlockSize(placement) {
+            const mod = drawingModuleLibraryData.find(m => m.id === placement.moduleId) || {};
+            const name = mod.name || 'Modul';
+            const width = parseFloat(placement.widthExternal) || parseFloat(mod.width_external) || 600;
+            const heightMm = drawingViewMode === 'plan'
+                ? (parseFloat(placement.depth) || parseFloat(mod.depth) || 600)
+                : (parseFloat(placement.heightExternal) || parseFloat(mod.height_external) || 720);
+            return { w: Math.max(30, width * DRAWING_SCALE), h: Math.max(30, heightMm * DRAWING_SCALE), name, dimLabel: `${Math.round(width)}x${Math.round(heightMm)}` };
+        }
+
+        function renderDrawingWalls() {
+            const container = document.getElementById('drawingWallsContainer');
+            if (drawingWalls.length === 0) { container.innerHTML = '<p class="text-sm text-gray-400 italic">Inga väggar ännu. Klicka "+ Vägg" för att börja rita.</p>'; return; }
+            container.innerHTML = '';
+            drawingWalls.forEach(wall => {
+                const wallBox = document.createElement('div');
+                wallBox.className = 'bg-white border border-gray-300 rounded-lg shadow-sm';
+
+                const header = document.createElement('div');
+                header.className = 'flex justify-between items-center px-3 py-2 border-b border-gray-200';
+                header.innerHTML = `<span class="text-xs font-bold text-gray-600 uppercase tracking-wide">${escapeHtml(wall.name)}</span>`;
+                const delBtn = document.createElement('button');
+                delBtn.className = 'text-red-500 hover:text-red-700 text-xs';
+                delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+                delBtn.onclick = () => removeDrawingWall(wall.id);
+                header.appendChild(delBtn);
+                wallBox.appendChild(header);
+
+                const dropzone = document.createElement('div');
+                dropzone.className = 'drawing-wall-dropzone flex items-end gap-1 p-3 min-h-[110px] overflow-x-auto';
+                dropzone.dataset.wallId = wall.id;
+                if (wall.modules.length === 0) dropzone.innerHTML = '<p class="text-[11px] text-gray-300 italic">Släpp moduler här</p>';
+                wall.modules.forEach(placement => {
+                    const { w, h, name, dimLabel } = drawingBlockSize(placement);
+                    const block = document.createElement('div');
+                    block.className = 'shrink-0 bg-purple-50 border-2 border-purple-400 rounded-sm flex flex-col items-center justify-center relative cursor-grab select-none touch-none';
+                    block.style.width = w + 'px';
+                    block.style.height = h + 'px';
+                    block.innerHTML = `<span class="text-[9px] font-bold text-purple-800 text-center px-0.5 leading-tight">${escapeHtml(name)}</span><span class="text-[8px] text-purple-500">${dimLabel}mm</span>`;
+                    block.addEventListener('pointerdown', (ev) => startDrawingDrag(ev, null, { wallId: wall.id, placementId: placement.id }));
+                    dropzone.appendChild(block);
+                });
+                wallBox.appendChild(dropzone);
+                container.appendChild(wallBox);
+            });
+        }
+
+        // Pointer-events-baserad drag: fungerar likadant för mus och touch (iPad). Ett litet
+        // rörelsetröskelvärde skiljer på "tryck för att öppna måttpanelen" och "dra för att
+        // placera/flytta modulen", så samma pekhändelse kan hantera båda utan konflikt.
+        function startDrawingDrag(ev, libraryModule, existing) {
+            ev.preventDefault();
+            let label = 'Modul';
+            if (libraryModule) label = libraryModule.name;
+            else if (existing) {
+                const wall = drawingWalls.find(w => w.id === existing.wallId);
+                const placement = wall && wall.modules.find(mm => mm.id === existing.placementId);
+                const mod = placement && drawingModuleLibraryData.find(m => m.id === placement.moduleId);
+                label = mod ? mod.name : 'Modul';
+            }
+            const ghost = document.createElement('div');
+            ghost.className = 'fixed pointer-events-none z-[100] bg-purple-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg hidden';
+            ghost.textContent = label;
+            document.body.appendChild(ghost);
+            dragState = { libraryModule, existing, ghost, startX: ev.clientX, startY: ev.clientY, moved: false };
+            document.addEventListener('pointermove', onDrawingDragMove);
+            document.addEventListener('pointerup', onDrawingDragEnd);
+        }
+
+        function onDrawingDragMove(ev) {
+            if (!dragState) return;
+            const dx = ev.clientX - dragState.startX, dy = ev.clientY - dragState.startY;
+            if (!dragState.moved && Math.hypot(dx, dy) > DRAWING_DRAG_THRESHOLD) { dragState.moved = true; dragState.ghost.classList.remove('hidden'); }
+            if (dragState.moved) { dragState.ghost.style.left = (ev.clientX + 12) + 'px'; dragState.ghost.style.top = (ev.clientY + 12) + 'px'; }
+        }
+
+        function onDrawingDragEnd(ev) {
+            if (!dragState) return;
+            document.removeEventListener('pointermove', onDrawingDragMove);
+            document.removeEventListener('pointerup', onDrawingDragEnd);
+            const { libraryModule, existing, ghost, moved } = dragState;
+            ghost.remove();
+            dragState = null;
+
+            if (!moved) { if (existing) openDrawingPropsModal(existing.placementId); return; }
+            const target = document.elementFromPoint(ev.clientX, ev.clientY);
+            const dropzone = target ? target.closest('.drawing-wall-dropzone') : null;
+            if (!dropzone) { if (existing) renderDrawingWalls(); return; }
+            const wallId = dropzone.dataset.wallId;
+            if (libraryModule) addDrawingPlacement(wallId, libraryModule.id);
+            else if (existing) moveDrawingPlacement(existing.wallId, existing.placementId, wallId);
+        }
+
+        function addDrawingPlacement(wallId, moduleId) {
+            const wall = drawingWalls.find(w => w.id === wallId);
+            const mod = drawingModuleLibraryData.find(m => m.id === moduleId);
+            if (!wall || !mod) return;
+            const placement = {
+                id: 'dp_' + Date.now() + '_' + Math.floor(Math.random() * 1000), moduleId: mod.id, cartId: null,
+                frameThickness: mod.frame_thickness, widthInternal: mod.width_internal, widthExternal: mod.width_external,
+                depth: mod.depth, depthInternal: mod.depth_internal, heightInternal: mod.height_internal, heightExternal: mod.height_external
+            };
+            wall.modules.push(placement);
+            linkDrawingPlacementToCart(placement, mod);
+            renderDrawingWalls();
+            renderCart();
+            scheduleAutoSave();
+        }
+
+        function moveDrawingPlacement(fromWallId, placementId, toWallId) {
+            if (fromWallId === toWallId) return;
+            const fromWall = drawingWalls.find(w => w.id === fromWallId);
+            const toWall = drawingWalls.find(w => w.id === toWallId);
+            if (!fromWall || !toWall) return;
+            const idx = fromWall.modules.findIndex(m => m.id === placementId);
+            if (idx === -1) return;
+            const [placement] = fromWall.modules.splice(idx, 1);
+            toWall.modules.push(placement);
+            renderDrawingWalls();
+            scheduleAutoSave();
+        }
+
+        // Skapar (om modulen har en kopplad produkt) en rad i offertkorgen som följer med
+        // modulens pris/montage, kopplad tillbaka till ritningsplaceringen via ett delat id -
+        // så att priset räknas med i offerten automatiskt så fort modulen läggs ut i ritningen.
+        function linkDrawingPlacementToCart(placement, mod) {
+            if (!mod.product_id) return;
+            const product = products.find(p => p.id === mod.product_id);
+            if (!product) return;
+            const installTot = parseFloat(product.installation_price) || 0;
+            const instShare = parseFloat(product.installer_share) || 0;
+            placement.cartId = 'drawing_' + placement.id;
+            quoteCart.push({
+                cartId: placement.cartId, id: product.id, sku: product.sku, name: product.name + ' (från ritning)',
+                priceIncVat: product.has_variations === 1 ? 0 : (parseFloat(product.standard_price) || 0),
+                installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare,
+                qty: 1, discount: 0, drawingPlacementId: placement.id
+            });
+        }
+
+        function findDrawingPlacement(placementId) {
+            for (const wall of drawingWalls) {
+                const placement = wall.modules.find(m => m.id === placementId);
+                if (placement) return { wall, placement };
+            }
+            return null;
+        }
+
+        function removeDrawingPlacement(wallId, placementId, rerender = true) {
+            const wall = drawingWalls.find(w => w.id === wallId);
+            if (!wall) return;
+            const idx = wall.modules.findIndex(m => m.id === placementId);
+            if (idx === -1) return;
+            const [placement] = wall.modules.splice(idx, 1);
+            if (placement.cartId) {
+                const cartIdx = quoteCart.findIndex(i => i.cartId === placement.cartId);
+                if (cartIdx !== -1) quoteCart.splice(cartIdx, 1);
+            }
+            if (rerender) { renderDrawingWalls(); renderCart(); scheduleAutoSave(); }
+        }
+
+        // Anropas av removeRow() när en offertrad som kom från ritningen tas bort direkt i
+        // korgen, så att blocket i ritningen försvinner också (utan att ta bort raden en gång
+        // till - den är redan borttagen av removeRow när detta anropas).
+        function removeDrawingPlacementByCartId(cartId) {
+            for (const wall of drawingWalls) {
+                const idx = wall.modules.findIndex(m => m.cartId === cartId);
+                if (idx !== -1) { wall.modules.splice(idx, 1); renderDrawingWalls(); return; }
+            }
+        }
+
+        function openDrawingPropsModal(placementId) {
+            const found = findDrawingPlacement(placementId);
+            if (!found) return;
+            currentDrawingPlacement = { wallId: found.wall.id, placementId };
+            const { placement } = found;
+            const mod = drawingModuleLibraryData.find(m => m.id === placement.moduleId);
+            document.getElementById('drawingPropsTitle').textContent = mod ? mod.name : 'Modul';
+            document.getElementById('dpFrameThickness').value = placement.frameThickness ?? '';
+            document.getElementById('dpWidthInternal').value = placement.widthInternal ?? '';
+            document.getElementById('dpWidthExternal').value = placement.widthExternal ?? '';
+            document.getElementById('dpDepth').value = placement.depth ?? '';
+            document.getElementById('dpDepthInternal').value = placement.depthInternal ?? '';
+            document.getElementById('dpHeightInternal').value = placement.heightInternal ?? '';
+            document.getElementById('dpHeightExternal').value = placement.heightExternal ?? '';
+            document.getElementById('drawingPropsModal').classList.remove('hidden');
+        }
+
+        function closeDrawingPropsModal() {
+            document.getElementById('drawingPropsModal').classList.add('hidden');
+            currentDrawingPlacement = null;
+        }
+
+        function saveDrawingPlacementProps() {
+            if (!currentDrawingPlacement) return;
+            const found = findDrawingPlacement(currentDrawingPlacement.placementId);
+            if (!found) return;
+            const p = found.placement;
+            p.frameThickness = document.getElementById('dpFrameThickness').value || null;
+            p.widthInternal = document.getElementById('dpWidthInternal').value || null;
+            p.widthExternal = document.getElementById('dpWidthExternal').value || null;
+            p.depth = document.getElementById('dpDepth').value || null;
+            p.depthInternal = document.getElementById('dpDepthInternal').value || null;
+            p.heightInternal = document.getElementById('dpHeightInternal').value || null;
+            p.heightExternal = document.getElementById('dpHeightExternal').value || null;
+            closeDrawingPropsModal();
+            renderDrawingWalls();
+            scheduleAutoSave();
+        }
+
+        function deleteDrawingPlacement() {
+            if (!currentDrawingPlacement) return;
+            if (!confirm('Ta bort denna modul från ritningen?')) return;
+            removeDrawingPlacement(currentDrawingPlacement.wallId, currentDrawingPlacement.placementId);
+            closeDrawingPropsModal();
         }
 
         document.getElementById('searchInput').addEventListener('input', applyFilters);
