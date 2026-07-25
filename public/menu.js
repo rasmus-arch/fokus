@@ -68,6 +68,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         menuHtml += `<a href="/onboarding.html" class="${baseClass} ${isActive('onboarding') ? activeClass : inactiveClass}"><i class="fas fa-list-check w-6"></i> Kom igång</a>`;
         menuHtml += `<a href="/suppliers.html" class="${baseClass} ${isActive('suppliers') ? activeClass : inactiveClass}"><i class="fas fa-truck w-6"></i> Leverantörer</a>`;
         menuHtml += `<a href="/products.html" class="${baseClass} ${isActive('products') ? activeClass : inactiveClass}"><i class="fas fa-boxes w-6"></i> Produkter</a>`;
+        menuHtml += `<a href="/drawing-modules.html" class="${baseClass} ${isActive('drawing-modules') ? activeClass : inactiveClass}"><i class="fas fa-draw-polygon w-6"></i> Ritningsmoduler</a>`;
         menuHtml += `<a href="/statistics.html" class="${baseClass} ${isActive('statistics') ? activeClass : inactiveClass}"><i class="fas fa-chart-line w-6"></i> Statistik</a>`;
         menuHtml += `<a href="/frame-types.html" class="${baseClass} ${isActive('frame-types') ? activeClass : inactiveClass}"><i class="fas fa-cubes w-6"></i> Stomtyper</a>`;
     }
