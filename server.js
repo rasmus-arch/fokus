@@ -1087,6 +1087,30 @@ app.post('/api/door-price-groups', requireAuth, requireAdmin, (req, res) => {
 app.put('/api/door-price-groups/:id', requireAuth, requireAdmin, (req, res) => {
     db.query('UPDATE door_price_groups SET name = ? WHERE id = ?', [req.body.name, req.params.id], dbResult(res, 'Grupp uppdaterad!'));
 });
+// Duplicerar en grupp (nytt namn med "(kopia)"-suffix) inklusive dess eventuella
+// delade prisrader (döp om deras price_group_id till den nya gruppen). Kopierar
+// medvetet INTE vilka modeller/produkter som pekar på gruppen - det är en egen,
+// synlig handling (byt prisgrupp/tillbehörsgrupp per modell/produkt som vanligt).
+app.post('/api/door-price-groups/:id/duplicate', requireAuth, requireAdmin, (req, res) => {
+    const sourceId = req.params.id;
+    db.query('SELECT * FROM door_price_groups WHERE id = ?', [sourceId], (err, rows) => {
+        if (err) return res.status(500).json({ message: err.message });
+        if (!rows || rows.length === 0) return res.status(404).json({ message: 'Gruppen hittades inte.' });
+        db.query('INSERT INTO door_price_groups (name) VALUES (?)', [rows[0].name + ' (kopia)'], (err2, result) => {
+            if (err2) return res.status(500).json({ message: err2.message });
+            const newId = result.insertId;
+            db.query('SELECT * FROM door_price_items WHERE price_group_id = ?', [sourceId], (err3, items) => {
+                if (err3) return res.status(500).json({ message: err3.message });
+                if (!items || items.length === 0) return res.json({ message: 'Grupp duplicerad!', id: newId });
+                const values = items.map(it => [newId, it.component_type, it.height_min, it.height_max, it.width_min, it.width_max, it.purchase_price, it.markup_factor, it.price, it.installation_price, it.installer_share]);
+                db.query('INSERT INTO door_price_items (price_group_id, component_type, height_min, height_max, width_min, width_max, purchase_price, markup_factor, price, installation_price, installer_share) VALUES ?', [values], (err4) => {
+                    if (err4) return res.status(500).json({ message: err4.message });
+                    res.json({ message: 'Grupp duplicerad!', id: newId });
+                });
+            });
+        });
+    });
+});
 app.delete('/api/door-price-groups/:id', requireAuth, requireAdmin, (req, res) => {
     const gid = req.params.id;
     db.query('DELETE FROM door_price_items WHERE price_group_id = ?', [gid], (err) => {
