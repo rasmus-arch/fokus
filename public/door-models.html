@@ -210,8 +210,9 @@
                     <div class="flex justify-between items-center px-2 py-1.5 rounded hover:bg-gray-50 group">
                         <span class="text-sm text-gray-700">${g.name}</span>
                         <div class="flex gap-2">
-                            <button onclick="renamePriceGroup(${g.id})" class="text-gray-400 hover:text-blue-600 hidden group-hover:block"><i class="fas fa-edit"></i></button>
-                            <button onclick="deletePriceGroup(${g.id})" class="text-gray-400 hover:text-red-600 hidden group-hover:block"><i class="fas fa-trash"></i></button>
+                            <button onclick="renamePriceGroup(${g.id})" class="text-gray-400 hover:text-blue-600 hidden group-hover:block" title="Byt namn"><i class="fas fa-edit"></i></button>
+                            <button onclick="duplicatePriceGroup(${g.id})" class="text-gray-400 hover:text-green-600 hidden group-hover:block" title="Duplicera"><i class="fas fa-copy"></i></button>
+                            <button onclick="deletePriceGroup(${g.id})" class="text-gray-400 hover:text-red-600 hidden group-hover:block" title="Ta bort"><i class="fas fa-trash"></i></button>
                         </div>
                     </div>`;
             });
@@ -231,6 +232,16 @@
             const name = prompt('Nytt namn på gruppen:', group ? group.name : '');
             if (!name || !name.trim()) return;
             await fetch(`/api/door-price-groups/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) });
+            await fetchPriceGroups();
+            populateGroupSelects();
+        }
+
+        async function duplicatePriceGroup(id) {
+            const group = priceGroups.find(g => g.id === id);
+            if (!confirm(`Duplicera gruppen "${group ? group.name : ''}"? En ny grupp skapas med samma prisrader (om det finns några).`)) return;
+            const res = await fetch(`/api/door-price-groups/${id}/duplicate`, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) return alert(data.message || 'Kunde inte duplicera gruppen.');
             await fetchPriceGroups();
             populateGroupSelects();
         }
