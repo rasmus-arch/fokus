@@ -454,7 +454,10 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                     markup_factor: row['Faktor'] === '' || row['Faktor'] === undefined ? null : (parseFloat(row['Faktor']) || null),
                     height: parseFloat(row['Stommens höjd (mm)']) || 0,
                     width: parseFloat(row['Stommens bredd (mm)']) || 0,
-                    length: parseFloat(row['Stommens djup (mm)']) || 0
+                    length: parseFloat(row['Stommens djup (mm)']) || 0,
+                    // Valfri kolumn - om ifylld laddar /api/products/bulk hem bilden automatiskt
+                    // (samma downloadExternalImage-logik som redan finns för produkter med bild-URL).
+                    image_url: String(row['Bild-URL'] || '').trim()
                 });
             });
         } else if (variableSheetName) {
@@ -472,7 +475,10 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                         category: String(row['Kategori (Produkt-rad)'] || '').trim(),
                         brand: String(row['Varumärke (Produkt-rad)'] || '').trim(),
                         attr1Name: String(row['Variabel 1 namn (Produkt-rad)'] || '').trim() || 'Alternativ 1',
-                        attr2Name: String(row['Variabel 2 namn (Produkt-rad)'] || '').trim()
+                        attr2Name: String(row['Variabel 2 namn (Produkt-rad)'] || '').trim(),
+                        // Valfri kolumn - en variabel produkt har bara EN bild på produktnivå
+                        // (ingen bild per variant/färg ännu), så det blir typiskt första variantens bild.
+                        imageUrl: String(row['Bild-URL (Produkt-rad)'] || '').trim()
                     };
                 } else if (rowType === 'variant') {
                     const sku = String(row['Variant-SKU* (Variant-rad)'] || '').trim();
@@ -498,6 +504,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                     description: g.parent.description,
                     category: g.parent.category,
                     brand: g.parent.brand,
+                    image_url: g.parent.imageUrl,
                     has_variations: true,
                     variations: g.variants.map(v => ({
                         sku: v.sku,
