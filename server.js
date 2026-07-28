@@ -353,14 +353,23 @@ app.post('/api/products/bulk', requireAuth, requireAdmin, async (req, res) => {
         // manuella produktredigeringen - luckor/lådfronter har sitt eget prissystem).
         const pricingType = (p.pricing_type === 'per_sqm' && !p.has_variations) ? 'per_sqm' : 'unit';
         const markupFactor = (p.has_variations || p.markup_factor === undefined || p.markup_factor === '' || p.markup_factor === null) ? null : (parseFloat(p.markup_factor) || null);
+        // Tomt SKU sparas som NULL istället för '' - annars krockar flera produkter utan eget SKU
+        // (t.ex. flera variantprodukter i samma import) mot den unika SKU-kolumnen, samma
+        // normalisering som redan görs i den vanliga produktredigeringen (POST /api/products).
+        const skuValue = (p.sku && String(p.sku).trim() !== '') ? String(p.sku).trim() : null;
         return [
-            p.name, p.description, p.sku, p.cc_measurement||'', p.height||0, p.length||0, p.width||0, p.brand||'', p.category||'Okategoriserad',
+            p.name, p.description, skuValue, p.cc_measurement||'', p.height||0, p.length||0, p.width||0, p.brand||'', p.category||'Okategoriserad',
             p.image_url, p.gallery, p.installation_price||0, p.installer_share||0, p.standard_price||0, p.purchase_price||0,
             p.has_variations ? 1 : 0, p.variations, pricingType, pricingType === 'per_sqm' ? (p.price_per_sqm||0) : null, pricingType === 'per_sqm' ? (p.min_billable_sqm||0) : null, markupFactor
         ];
     });
 
-    const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, has_variations, variations, pricing_type, price_per_sqm, min_billable_sqm, markup_factor) VALUES ? ON DUPLICATE KEY UPDATE name=VALUES(name), standard_price=VALUES(standard_price), image_url=IF(VALUES(image_url) != '', VALUES(image_url), image_url), gallery=IF(VALUES(gallery) != '[]', VALUES(gallery), gallery), has_variations=VALUES(has_variations), variations=VALUES(variations), pricing_type=VALUES(pricing_type), price_per_sqm=VALUES(price_per_sqm), min_billable_sqm=VALUES(min_billable_sqm), markup_factor=VALUES(markup_factor)`;
+    // ON DUPLICATE KEY UPDATE matchar på sku (unikt) - så att man kan redigera fält i samma
+    // importfil och köra om importen för att uppdatera befintliga produkter istället för att
+    // skapa dubbletter. Alla importerade fält uppdateras då, INTE bara namn/pris som tidigare.
+    // image_url/gallery skrivs bara över om den nya importraden faktiskt har ett värde, så en
+    // omimport utan bild-URL inte av misstag raderar en bild som satts manuellt efteråt.
+    const sql = `INSERT INTO products (name, description, sku, cc_measurement, height, length, width, brand, category, image_url, gallery, installation_price, installer_share, standard_price, purchase_price, has_variations, variations, pricing_type, price_per_sqm, min_billable_sqm, markup_factor) VALUES ? ON DUPLICATE KEY UPDATE name=VALUES(name), description=VALUES(description), cc_measurement=VALUES(cc_measurement), height=VALUES(height), length=VALUES(length), width=VALUES(width), brand=VALUES(brand), category=VALUES(category), image_url=IF(VALUES(image_url) != '', VALUES(image_url), image_url), gallery=IF(VALUES(gallery) != '[]', VALUES(gallery), gallery), installation_price=VALUES(installation_price), installer_share=VALUES(installer_share), standard_price=VALUES(standard_price), purchase_price=VALUES(purchase_price), has_variations=VALUES(has_variations), variations=VALUES(variations), pricing_type=VALUES(pricing_type), price_per_sqm=VALUES(price_per_sqm), min_billable_sqm=VALUES(min_billable_sqm), markup_factor=VALUES(markup_factor)`;
     
     db.query(sql, [values], (err, result) => {
         if (err) return res.status(500).json({message: err.message});
