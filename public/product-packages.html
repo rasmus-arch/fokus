@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paket - Klarälvskök</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <div id="sidebar-container"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto p-4 lg:p-6">
+        <div class="mb-6 lg:pl-0 pl-12">
+            <h2 class="text-2xl font-semibold text-gray-800">Paket</h2>
+            <p class="text-sm text-gray-500 mt-1">Bygg paketprodukter (t.ex. "Vitvarupaket Bosch", "Belysningspaket") av befintliga produkter. I offertbyggaren läggs hela paketet till med ett klick - varje ingående produkt blir sin egen rad med sitt riktiga pris.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div class="bg-white p-5 rounded-lg shadow-sm h-fit">
+                <h3 class="text-sm font-bold text-gray-700 mb-3 uppercase tracking-wide">Paket</h3>
+                <div class="flex gap-2 mb-4">
+                    <input type="text" id="newPackageName" placeholder="Namn, t.ex. Vitvarupaket Bosch" class="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm">
+                    <button onclick="addPackage()" class="bg-blue-600 text-white px-3 rounded text-sm hover:bg-blue-700"><i class="fas fa-plus"></i></button>
+                </div>
+                <div id="packageList" class="space-y-1"></div>
+            </div>
+
+            <div class="lg:col-span-3 bg-white p-5 rounded-lg shadow-sm">
+                <div id="noPackageSelected" class="text-gray-400 italic text-sm py-10 text-center">Välj eller skapa ett paket till vänster för att redigera det.</div>
+
+                <div id="packageDetail" class="hidden">
+                    <div class="flex justify-between items-center mb-4 border-b pb-3">
+                        <input type="text" id="pDetailName" class="text-lg font-bold text-gray-800 border border-transparent hover:border-gray-300 focus:border-blue-500 rounded px-2 py-1 -ml-2 outline-none">
+                        <button onclick="deletePackage()" class="text-red-600 hover:text-red-900 text-sm"><i class="fas fa-trash mr-1"></i> Ta bort paket</button>
+                    </div>
+
+                    <div class="flex gap-2 mb-3">
+                        <select id="pAddProductSelect" class="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-white">
+                            <option value="">-- Välj produkt att lägga till --</option>
+                        </select>
+                        <input type="number" id="pAddProductQty" value="1" min="1" class="w-20 px-2 py-2 border border-gray-300 rounded text-sm text-right">
+                        <button onclick="addItemToPackage()" class="bg-gray-800 text-white px-4 rounded text-sm font-medium hover:bg-gray-900">Lägg till</button>
+                    </div>
+                    <p class="text-[11px] text-gray-400 mb-3">Bara enkla produkter (utan varianter eller m²-pris) går att lägga i ett paket.</p>
+
+                    <table class="w-full text-left text-sm border border-gray-200">
+                        <thead class="bg-gray-100 text-gray-600 text-xs">
+                            <tr>
+                                <th class="p-2 border-b">Produkt</th>
+                                <th class="p-2 border-b w-20 text-right">Antal</th>
+                                <th class="p-2 border-b w-24 text-right">á-pris</th>
+                                <th class="p-2 border-b w-10"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="packageItemsBody"></tbody>
+                        <tfoot>
+                            <tr class="bg-gray-50 font-semibold">
+                                <td class="p-2 border-t" colspan="2">Totalt materialpris</td>
+                                <td class="p-2 border-t text-right" id="packageTotalPrice">0 kr</td>
+                                <td class="p-2 border-t"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+
+                    <div class="flex gap-2 mt-5">
+                        <button onclick="savePackage()" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700">Spara ändringar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/common.js"></script>
+    <script src="/menu.js"></script>
+    <script>
+        let allPackages = []; let allProducts = []; let currentPackageId = null; let currentItems = [];
+
+        async function fetchProducts() {
+            try {
+                const res = await fetch('/api/products');
+                const products = await res.json();
+                // Bara enkla produkter (inga varianter/m²-pris) går att lägga i ett paket - de kräver
+                // ett val (variant/mått) som ett paket inte kan göra åt säljaren automatiskt.
+                allProducts = products.filter(p => p.has_variations !== 1 && p.pricing_type !== 'per_sqm');
+                const sel = document.getElementById('pAddProductSelect');
+                sel.innerHTML = '<option value="">-- Välj produkt att lägga till --</option>';
+                allProducts.forEach(p => { sel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)} (${(parseFloat(p.standard_price)||0).toLocaleString('sv-SE')} kr)</option>`; });
+            } catch (e) { console.error(e); }
+        }
+
+        async function fetchPackages() {
+            const res = await fetch('/api/product-packages');
+            allPackages = await res.json();
+            renderPackageList();
+        }
+
+        function renderPackageList() {
+            const div = document.getElementById('packageList');
+            div.innerHTML = '';
+            if (allPackages.length === 0) { div.innerHTML = '<p class="text-xs text-gray-400 italic">Inga paket ännu.</p>'; return; }
+            allPackages.forEach(pkg => {
+                const active = pkg.id === currentPackageId;
+                const itemCount = (parseJsonField(pkg.items, []) || []).length;
+                div.innerHTML += `<button onclick="selectPackage(${pkg.id})" class="w-full text-left px-3 py-2 rounded text-sm ${active ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-gray-100 text-gray-700'}">${escapeHtml(pkg.name)} <span class="text-[10px] text-gray-400">(${itemCount} art.)</span></button>`;
+            });
+        }
+
+        async function addPackage() {
+            const name = document.getElementById('newPackageName').value.trim();
+            if (!name) return;
+            const res = await fetch('/api/product-packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, items: [] }) });
+            const data = await res.json();
+            if (!res.ok) { alert(data.message || `Något gick fel (status ${res.status}).`); return; }
+            document.getElementById('newPackageName').value = '';
+            await fetchPackages();
+            if (data.id) selectPackage(data.id);
+        }
+
+        function selectPackage(id) {
+            currentPackageId = id;
+            renderPackageList();
+            document.getElementById('noPackageSelected').classList.add('hidden');
+            document.getElementById('packageDetail').classList.remove('hidden');
+            const pkg = allPackages.find(x => x.id === id) || {};
+            document.getElementById('pDetailName').value = pkg.name || '';
+            currentItems = parseJsonField(pkg.items, []) || [];
+            renderPackageItems();
+        }
+
+        function renderPackageItems() {
+            const tbody = document.getElementById('packageItemsBody');
+            tbody.innerHTML = '';
+            let total = 0;
+            if (currentItems.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-xs text-gray-400 italic">Inga produkter i paketet ännu.</td></tr>';
+            }
+            currentItems.forEach((item, idx) => {
+                const p = allProducts.find(x => x.id === item.product_id);
+                const price = p ? (parseFloat(p.standard_price) || 0) : 0;
+                total += price * (item.qty || 1);
+                tbody.innerHTML += `
+                    <tr class="border-b border-gray-100">
+                        <td class="p-2">${p ? escapeHtml(p.name) : `<span class="text-red-500 italic">Okänd produkt (id ${item.product_id})</span>`}</td>
+                        <td class="p-2 text-right"><input type="number" min="1" value="${item.qty || 1}" onchange="updateItemQty(${idx}, this.value)" class="w-16 px-1 py-1 border rounded text-right"></td>
+                        <td class="p-2 text-right">${price.toLocaleString('sv-SE')} kr</td>
+                        <td class="p-2 text-center"><button onclick="removeItemFromPackage(${idx})" class="text-red-400 hover:text-red-600"><i class="fas fa-trash"></i></button></td>
+                    </tr>`;
+            });
+            document.getElementById('packageTotalPrice').innerText = total.toLocaleString('sv-SE') + ' kr';
+        }
+
+        function addItemToPackage() {
+            const productId = parseInt(document.getElementById('pAddProductSelect').value);
+            const qty = parseInt(document.getElementById('pAddProductQty').value) || 1;
+            if (!productId) return;
+            const existing = currentItems.find(i => i.product_id === productId);
+            if (existing) existing.qty += qty;
+            else currentItems.push({ product_id: productId, qty });
+            document.getElementById('pAddProductSelect').value = '';
+            document.getElementById('pAddProductQty').value = 1;
+            renderPackageItems();
+        }
+
+        function updateItemQty(idx, val) {
+            const qty = parseInt(val) || 1;
+            currentItems[idx].qty = qty;
+            renderPackageItems();
+        }
+
+        function removeItemFromPackage(idx) {
+            currentItems.splice(idx, 1);
+            renderPackageItems();
+        }
+
+        function deletePackage() {
+            if (!currentPackageId) return;
+            confirmAndDelete('Ta bort paketet? Offerter där det redan lagts till påverkas inte (de har redan sina egna rader).', `/api/product-packages/${currentPackageId}`, () => {
+                currentPackageId = null;
+                document.getElementById('packageDetail').classList.add('hidden');
+                document.getElementById('noPackageSelected').classList.remove('hidden');
+                fetchPackages();
+            });
+        }
+
+        async function savePackage() {
+            if (!currentPackageId) return;
+            const name = document.getElementById('pDetailName').value.trim();
+            if (!name) return alert('Namn saknas.');
+            const res = await fetch(`/api/product-packages/${currentPackageId}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, items: currentItems, active: true })
+            });
+            const data = await res.json();
+            if (!res.ok) { alert(data.message || 'Kunde inte spara.'); return; }
+            alert(data.message || 'Sparad!');
+            fetchPackages();
+        }
+
+        fetchProducts().then(fetchPackages);
+    </script>
+</body>
+</html>
