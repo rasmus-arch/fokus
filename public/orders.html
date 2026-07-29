@@ -166,6 +166,7 @@
                             <p><i class="fas fa-user text-gray-400 w-5"></i> ${o.customer_name || 'Okänd kund'}</p>
                             <p><i class="fas fa-map-marker-alt text-gray-400 w-5"></i> ${o.address || 'Adress saknas'}</p>
                             <p><i class="fas fa-hard-hat text-gray-400 w-5"></i> <span class="font-medium text-gray-800">${o.installer_name || 'Ingen montör tilldelad'}</span></p>
+                            <p><i class="fas fa-chart-line text-gray-400 w-5"></i> Marginal: ${marginBadgeHtml(calcQuoteMargin(o))}</p>
                         </div>
                     </div>
                 `;
@@ -386,6 +387,7 @@
             }
         });
 
+        fetchVatRate();
         fetchInstallers().then(() => fetchOrders());
     </script>
 </body>

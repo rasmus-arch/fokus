@@ -63,6 +63,7 @@
                             <th class="p-3">Kategori</th>
                             <th class="p-3 text-right">Pris (Material)</th>
                             <th class="p-3 text-right">Pris (Montage)</th>
+                            <th class="p-3 text-right">Marginal</th>
                             <th class="p-3 text-right">Åtgärd</th>
                         </tr>
                     </thead>
@@ -191,6 +192,7 @@
                                             <th class="p-2 border-b w-20">Pris (Mat)</th>
                                             <th class="p-2 border-b w-20">Pris (Mont)</th>
                                             <th class="p-2 border-b w-20">Montör Del</th>
+                                            <th class="p-2 border-b w-16">Marginal</th>
                                             <th class="p-2 border-b w-10 text-center"><i class="fas fa-cog"></i></th>
                                         </tr>
                                     </thead>
@@ -589,7 +591,18 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 const img = p.image_url ? `<img src="${p.image_url}" class="w-10 h-10 object-contain rounded border bg-white">` : `<div class="w-10 h-10 bg-gray-100 rounded border flex items-center justify-center text-gray-400 text-xs"><i class="fas fa-image"></i></div>`;
                 const isVar = p.has_variations === 1;
                 let varText = isVar ? `<span class="bg-blue-100 text-blue-800 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ml-2">Variabel Produkt</span>` : '';
-                
+                const isSqm = p.pricing_type === 'per_sqm';
+                let marginCell;
+                if (isVar) {
+                    const vars = parseJsonField(p.variations, []);
+                    const margins = vars.map(v => calcMarginPercent(v.price, v.purchase_price)).filter(m => m !== null);
+                    marginCell = margins.length === 0 ? marginBadgeHtml(null)
+                        : (Math.min(...margins) === Math.max(...margins) ? marginBadgeHtml(margins[0])
+                            : `${marginBadgeHtml(Math.min(...margins))} - ${marginBadgeHtml(Math.max(...margins))}`);
+                } else {
+                    marginCell = marginBadgeHtml(calcMarginPercent(isSqm ? p.price_per_sqm : p.standard_price, p.purchase_price));
+                }
+
                 tbody.innerHTML += `
                     <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
                         <td class="p-3 w-14">${img}</td>
@@ -598,8 +611,9 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                             <span class="text-xs text-gray-400 font-mono">${isVar ? 'Flera SKU:s' : p.sku}</span>
                         </td>
                         <td class="p-3 text-gray-600 text-sm">${p.category || '-'}</td>
-                        <td class="p-3 text-right font-medium">${isVar ? '-' : (parseFloat(p.standard_price)||0).toLocaleString() + ' kr'}</td>
-                        <td class="p-3 text-right font-medium text-purple-600">${isVar ? '-' : (parseFloat(p.installation_price)||0).toLocaleString() + ' kr'}</td>
+                        <td class="p-3 text-right font-medium kundlage-price">${isVar ? '-' : (parseFloat(p.standard_price)||0).toLocaleString() + ' kr'}</td>
+                        <td class="p-3 text-right font-medium text-purple-600 kundlage-price">${isVar ? '-' : (parseFloat(p.installation_price)||0).toLocaleString() + ' kr'}</td>
+                        <td class="p-3 text-right">${marginCell}</td>
                         <td class="p-3 text-right whitespace-nowrap">
                             <button onclick='openProductModal(${JSON.stringify(p).replace(/'/g, "&#39;")})' class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-medium transition mr-1"><i class="fas fa-edit"></i></button>
                             <button onclick="deleteProduct(${p.id})" class="text-red-400 hover:text-red-600 px-2"><i class="fas fa-trash"></i></button>
@@ -831,9 +845,18 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
             const row = inputEl.closest('tr');
             const purchase = parseFloat(row.querySelector('.v-purchase').value) || 0;
             const factorRaw = row.querySelector('.v-factor').value;
-            if (factorRaw === '') return;
-            const factor = parseFloat(factorRaw) || 0;
-            row.querySelector('.v-price').value = Math.round(purchase * factor * VAT_FACTOR * 100) / 100;
+            if (factorRaw !== '') {
+                const factor = parseFloat(factorRaw) || 0;
+                row.querySelector('.v-price').value = Math.round(purchase * factor * VAT_FACTOR * 100) / 100;
+            }
+            updateVariantRowMargin(inputEl);
+        }
+
+        function updateVariantRowMargin(inputEl) {
+            const row = inputEl.closest('tr');
+            const purchase = parseFloat(row.querySelector('.v-purchase').value) || 0;
+            const price = parseFloat(row.querySelector('.v-price').value) || 0;
+            row.querySelector('.v-margin').innerHTML = marginBadgeHtml(calcMarginPercent(price, purchase));
         }
 
         function addVariationRow(v = {}) {
@@ -846,9 +869,10 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 <td class="p-1 border-b"><input type="text" class="v-image w-full px-1 py-1 border rounded" placeholder="https://..." value="${v.image_url || ''}"></td>
                 <td class="p-1 border-b"><input type="number" class="v-purchase w-full px-1 py-1 border rounded text-right" value="${v.purchase_price || 0}" oninput="recalcVariantRowPrice(this)"></td>
                 <td class="p-1 border-b"><input type="number" step="0.01" class="v-factor w-full px-1 py-1 border rounded text-right" placeholder="t.ex. 2" value="${v.factor ?? ''}" oninput="recalcVariantRowPrice(this)"></td>
-                <td class="p-1 border-b"><input type="number" class="v-price w-full px-1 py-1 border rounded text-right" value="${v.price || 0}"></td>
+                <td class="p-1 border-b"><input type="number" class="v-price w-full px-1 py-1 border rounded text-right" value="${v.price || 0}" oninput="updateVariantRowMargin(this)"></td>
                 <td class="p-1 border-b"><input type="number" class="v-install w-full px-1 py-1 border rounded text-right" value="${v.install_price || 0}"></td>
                 <td class="p-1 border-b"><input type="number" class="v-share w-full px-1 py-1 border border-purple-200 bg-purple-50 rounded text-right" value="${v.installer_share || 0}"></td>
+                <td class="p-1 border-b text-center v-margin">${marginBadgeHtml(calcMarginPercent(v.price, v.purchase_price))}</td>
                 <td class="p-1 border-b text-center"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600"><i class="fas fa-trash"></i></button></td>
             `;
             tbody.appendChild(tr);

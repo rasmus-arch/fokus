@@ -99,6 +99,56 @@ async function fetchVatRate() {
     return VAT_FACTOR;
 }
 
+// Delad marginalberäkning - används på produktnivå (products.html, countertops.html) och på
+// offert-/ordernivå (quote-builder.html, quotes.html, orders.html), så alla sidor räknar exakt
+// likadant. Standardformeln: (intäkt ex moms - kostnad ex moms) / intäkt ex moms.
+// saleIncVat = försäljningspris inkl moms, costExVat = kostnad (redan ex moms, t.ex. inköpspris).
+function calcMarginPercent(saleIncVat, costExVat) {
+    const saleExVat = (parseFloat(saleIncVat) || 0) / VAT_FACTOR;
+    if (saleExVat <= 0) return null;
+    const cost = parseFloat(costExVat) || 0;
+    return ((saleExVat - cost) / saleExVat) * 100;
+}
+
+// Färgad badge för att visa en marginal-procent i UI:t. Returnerar en neutral "–" om marginalen
+// inte går att räkna (t.ex. saknad kostnadsdata). kundlage-price gör att den döljs i Kundläge
+// precis som andra priser.
+function marginBadgeHtml(marginPercent) {
+    if (marginPercent === null || marginPercent === undefined || isNaN(marginPercent)) return '<span class="text-gray-400 text-xs">–</span>';
+    const rounded = Math.round(marginPercent * 10) / 10;
+    const color = marginPercent < 10 ? 'text-red-600 bg-red-50' : marginPercent < 25 ? 'text-amber-600 bg-amber-50' : 'text-green-700 bg-green-50';
+    return `<span class="kundlage-price inline-block px-1.5 py-0.5 rounded text-[11px] font-bold ${color}">${rounded.toLocaleString('sv-SE')}%</span>`;
+}
+
+// Räknar total marginal för en hel offert/order utifrån dess sparade quote_data - används i
+// offert-/orderlistorna (quotes.html, orders.html) för en snabb överblick utan att behöva öppna
+// offertbyggaren. quote = hela raden från /api/quotes (måste innehålla quote_data, global_discount,
+// discount_type). Notera: räknar bara med kundvagnens rader (produkter/luckor/bänkskivor) plus
+// deras montage - monteringsvillkor och startavgifter (som sätts i offertbyggaren) räknas INTE med
+// här, så siffran är en approximation. Den exakta, fullständiga marginalen visas i offertbyggaren.
+function calcQuoteMargin(quote) {
+    const qd = parseJsonField(quote.quote_data, {});
+    const cart = Array.isArray(qd.quoteCart) ? qd.quoteCart : [];
+    if (cart.length === 0) return null;
+
+    let materialRevenueIncVat = 0, materialCostExVat = 0, installRevenueIncVat = 0, installerCutIncVat = 0;
+    cart.forEach(item => {
+        materialRevenueIncVat += (parseFloat(item.priceIncVat) || 0) * (1 - ((parseFloat(item.discount) || 0) / 100)) * (item.qty || 1);
+        materialCostExVat += (parseFloat(item.costExVat) || 0) * (item.qty || 1);
+        installRevenueIncVat += (parseFloat(item.installIncVat) || 0) * (item.qty || 1);
+        installerCutIncVat += (parseFloat(item.installerShare) || 0) * (item.qty || 1);
+    });
+
+    const discountVal = parseFloat(quote.global_discount) || 0;
+    const discountAmount = quote.discount_type === '%' ? materialRevenueIncVat * (discountVal / 100) : discountVal;
+    materialRevenueIncVat = Math.max(0, materialRevenueIncVat - discountAmount);
+
+    const totalRevenueExVat = (materialRevenueIncVat + installRevenueIncVat) / VAT_FACTOR;
+    if (totalRevenueExVat <= 0) return null;
+    const totalCostExVat = materialCostExVat + (installerCutIncVat / VAT_FACTOR);
+    return ((totalRevenueExVat - totalCostExVat) / totalRevenueExVat) * 100;
+}
+
 // Enkel HTML-escaping för text som interpolers i innerHTML-mallar (produktnamn, kundnamn,
 // leaddata från externa webbformulär osv). Använd runt värden som kan innehålla < > & " '
 // för att undvika att data av misstag tolkas som HTML/script.
