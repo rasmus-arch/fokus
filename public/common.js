@@ -170,7 +170,7 @@ function escapeHtml(val) {
 // ==========================================
 (function () {
     const style = document.createElement('style');
-    style.textContent = 'body.kundlage-active .kundlage-price { filter: blur(7px); user-select: none; }';
+    style.textContent = 'body.kundlage-active .kundlage-price { display: none !important; }';
     document.head.appendChild(style);
 
     function isKundlageActive() { return localStorage.getItem('kundlage') === 'true'; }
