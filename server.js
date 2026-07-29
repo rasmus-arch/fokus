@@ -497,10 +497,10 @@ const ctTables = ['materials', 'colors', 'prices', 'services', 'edges'];
 ctTables.forEach(table => {
     app.post(`/api/countertops/${table}`, requireAuth, requireAdmin, (req, res) => {
         if (table === 'prices' && req.body.color_ids) {
-            const { depth_min, depth_max, price_per_lm, thickness, color_ids } = req.body;
+            const { depth_min, depth_max, price_per_lm, purchase_price_per_lm, thickness, color_ids } = req.body;
             if (!color_ids || color_ids.length === 0) return res.status(400).json({ message: "Inga färger angivna" });
-            const values = color_ids.map(id => [id, depth_min, depth_max, price_per_lm, thickness]);
-            db.query(`INSERT INTO countertop_prices (color_id, depth_min, depth_max, price_per_lm, thickness) VALUES ?`, [values], (err) => {
+            const values = color_ids.map(id => [id, depth_min, depth_max, price_per_lm, purchase_price_per_lm || null, thickness]);
+            db.query(`INSERT INTO countertop_prices (color_id, depth_min, depth_max, price_per_lm, purchase_price_per_lm, thickness) VALUES ?`, [values], (err) => {
                 if (err) return res.status(500).json({ message: err.message });
                 res.json({ message: 'Priserna har sparats på alla valda färger!' });
             });
@@ -524,8 +524,8 @@ ctTables.forEach(table => {
 app.post('/api/countertops/prices/bulk', requireAuth, requireAdmin, (req, res) => {
     const rows = req.body;
     if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ message: 'Inga rader skickades in.' });
-    const values = rows.map(r => [r.color_id || null, r.price_group_id || null, r.depth_min || 0, r.depth_max || 0, r.price_per_lm || 0, r.thickness || 0]);
-    db.query('INSERT INTO countertop_prices (color_id, price_group_id, depth_min, depth_max, price_per_lm, thickness) VALUES ?', [values], (err, result) => {
+    const values = rows.map(r => [r.color_id || null, r.price_group_id || null, r.depth_min || 0, r.depth_max || 0, r.price_per_lm || 0, r.purchase_price_per_lm || null, r.thickness || 0]);
+    db.query('INSERT INTO countertop_prices (color_id, price_group_id, depth_min, depth_max, price_per_lm, purchase_price_per_lm, thickness) VALUES ?', [values], (err, result) => {
         if (err) return res.status(500).json({ message: err.message });
         res.json({ message: `${result.affectedRows} prisrader sparade!` });
     });

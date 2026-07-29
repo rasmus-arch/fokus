@@ -143,6 +143,7 @@
                             <th class="p-2 font-semibold w-28">Djup min</th>
                             <th class="p-2 font-semibold w-28">Djup max</th>
                             <th class="p-2 font-semibold w-32">Pris/lpm</th>
+                            <th class="p-2 font-semibold w-32">Inköp/lpm (ex moms)</th>
                             <th class="p-2 w-10"></th>
                         </tr>
                     </thead>
@@ -320,7 +321,11 @@
                     </div>
                     <div class="flex justify-between items-center border-t border-gray-100 pt-1 mt-1">
                         <span class="text-[10px] uppercase font-bold text-gray-400">Pris / Lpm</span>
-                        <span class="text-sm font-bold text-blue-700">${parseFloat(p.price_per_lm).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr</span>
+                        <span class="text-sm font-bold text-blue-700 kundlage-price">${parseFloat(p.price_per_lm).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-[10px] uppercase font-bold text-gray-400">Marginal</span>
+                        ${marginBadgeHtml(calcMarginPercent(p.price_per_lm, p.purchase_price_per_lm))}
                     </div>
                     <div class="absolute top-2 right-2 hidden group-hover:flex gap-2 bg-white px-1 shadow-sm rounded">
                         <button onclick="openModal('price', ${p.id})" class="text-gray-400 hover:text-blue-600"><i class="fas fa-edit"></i></button>
@@ -516,7 +521,10 @@
                         <div><label class="block text-xs font-semibold text-gray-600 mb-1">Minsta Djup (mm)</label><input type="number" id="pMin" value="${item ? item.depth_min : '0'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
                         <div><label class="block text-xs font-semibold text-gray-600 mb-1">Max Djup (mm)</label><input type="number" id="pMax" value="${item ? item.depth_max : '600'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
                     </div>
-                    <div class="mt-2"><label class="block text-xs font-semibold text-gray-600 mb-1">Pris (Inkl. moms / Lpm)</label><input type="number" id="pLpm" value="${item ? item.price_per_lm : '0'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                    <div class="grid grid-cols-2 gap-3 mt-2">
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Pris (Inkl. moms / Lpm)</label><input type="number" id="pLpm" value="${item ? item.price_per_lm : '0'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Inköpspris (Ex moms / Lpm)</label><input type="number" id="pPurchaseLpm" value="${item ? (item.purchase_price_per_lm ?? '') : ''}" class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                    </div>
                 `;
             }
             else if (type === 'price_group') {
@@ -577,7 +585,7 @@
             }
             else if (currentModalType === 'price') {
                 endpoint = 'prices';
-                const basePrice = { thickness: document.getElementById('pThick').value, depth_min: document.getElementById('pMin').value, depth_max: document.getElementById('pMax').value, price_per_lm: document.getElementById('pLpm').value };
+                const basePrice = { thickness: document.getElementById('pThick').value, depth_min: document.getElementById('pMin').value, depth_max: document.getElementById('pMax').value, price_per_lm: document.getElementById('pLpm').value, purchase_price_per_lm: document.getElementById('pPurchaseLpm').value || null };
                 if (currentEditId) {
                     // Redigering ändrar bara siffrorna - vilken färg/prisgrupp raden hör till rörs inte.
                     payload = basePrice;
@@ -679,7 +687,8 @@
                 <td class="p-1.5"><input type="number" name="qeThick" value="20" class="w-full border px-2 py-1 rounded text-xs outline-none focus:border-blue-500"></td>
                 <td class="p-1.5"><input type="number" name="qeMin" value="0" class="w-full border px-2 py-1 rounded text-xs outline-none focus:border-blue-500"></td>
                 <td class="p-1.5"><input type="number" name="qeMax" value="600" class="w-full border px-2 py-1 rounded text-xs outline-none focus:border-blue-500"></td>
-                <td class="p-1.5"><input type="number" name="qePrice" value="0" class="w-full border px-2 py-1 rounded text-xs outline-none focus:border-blue-500 qe-last"></td>
+                <td class="p-1.5"><input type="number" name="qePrice" value="0" class="w-full border px-2 py-1 rounded text-xs outline-none focus:border-blue-500"></td>
+                <td class="p-1.5"><input type="number" name="qePurchase" value="" placeholder="valfritt" class="w-full border px-2 py-1 rounded text-xs outline-none focus:border-blue-500 qe-last"></td>
                 <td class="p-1.5 text-center"><button type="button" onclick="removeQuickEntryRow(${rowId})" class="text-gray-400 hover:text-red-600"><i class="fas fa-trash"></i></button></td>
             `;
             document.getElementById('qeRows').appendChild(tr);
@@ -708,11 +717,13 @@
                 const depth_min = parseFloat(tr.querySelector('input[name="qeMin"]').value);
                 const depth_max = parseFloat(tr.querySelector('input[name="qeMax"]').value);
                 const price_per_lm = parseFloat(tr.querySelector('input[name="qePrice"]').value);
+                const purchaseRaw = tr.querySelector('input[name="qePurchase"]').value;
+                const purchase_price_per_lm = purchaseRaw === '' ? null : parseFloat(purchaseRaw);
                 if ([thickness, depth_min, depth_max, price_per_lm].some(isNaN)) return;
 
-                if (colorVal === 'ALL') colorsInMaterial.forEach(c => rows.push({ color_id: c.id, thickness, depth_min, depth_max, price_per_lm }));
-                else if (colorVal.startsWith('GROUP_')) rows.push({ price_group_id: parseInt(colorVal.replace('GROUP_', '')), thickness, depth_min, depth_max, price_per_lm });
-                else if (colorVal) rows.push({ color_id: parseInt(colorVal), thickness, depth_min, depth_max, price_per_lm });
+                if (colorVal === 'ALL') colorsInMaterial.forEach(c => rows.push({ color_id: c.id, thickness, depth_min, depth_max, price_per_lm, purchase_price_per_lm }));
+                else if (colorVal.startsWith('GROUP_')) rows.push({ price_group_id: parseInt(colorVal.replace('GROUP_', '')), thickness, depth_min, depth_max, price_per_lm, purchase_price_per_lm });
+                else if (colorVal) rows.push({ color_id: parseInt(colorVal), thickness, depth_min, depth_max, price_per_lm, purchase_price_per_lm });
             });
 
             if (rows.length === 0) return alert('Inga giltiga rader att spara. Har materialet några färger inlagda?');
@@ -728,6 +739,7 @@
             } catch (e) { alert('Kunde inte spara raderna.'); }
         }
 
+        fetchVatRate();
         fetchData();
     </script>
 </body>

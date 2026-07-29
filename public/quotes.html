@@ -42,6 +42,7 @@
         const TRASH_RETENTION_DAYS = 10;
 
         document.addEventListener("DOMContentLoaded", () => {
+            fetchVatRate();
             fetchQuotes();
             document.getElementById('searchInput').addEventListener('input', renderQuotes);
         });
@@ -107,6 +108,7 @@
                             <div class="text-sm text-gray-600 space-y-2 mb-6">
                                 <p class="flex items-center"><i class="fas fa-user text-gray-400 w-5 text-center mr-1"></i> <span class="font-medium text-gray-700">${q.customer_name || 'Okänd kund'}</span></p>
                                 <p class="flex items-center text-xs"><i class="far fa-calendar-alt text-gray-400 w-5 text-center mr-1"></i> ${dateString}</p>
+                                <p class="flex items-center text-xs"><i class="fas fa-chart-line text-gray-400 w-5 text-center mr-1"></i> Marginal: ${marginBadgeHtml(calcQuoteMargin(q))}</p>
                             </div>
                         </div>
 
