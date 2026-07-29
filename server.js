@@ -235,10 +235,21 @@ app.post('/api/products', requireAuth, requireAdmin, (req, res) => {
         const mainFile = req.files && req.files['mainImage'] ? req.files['mainImage'][0] : null;
         const galleryFiles = req.files && req.files['galleryImages'] ? req.files['galleryImages'] : [];
 
-        // Hantera varianter (JSON)
+        // Hantera varianter (JSON) - en variant kan ha en egen bild-URL (t.ex. olika färger av
+        // samma handtag), laddas hem lokalt precis som produktens huvudbild.
         let finalVariations = '[]';
         if (has_variations === 'true' && variations) {
-            try { finalVariations = variations; } catch(e) {}
+            try {
+                const variationsArr = JSON.parse(variations);
+                if (Array.isArray(variationsArr)) {
+                    for (let v of variationsArr) {
+                        if (v && v.image_url && String(v.image_url).startsWith('http')) {
+                            v.image_url = (await downloadExternalImage(v.image_url, uploadDir)) || '';
+                        }
+                    }
+                }
+                finalVariations = JSON.stringify(variationsArr);
+            } catch(e) { finalVariations = variations; }
         }
 
         // Pris per m² är bara relevant för vanliga produkter utan varianter (inte lucka/lådfront -
@@ -340,12 +351,18 @@ app.post('/api/products/bulk', requireAuth, requireAdmin, async (req, res) => {
                 if (localPath) { if (i === 0) mainImage = localPath; else localGallery.push(localPath); }
             }
         }
-        p.image_url = mainImage; 
+        p.image_url = mainImage;
         p.gallery = JSON.stringify(localGallery);
-        
-        // Formatera varianterna till JSON
-        if(typeof p.variations === 'object') p.variations = JSON.stringify(p.variations);
-        else if(!p.variations) p.variations = '[]';
+
+        // Varianter (t.ex. olika färger av samma handtag) kan ha sin egen bild-URL - laddas
+        // hem lokalt precis som produktbilden, innan varianterna serialiseras till JSON.
+        let variationsArr = Array.isArray(p.variations) ? p.variations : (p.variations ? (() => { try { return JSON.parse(p.variations); } catch (e) { return []; } })() : []);
+        for (let v of variationsArr) {
+            if (v && v.image_url && String(v.image_url).startsWith('http')) {
+                v.image_url = (await downloadExternalImage(v.image_url, uploadDir)) || '';
+            }
+        }
+        p.variations = JSON.stringify(variationsArr);
     }
 
     const values = products.map(p => {
@@ -797,7 +814,7 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             const imgSize = 68;
             const tableBody = [ [{ text: '', style: thStyle, alignment: 'center' }, { text: 'Artikel / Beskrivning', style: thStyle }, { text: 'Antal', style: thStyle, alignment: 'center' }] ];
         
-        db.query('SELECT id, sku, image_url FROM products', async (err, dbProducts) => {
+        db.query('SELECT id, sku, image_url, variations FROM products', async (err, dbProducts) => {
             if (err) dbProducts = [];
         db.query('SELECT id, image_url FROM countertop_colors', async (errCol, dbColors) => {
             if (errCol) dbColors = [];
@@ -815,7 +832,17 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
                     pdfImageCell = await buildPdfImageCell(dbColor ? dbColor.image_url : null, imgSize);
                 } else {
                     const dbProd = dbProducts.find(p => p.sku === item.sku || p.id == item.id);
-                    pdfImageCell = await buildPdfImageCell(dbProd ? dbProd.image_url : null, imgSize);
+                    // En variant (t.ex. en viss färg) kan ha sin egen bild - matchas på SKU i
+                    // variations-JSON:en och tar då över produktens generella bild.
+                    let itemImageUrl = dbProd ? dbProd.image_url : null;
+                    if (dbProd && dbProd.variations) {
+                        try {
+                            const variantList = typeof dbProd.variations === 'string' ? JSON.parse(dbProd.variations) : dbProd.variations;
+                            const variant = Array.isArray(variantList) ? variantList.find(v => v.sku === item.sku) : null;
+                            if (variant && variant.image_url) itemImageUrl = variant.image_url;
+                        } catch (e) {}
+                    }
+                    pdfImageCell = await buildPdfImageCell(itemImageUrl, imgSize);
                 }
                 tableBody.push([ pdfImageCell, [{ text: item.name, bold: true, color: '#000000', margin: [0, 5] }, { text: `Art.nr: ${item.sku}`, fontSize: 8, color: '#444444' }], { text: item.qty.toString(), alignment: 'center', margin: [0, 15], color: '#000000' } ]);
             }

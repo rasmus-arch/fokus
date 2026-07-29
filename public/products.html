@@ -185,6 +185,7 @@
                                             <th class="p-2 border-b w-32">SKU</th>
                                             <th class="p-2 border-b" id="varHead1">Variabel 1</th>
                                             <th class="p-2 border-b" id="varHead2">Variabel 2</th>
+                                            <th class="p-2 border-b w-32">Bild-URL</th>
                                             <th class="p-2 border-b w-20">Inköp</th>
                                             <th class="p-2 border-b w-16">Faktor</th>
                                             <th class="p-2 border-b w-20">Pris (Mat)</th>
@@ -476,8 +477,8 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                         brand: String(row['Varumärke (Produkt-rad)'] || '').trim(),
                         attr1Name: String(row['Variabel 1 namn (Produkt-rad)'] || '').trim() || 'Alternativ 1',
                         attr2Name: String(row['Variabel 2 namn (Produkt-rad)'] || '').trim(),
-                        // Valfri kolumn - en variabel produkt har bara EN bild på produktnivå
-                        // (ingen bild per variant/färg ännu), så det blir typiskt första variantens bild.
+                        // Valfri kolumn för produktens egen bild (visas i produktgridet). Varje
+                        // variant kan dessutom ha sin egen bild via "Bild-URL (Variant-rad)" nedan.
                         imageUrl: String(row['Bild-URL (Produkt-rad)'] || '').trim()
                     };
                 } else if (rowType === 'variant') {
@@ -487,6 +488,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                         sku,
                         attr1_value: String(row['Variabel 1 värde (Variant-rad)'] || '').trim(),
                         attr2_value: String(row['Variabel 2 värde (Variant-rad)'] || '').trim(),
+                        image_url: String(row['Bild-URL (Variant-rad)'] || '').trim(),
                         purchase_price: parseFloat(row['Inköpspris (Variant-rad)']) || 0,
                         factor: row['Prisfaktor (Variant-rad)'] === '' ? null : parseFloat(row['Prisfaktor (Variant-rad)']),
                         price: parseFloat(row['Försäljningspris Material (Variant-rad)']) || 0,
@@ -512,6 +514,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                         attr1_value: v.attr1_value,
                         attr2_name: g.parent.attr2Name,
                         attr2_value: v.attr2_value,
+                        image_url: v.image_url,
                         purchase_price: v.purchase_price,
                         factor: v.factor,
                         price: v.price,
@@ -840,6 +843,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 <td class="p-1 border-b"><input type="text" class="v-sku w-full px-1 py-1 border rounded" value="${v.sku || ''}"></td>
                 <td class="p-1 border-b"><input type="text" class="v-attr1 w-full px-1 py-1 border rounded" value="${v.attr1_value || ''}"></td>
                 <td class="p-1 border-b"><input type="text" class="v-attr2 w-full px-1 py-1 border rounded" value="${v.attr2_value || ''}"></td>
+                <td class="p-1 border-b"><input type="text" class="v-image w-full px-1 py-1 border rounded" placeholder="https://..." value="${v.image_url || ''}"></td>
                 <td class="p-1 border-b"><input type="number" class="v-purchase w-full px-1 py-1 border rounded text-right" value="${v.purchase_price || 0}" oninput="recalcVariantRowPrice(this)"></td>
                 <td class="p-1 border-b"><input type="number" step="0.01" class="v-factor w-full px-1 py-1 border rounded text-right" placeholder="t.ex. 2" value="${v.factor ?? ''}" oninput="recalcVariantRowPrice(this)"></td>
                 <td class="p-1 border-b"><input type="number" class="v-price w-full px-1 py-1 border rounded text-right" value="${v.price || 0}"></td>
@@ -977,6 +981,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                             attr1_value: row.querySelector('.v-attr1').value,
                             attr2_name: attr2Name,
                             attr2_value: row.querySelector('.v-attr2').value,
+                            image_url: row.querySelector('.v-image').value.trim(),
                             purchase_price: parseFloat(row.querySelector('.v-purchase').value) || 0,
                             factor: row.querySelector('.v-factor').value === '' ? null : parseFloat(row.querySelector('.v-factor').value),
                             price: parseFloat(row.querySelector('.v-price').value) || 0,
