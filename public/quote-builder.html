@@ -67,6 +67,7 @@
                         <button onclick="openCountertopModal()" class="text-[11px] bg-blue-600 hover:bg-blue-500 px-2.5 py-1.5 rounded border border-blue-500 font-medium shadow-sm transition"><i class="fas fa-layer-group mr-1"></i> Bänkskiva</button>
                         <button onclick="openManualFrontModal()" class="text-[11px] bg-gray-700 hover:bg-gray-600 px-2.5 py-1.5 rounded border border-gray-600 font-medium transition"><i class="fas fa-door-open mr-1"></i> Lucka/Front</button>
                         <button onclick="openDrawingModal()" class="text-[11px] bg-purple-600 hover:bg-purple-500 px-2.5 py-1.5 rounded border border-purple-500 font-medium shadow-sm transition"><i class="fas fa-draw-polygon mr-1"></i> Ritning</button>
+                        <button onclick="openPackageModal()" class="text-[11px] bg-amber-600 hover:bg-amber-500 px-2.5 py-1.5 rounded border border-amber-500 font-medium shadow-sm transition"><i class="fas fa-box-open mr-1"></i> Paket</button>
                         <button onclick="document.getElementById('freeTextModal').classList.remove('hidden')" class="text-[11px] bg-gray-700 hover:bg-gray-600 px-2.5 py-1.5 rounded border border-gray-600 font-medium transition">+ Fritext</button>
                     </div>
                 </div>
@@ -509,6 +510,16 @@
                     <button onclick="saveDrawingPlacementProps()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-medium">Spara</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="packageModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-2 md:p-4 overflow-y-auto">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-2xl flex flex-col my-auto relative border border-gray-300 max-h-[90vh]">
+            <header class="p-4 bg-gray-900 text-white flex justify-between items-center rounded-t-lg shrink-0">
+                <h3 class="font-bold text-lg"><i class="fas fa-box-open text-amber-400 mr-2"></i> Paket</h3>
+                <button onclick="document.getElementById('packageModal').classList.add('hidden')" class="text-gray-300 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+            </header>
+            <div class="p-4 overflow-y-auto space-y-2" id="packageModalList"></div>
         </div>
     </div>
 
@@ -1435,6 +1446,65 @@
                 quoteCart.push({ cartId: cartId, id: p.id, sku: p.sku, name: p.name, priceIncVat: parseFloat(p.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0 });
             }
             renderCart();
+        }
+
+        // ==========================================
+        // PAKET - namngivna grupper av befintliga produkter (t.ex. "Vitvarupaket Bosch") som
+        // läggs till i offerten som sina egna rader med ett klick, se product-packages.html.
+        // ==========================================
+        let productPackages = [];
+
+        async function fetchProductPackages() {
+            try {
+                const res = await fetch('/api/product-packages');
+                productPackages = await res.json();
+            } catch (e) { console.error(e); }
+        }
+
+        function openPackageModal() {
+            const list = document.getElementById('packageModalList');
+            if (productPackages.length === 0) {
+                list.innerHTML = '<p class="text-sm text-gray-400 italic">Inga paket upplagda ännu - lägg till under "Paket" i menyn.</p>';
+            } else {
+                list.innerHTML = productPackages.map(pkg => {
+                    const items = parseJsonField(pkg.items, []) || [];
+                    const rows = items.map(it => {
+                        const p = products.find(x => x.id === it.product_id);
+                        return p ? `<li>${it.qty} × ${escapeHtml(p.name)}</li>` : `<li class="text-red-400 italic">Okänd produkt</li>`;
+                    }).join('');
+                    const total = items.reduce((sum, it) => { const p = products.find(x => x.id === it.product_id); return sum + (p ? (parseFloat(p.standard_price) || 0) * it.qty : 0); }, 0);
+                    return `
+                        <div class="border border-gray-200 rounded-lg p-3 flex justify-between items-start gap-3">
+                            <div class="min-w-0">
+                                <p class="font-semibold text-gray-800 text-sm">${escapeHtml(pkg.name)}</p>
+                                <ul class="text-xs text-gray-500 list-disc list-inside mt-1">${rows}</ul>
+                                <p class="text-xs font-bold text-gray-600 mt-1 kundlage-price">${total.toLocaleString('sv-SE')} kr totalt</p>
+                            </div>
+                            <button onclick="addPackageToQuote(${pkg.id})" class="shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium px-3 py-1.5 rounded"><i class="fas fa-plus mr-1"></i> Lägg till</button>
+                        </div>`;
+                }).join('');
+            }
+            document.getElementById('packageModal').classList.remove('hidden');
+        }
+
+        function addPackageToQuote(packageId) {
+            const pkg = productPackages.find(x => x.id === packageId);
+            if (!pkg) return;
+            const items = parseJsonField(pkg.items, []) || [];
+            let missing = 0;
+            items.forEach(it => {
+                const p = products.find(x => x.id === it.product_id);
+                if (!p) { missing++; return; }
+                const cartId = p.id + '_base';
+                const existing = quoteCart.find(item => item.cartId === cartId);
+                if (existing) { existing.qty += it.qty; } else {
+                    const installTot = parseFloat(p.installation_price) || 0; const instShare = parseFloat(p.installer_share) || 0;
+                    quoteCart.push({ cartId: cartId, id: p.id, sku: p.sku, name: p.name, priceIncVat: parseFloat(p.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: it.qty, discount: 0 });
+                }
+            });
+            renderCart();
+            document.getElementById('packageModal').classList.add('hidden');
+            if (missing > 0) alert(`Paketet lades till, men ${missing} produkt(er) i det finns inte längre kvar i sortimentet och hoppades över.`);
         }
 
         // Vissa produkter (t.ex. skåp med Legrabox/Basic-lådor) har bredden som en variant-egenskap
@@ -2458,6 +2528,7 @@
 
         fetchCountertopConfig();
         fetchDoorModels();
+        fetchProductPackages();
         fetchProducts().then(() => loadQuoteData());
     </script>
 </body>

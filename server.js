@@ -338,6 +338,24 @@ app.put('/api/drawing-modules/:id', requireAuth, requireAdmin, (req, res) => {
 });
 app.delete('/api/drawing-modules/:id', requireAuth, requireAdmin, (req, res) => db.query('UPDATE drawing_modules SET active = 0 WHERE id = ?', [req.params.id], dbResult(res, 'Modul inaktiverad!')));
 
+// ==========================================
+// PAKETPRODUKTER (product_packages) - namngivna grupper av befintliga produkter (t.ex.
+// "Vitvarupaket Bosch") som läggs till i offerten som sina egna rader med ett klick.
+// ==========================================
+app.get('/api/product-packages', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM product_packages WHERE active = 1 ORDER BY name ASC', (err, results) => res.json(results || [])));
+app.post('/api/product-packages', requireAuth, requireAdmin, (req, res) => {
+    const { name, items } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ message: 'Namn saknas.' });
+    db.query('INSERT INTO product_packages (name, items) VALUES (?, ?)', [name.trim(), JSON.stringify(items || [])], dbResult(res, 'Paket skapat!', result => ({ id: result.insertId })));
+});
+app.put('/api/product-packages/:id', requireAuth, requireAdmin, (req, res) => {
+    const { name, items, active } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ message: 'Namn saknas.' });
+    db.query('UPDATE product_packages SET name=?, items=?, active=? WHERE id=?',
+        [name.trim(), JSON.stringify(items || []), active === false || active === 'false' ? 0 : 1, req.params.id], dbResult(res, 'Paket uppdaterat!'));
+});
+app.delete('/api/product-packages/:id', requireAuth, requireAdmin, (req, res) => db.query('UPDATE product_packages SET active = 0 WHERE id = ?', [req.params.id], dbResult(res, 'Paket inaktiverat!')));
+
 app.post('/api/products/bulk', requireAuth, requireAdmin, async (req, res) => {
     const products = req.body;
     if (!products || products.length === 0) return res.status(400).json({ message: 'Inga produkter skickades in.' });
