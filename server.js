@@ -862,7 +862,7 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
                     }
                     pdfImageCell = await buildPdfImageCell(itemImageUrl, imgSize);
                 }
-                tableBody.push([ pdfImageCell, [{ text: item.name, bold: true, color: '#000000', margin: [0, 5] }, { text: `Art.nr: ${item.sku}`, fontSize: 8, color: '#444444' }], { text: item.qty.toString(), alignment: 'center', margin: [0, 15], color: '#000000' } ]);
+                tableBody.push([ pdfImageCell, [{ text: item.name, bold: true, color: '#000000', margin: [0, 5] }], { text: item.qty.toString(), alignment: 'center', margin: [0, 15], color: '#000000' } ]);
             }
 
             const conditionsList = [ { id: 'demontering_luckor', label: 'Demontering luckbyte', hasQty: false, price: 2000, isRot: true }, { id: 'demontering_helkok', label: 'Demontering helkök per stomme', hasQty: true, price: 600, isRot: true }, { id: 'bortforsling', label: 'Bortforsling', hasQty: false, price: 2000, isRot: false }, { id: 'bortforsling_vit', label: 'Bortforsling av vitvaror (vid köp av nya)', hasQty: true, price: 1000, isRot: false }, { id: 'inkoppling_vit', label: 'Inkoppling av vitvaror', hasQty: true, price: 1000, isRot: true }, { id: 'el', label: 'In/Urkoppling el', hasQty: false, hasCustomPrice: true, price: 0, isRot: true }, { id: 'vvs', label: 'In/Urkoppling VVS', hasQty: false, hasCustomPrice: true, price: 0, isRot: true } ];
