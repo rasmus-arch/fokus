@@ -144,15 +144,18 @@ function marginBadgeHtml(marginPercent, profitKr) {
 function calcQuoteMargin(quote) {
     const qd = parseJsonField(quote.quote_data, {});
     const cart = Array.isArray(qd.quoteCart) ? qd.quoteCart : [];
-    if (cart.length === 0) return { percent: null, kr: null };
+    if (cart.length === 0) return { percent: null, kr: null, excludedRevenueIncVat: 0, excludedCount: 0 };
 
-    let materialRevenueIncVatAll = 0, marginRevenueIncVat = 0, marginCostExVat = 0, installRevenueIncVat = 0, installerCutIncVat = 0;
+    let materialRevenueIncVatAll = 0, marginRevenueIncVat = 0, marginCostExVat = 0, installRevenueIncVat = 0, installerCutIncVat = 0, excludedRevenueIncVat = 0, excludedCount = 0;
     cart.forEach(item => {
         const rowRevenueIncVat = (parseFloat(item.priceIncVat) || 0) * (1 - ((parseFloat(item.discount) || 0) / 100)) * (item.qty || 1);
         materialRevenueIncVatAll += rowRevenueIncVat;
         if (hasCostData(item.costExVat)) {
             marginRevenueIncVat += rowRevenueIncVat;
             marginCostExVat += parseFloat(item.costExVat) * (item.qty || 1);
+        } else {
+            excludedRevenueIncVat += rowRevenueIncVat;
+            excludedCount++;
         }
         installRevenueIncVat += (parseFloat(item.installIncVat) || 0) * (item.qty || 1);
         installerCutIncVat += (parseFloat(item.installerShare) || 0) * (item.qty || 1);
@@ -166,10 +169,10 @@ function calcQuoteMargin(quote) {
     marginRevenueIncVat *= discountFraction;
 
     const totalRevenueExVat = (marginRevenueIncVat + installRevenueIncVat) / VAT_FACTOR;
-    if (totalRevenueExVat <= 0) return { percent: null, kr: null };
+    if (totalRevenueExVat <= 0) return { percent: null, kr: null, excludedRevenueIncVat, excludedCount };
     const totalCostExVat = marginCostExVat + (installerCutIncVat / VAT_FACTOR);
     const profitKr = totalRevenueExVat - totalCostExVat;
-    return { percent: (profitKr / totalRevenueExVat) * 100, kr: profitKr };
+    return { percent: (profitKr / totalRevenueExVat) * 100, kr: profitKr, excludedRevenueIncVat, excludedCount };
 }
 
 // Enkel HTML-escaping för text som interpolers i innerHTML-mallar (produktnamn, kundnamn,

@@ -94,6 +94,9 @@
                 // Formatera datumet
                 const dateObj = new Date(q.created_at);
                 const dateString = dateObj.toLocaleDateString('sv-SE') + ' ' + dateObj.toLocaleTimeString('sv-SE', {hour: '2-digit', minute:'2-digit'});
+                const margin = calcQuoteMargin(q);
+                const marginTitle = margin.excludedCount > 0 ? `title="${margin.excludedCount} rad${margin.excludedCount === 1 ? '' : 'er'} saknar inköpspris och räknas ej med"` : '';
+                const marginHtml = marginBadgeHtml(margin.percent, margin.kr) + (margin.excludedCount > 0 ? ' <i class="fas fa-triangle-exclamation text-amber-500 text-[10px]"></i>' : '');
 
                 grid.innerHTML += `
                     <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 hover:shadow-md transition flex flex-col justify-between h-full relative">
@@ -108,7 +111,7 @@
                             <div class="text-sm text-gray-600 space-y-2 mb-6">
                                 <p class="flex items-center"><i class="fas fa-user text-gray-400 w-5 text-center mr-1"></i> <span class="font-medium text-gray-700">${q.customer_name || 'Okänd kund'}</span></p>
                                 <p class="flex items-center text-xs"><i class="far fa-calendar-alt text-gray-400 w-5 text-center mr-1"></i> ${dateString}</p>
-                                <p class="flex items-center text-xs"><i class="fas fa-chart-line text-gray-400 w-5 text-center mr-1"></i> Marginal: ${(() => { const m = calcQuoteMargin(q); return marginBadgeHtml(m.percent, m.kr); })()}</p>
+                                <p class="flex items-center text-xs" ${marginTitle}><i class="fas fa-chart-line text-gray-400 w-5 text-center mr-1"></i> Marginal: ${marginHtml}</p>
                             </div>
                         </div>
 
