@@ -595,12 +595,13 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 let marginCell;
                 if (isVar) {
                     const vars = parseJsonField(p.variations, []);
-                    const margins = vars.map(v => calcMarginPercent(v.price, v.purchase_price)).filter(m => m !== null);
+                    const withCost = vars.filter(v => hasCostData(v.purchase_price));
+                    const margins = withCost.map(v => calcMarginPercent(v.price, v.purchase_price));
                     marginCell = margins.length === 0 ? marginBadgeHtml(null)
-                        : (Math.min(...margins) === Math.max(...margins) ? marginBadgeHtml(margins[0])
+                        : (Math.min(...margins) === Math.max(...margins) ? marginBadgeHtml(margins[0], calcMarginKr(withCost[0].price, withCost[0].purchase_price))
                             : `${marginBadgeHtml(Math.min(...margins))} - ${marginBadgeHtml(Math.max(...margins))}`);
                 } else {
-                    marginCell = marginBadgeHtml(calcMarginPercent(isSqm ? p.price_per_sqm : p.standard_price, p.purchase_price));
+                    marginCell = marginBadgeHtml(calcMarginPercent(isSqm ? p.price_per_sqm : p.standard_price, p.purchase_price), calcMarginKr(isSqm ? p.price_per_sqm : p.standard_price, p.purchase_price));
                 }
 
                 tbody.innerHTML += `
@@ -856,7 +857,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
             const row = inputEl.closest('tr');
             const purchase = parseFloat(row.querySelector('.v-purchase').value) || 0;
             const price = parseFloat(row.querySelector('.v-price').value) || 0;
-            row.querySelector('.v-margin').innerHTML = marginBadgeHtml(calcMarginPercent(price, purchase));
+            row.querySelector('.v-margin').innerHTML = marginBadgeHtml(calcMarginPercent(price, purchase), calcMarginKr(price, purchase));
         }
 
         function addVariationRow(v = {}) {
@@ -872,7 +873,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 <td class="p-1 border-b"><input type="number" class="v-price w-full px-1 py-1 border rounded text-right" value="${v.price || 0}" oninput="updateVariantRowMargin(this)"></td>
                 <td class="p-1 border-b"><input type="number" class="v-install w-full px-1 py-1 border rounded text-right" value="${v.install_price || 0}"></td>
                 <td class="p-1 border-b"><input type="number" class="v-share w-full px-1 py-1 border border-purple-200 bg-purple-50 rounded text-right" value="${v.installer_share || 0}"></td>
-                <td class="p-1 border-b text-center v-margin">${marginBadgeHtml(calcMarginPercent(v.price, v.purchase_price))}</td>
+                <td class="p-1 border-b text-center v-margin">${marginBadgeHtml(calcMarginPercent(v.price, v.purchase_price), calcMarginKr(v.price, v.purchase_price))}</td>
                 <td class="p-1 border-b text-center"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600"><i class="fas fa-trash"></i></button></td>
             `;
             tbody.appendChild(tr);
