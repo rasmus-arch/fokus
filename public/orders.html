@@ -12,9 +12,14 @@
     <div id="sidebar-container" class="shrink-0"></div>
 
     <main class="flex-1 flex flex-col h-screen overflow-y-auto p-4 md:p-6 lg:p-8 w-full max-w-full">
-        <div class="mb-6">
-            <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Ordrar (Arbetsordrar)</h2>
-            <p class="text-xs md:text-sm text-gray-500 mt-1">Låsta offerter och fildelning för projekt</p>
+        <div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Ordrar (Arbetsordrar)</h2>
+                <p class="text-xs md:text-sm text-gray-500 mt-1">Låsta offerter och fildelning för projekt</p>
+            </div>
+            <button id="recalcCostsBtn" onclick="recalcAllQuoteCosts()" title="Räknar om kostnadsdata för äldre offerter/order som sparades innan kostnadsspårning fanns, utifrån dagens inköpspriser" class="shrink-0 bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 px-3 py-2 rounded-md text-sm font-medium shadow-sm whitespace-nowrap">
+                <i class="fas fa-rotate mr-1"></i> Uppdatera kostnadsdata
+            </button>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6" id="ordersGrid"></div>
@@ -125,6 +130,26 @@
                 label.innerText = "Ladda upp filer (Bilder, PDF, Word)";
             }
         });
+
+        // Räknar om costExVat på rader i ALLA offerter/order (delad tabell) utifrån dagens
+        // inköpspriser - för de som sparades innan kostnadsspårning per rad fanns. Se
+        // POST /api/quotes/recalculate-costs i server.js för matchningslogiken/begränsningarna.
+        async function recalcAllQuoteCosts() {
+            if (!confirm('Räkna om kostnadsdata utifrån dagens inköpspriser för alla offerter och order som saknar det? Det här kan inte ångras (fast befintlig kostnadsdata skrivs aldrig över).')) return;
+            const btn = document.getElementById('recalcCostsBtn');
+            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Räknar om...';
+            try {
+                const res = await fetch('/api/quotes/recalculate-costs', { method: 'POST' });
+                const data = await res.json();
+                alert(data.message || 'Klart.');
+                fetchOrders();
+            } catch (e) {
+                console.error(e);
+                alert('Något gick fel.');
+            } finally {
+                btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate mr-1"></i> Uppdatera kostnadsdata';
+            }
+        }
 
         async function fetchInstallers() {
             try {
