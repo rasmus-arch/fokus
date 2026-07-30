@@ -1117,7 +1117,7 @@
                     if (count >= 3 && joint3 === 'vertical') extraInfo += ' (Ansluter till höger om Del 3)';
                 }
 
-                const materialCostExVat = (part.calcL / 1000) * (parseFloat(priceBand.purchase_price_per_lm) || 0);
+                const materialCostExVat = hasCostData(priceBand.purchase_price_per_lm) ? (part.calcL / 1000) * parseFloat(priceBand.purchase_price_per_lm) : null;
                 quoteCart.push({
                     cartId: 'ct_' + Date.now() + part.id, id: null, sku: 'BÄNKSKIVA', colorId: colorId,
                     name: `Bänkskiva ${matName} - ${colName} (${thk}mm) | Del ${part.id} (Kapsnitt: ${part.calcL}x${part.d}mm | Ryggmått: ${part.rawL}mm)${extraInfo}`,
@@ -1380,7 +1380,7 @@
                 
                 const existing = quoteCart.find(item => item.cartId === cartId);
                 if(existing) { existing.qty += 1; } else {
-                    quoteCart.push({ cartId: cartId, id: currentModalProduct.id, sku: selectedVariation.sku, name: currentModalProduct.name + nameSuffix, priceIncVat: parseFloat(selectedVariation.price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, imageUrl: selectedVariation.image_url || currentModalProduct.image_url || '', costExVat: parseFloat(selectedVariation.purchase_price) || 0 });
+                    quoteCart.push({ cartId: cartId, id: currentModalProduct.id, sku: selectedVariation.sku, name: currentModalProduct.name + nameSuffix, priceIncVat: parseFloat(selectedVariation.price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, imageUrl: selectedVariation.image_url || currentModalProduct.image_url || '', costExVat: hasCostData(selectedVariation.purchase_price) ? parseFloat(selectedVariation.purchase_price) : null });
                 }
                 const variantWidth = getVariantWidth(selectedVariation, currentModalProduct);
                 addAutoFrontsForProduct({ ...currentModalProduct, width: variantWidth });
@@ -1392,12 +1392,12 @@
                 const areaM2 = Math.max((widthMm / 1000) * (heightMm / 1000), minSqm);
                 const price = Math.round(areaM2 * (parseFloat(currentModalProduct.price_per_sqm) || 0) * 100) / 100;
                 const installTot = parseFloat(currentModalProduct.installation_price) || 0; const instShare = parseFloat(currentModalProduct.installer_share) || 0;
-                quoteCart.push({ cartId: `sqm_${currentModalProduct.id}_${Date.now()}`, id: currentModalProduct.id, sku: currentModalProduct.sku, name: `${currentModalProduct.name} (${widthMm}x${heightMm}mm)`, priceIncVat: price, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, isFreeText: true, imageUrl: currentModalProduct.image_url || '', costExVat: areaM2 * (parseFloat(currentModalProduct.purchase_price) || 0) });
+                quoteCart.push({ cartId: `sqm_${currentModalProduct.id}_${Date.now()}`, id: currentModalProduct.id, sku: currentModalProduct.sku, name: `${currentModalProduct.name} (${widthMm}x${heightMm}mm)`, priceIncVat: price, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, isFreeText: true, imageUrl: currentModalProduct.image_url || '', costExVat: hasCostData(currentModalProduct.purchase_price) ? areaM2 * parseFloat(currentModalProduct.purchase_price) : null });
             } else {
                 const cartId = currentModalProduct.id + '_base'; const existing = quoteCart.find(item => item.cartId === cartId);
                 if(existing) { existing.qty += 1; } else {
                     const installTot = parseFloat(currentModalProduct.installation_price) || 0; const instShare = parseFloat(currentModalProduct.installer_share) || 0;
-                    quoteCart.push({ cartId: cartId, id: currentModalProduct.id, sku: currentModalProduct.sku, name: currentModalProduct.name, priceIncVat: parseFloat(currentModalProduct.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, imageUrl: currentModalProduct.image_url || '', costExVat: parseFloat(currentModalProduct.purchase_price) || 0 });
+                    quoteCart.push({ cartId: cartId, id: currentModalProduct.id, sku: currentModalProduct.sku, name: currentModalProduct.name, priceIncVat: parseFloat(currentModalProduct.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, imageUrl: currentModalProduct.image_url || '', costExVat: hasCostData(currentModalProduct.purchase_price) ? parseFloat(currentModalProduct.purchase_price) : null });
                 }
                 addAutoFrontsForProduct(currentModalProduct);
             }
@@ -1446,7 +1446,7 @@
             const cartId = p.id + '_base'; const existing = quoteCart.find(item => item.cartId === cartId);
             if (existing) { existing.qty += 1; } else {
                 const installTot = parseFloat(p.installation_price) || 0; const instShare = parseFloat(p.installer_share) || 0;
-                quoteCart.push({ cartId: cartId, id: p.id, sku: p.sku, name: p.name, priceIncVat: parseFloat(p.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, costExVat: parseFloat(p.purchase_price) || 0 });
+                quoteCart.push({ cartId: cartId, id: p.id, sku: p.sku, name: p.name, priceIncVat: parseFloat(p.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, costExVat: hasCostData(p.purchase_price) ? parseFloat(p.purchase_price) : null });
             }
             renderCart();
         }
@@ -1502,7 +1502,7 @@
                 const existing = quoteCart.find(item => item.cartId === cartId);
                 if (existing) { existing.qty += it.qty; } else {
                     const installTot = parseFloat(p.installation_price) || 0; const instShare = parseFloat(p.installer_share) || 0;
-                    quoteCart.push({ cartId: cartId, id: p.id, sku: p.sku, name: p.name, priceIncVat: parseFloat(p.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: it.qty, discount: 0, costExVat: parseFloat(p.purchase_price) || 0 });
+                    quoteCart.push({ cartId: cartId, id: p.id, sku: p.sku, name: p.name, priceIncVat: parseFloat(p.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: it.qty, discount: 0, costExVat: hasCostData(p.purchase_price) ? parseFloat(p.purchase_price) : null });
                 }
             });
             renderCart();
@@ -1563,12 +1563,12 @@
                 const matchRow = lookupFrontPriceRow({ component_type: item.componentType, width: item.pieceWidth, height: item.pieceHeight });
                 if (!matchRow) {
                     item.sku = 'PRIS SAKNAS';
-                    item.priceIncVat = 0; item.installIncVat = 0; item.companyShare = 0; item.installerShare = 0; item.costExVat = 0;
+                    item.priceIncVat = 0; item.installIncVat = 0; item.companyShare = 0; item.installerShare = 0; item.costExVat = null;
                 } else {
                     const installTot = parseFloat(matchRow.installation_price) || 0; const instShare = parseFloat(matchRow.installer_share) || 0;
                     item.priceIncVat = parseFloat(matchRow.price); item.installIncVat = installTot;
                     item.companyShare = installTot - instShare; item.installerShare = instShare;
-                    item.costExVat = parseFloat(matchRow.purchase_price) || 0;
+                    item.costExVat = hasCostData(matchRow.purchase_price) ? parseFloat(matchRow.purchase_price) : null;
                 }
             });
             renderCart();
@@ -1664,7 +1664,7 @@
                     quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'PRIS SAKNAS', name: `${label} - INGET PRIS HITTAT, kontrollera prislistan`, priceIncVat: 0, installIncVat: 0, companyShare: 0, installerShare: 0, qty: 1, discount: 0, isFreeText: true, componentType: piece.component_type, pieceWidth: piece.width, pieceHeight: piece.height });
                 } else {
                     const installTot = parseFloat(matchRow.installation_price) || 0; const instShare = parseFloat(matchRow.installer_share) || 0;
-                    quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'AUTO-' + piece.component_type.toUpperCase(), name: label, priceIncVat: parseFloat(matchRow.price), installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, isFreeText: true, componentType: piece.component_type, pieceWidth: piece.width, pieceHeight: piece.height, costExVat: parseFloat(matchRow.purchase_price) || 0 });
+                    quoteCart.push({ cartId: `autofront_${product.id}_${idx}_${Date.now()}`, id: null, sku: 'AUTO-' + piece.component_type.toUpperCase(), name: label, priceIncVat: parseFloat(matchRow.price), installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, isFreeText: true, componentType: piece.component_type, pieceWidth: piece.width, pieceHeight: piece.height, costExVat: hasCostData(matchRow.purchase_price) ? parseFloat(matchRow.purchase_price) : null });
                 }
             });
         }
@@ -1746,7 +1746,7 @@
                 quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'PRIS SAKNAS', name: `${label} - INGET PRIS HITTAT, kontrollera prislistan`, priceIncVat: 0, installIncVat: 0, companyShare: 0, installerShare: 0, qty, discount: 0, isFreeText: true, componentType: type, pieceWidth: width, pieceHeight: height });
             } else {
                 const installTot = parseFloat(matchRow.installation_price) || 0; const instShare = parseFloat(matchRow.installer_share) || 0;
-                quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'MANUELL-' + type.toUpperCase(), name: label, priceIncVat: parseFloat(matchRow.price), installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty, discount: 0, isFreeText: true, componentType: type, pieceWidth: width, pieceHeight: height, costExVat: parseFloat(matchRow.purchase_price) || 0 });
+                quoteCart.push({ cartId: `manualfront_${Date.now()}`, id: null, sku: 'MANUELL-' + type.toUpperCase(), name: label, priceIncVat: parseFloat(matchRow.price), installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty, discount: 0, isFreeText: true, componentType: type, pieceWidth: width, pieceHeight: height, costExVat: hasCostData(matchRow.purchase_price) ? parseFloat(matchRow.purchase_price) : null });
             }
             document.getElementById('manualFrontModal').classList.add('hidden');
             renderCart();
@@ -1957,7 +1957,7 @@
             const startFeeProduct = parseFloat(document.getElementById('startFeeProduct').value) || 0; const startFeeNonRot = parseFloat(document.getElementById('startFeeNonRot').value) || 0; const startFeeRotComp = parseFloat(document.getElementById('startFeeRotComp').value) || 0; const startFeeRotInst = parseFloat(document.getElementById('startFeeRotInst').value) || 0; const colorFee = parseFloat(document.getElementById('feeColor').value) || 0;
             const useRot = document.getElementById('useRotCheckbox').checked;
             
-            let totalMaterialBeforeGlobalDiscount = 0, totalRotInstallIncVat = 0, totalNonRotInstallIncVat = 0, totalCompanyCut = 0, totalInstallerCut = 0, totalMaterialCostExVat = 0;
+            let totalMaterialBeforeGlobalDiscount = 0, totalRotInstallIncVat = 0, totalNonRotInstallIncVat = 0, totalCompanyCut = 0, totalInstallerCut = 0, totalMaterialCostExVat = 0, marginEligibleMaterialRevenue = 0;
 
             // Kompakt, grupperad radvy istället för ett kort per rad - så man ser fler av
             // (ibland närmare 50) raderna samtidigt utan att scrolla förbi varje enskild rad.
@@ -1968,7 +1968,10 @@
                 const rowMaterialTotal = (item.priceIncVat * (1 - (item.discount / 100))) * item.qty; const rowInstallTotal = item.installIncVat * item.qty;
                 totalMaterialBeforeGlobalDiscount += rowMaterialTotal; totalRotInstallIncVat += rowInstallTotal;
                 totalCompanyCut += (item.companyShare || 0) * item.qty; totalInstallerCut += (item.installerShare || 0) * item.qty;
-                totalMaterialCostExVat += (item.costExVat || 0) * item.qty;
+                if (hasCostData(item.costExVat)) {
+                    totalMaterialCostExVat += parseFloat(item.costExVat) * item.qty;
+                    marginEligibleMaterialRevenue += rowMaterialTotal;
+                }
                 const entry = { item, index, rowMaterialTotal, rowInstallTotal };
                 (item.componentType ? frontEntries : otherEntries).push(entry);
             });
@@ -2024,7 +2027,9 @@
 
             totalMaterialBeforeGlobalDiscount += startFeeProduct + colorFee; totalCompanyCut += startFeeProduct + colorFee + startFeeNonRot + startFeeRotComp;
             totalNonRotInstallIncVat += startFeeNonRot; totalRotInstallIncVat += (startFeeRotComp + startFeeRotInst); totalInstallerCut += startFeeRotInst;
-            
+            // Startavgifter/färgtillägg har ingen inköpskostnad - de är ren vinst och räknas alltid med i marginalunderlaget.
+            marginEligibleMaterialRevenue += startFeeProduct + colorFee;
+
             let globalDiscountAmount = globalDiscountType === '%' ? totalMaterialBeforeGlobalDiscount * (globalDiscountVal / 100) : globalDiscountVal;
             let totalMaterialIncVat = Math.max(0, totalMaterialBeforeGlobalDiscount - globalDiscountAmount);
             const rotDeduction = useRot ? (totalRotInstallIncVat * 0.30) : 0; const finalToPay = totalMaterialIncVat + totalRotInstallIncVat + totalNonRotInstallIncVat - rotDeduction;
@@ -2033,9 +2038,13 @@
             // inte marginalen - det är en skattereduktion för kunden, inte en rabatt på det
             // avtalade priset. Montagets del som INTE går till montören (totalCompanyCut) räknas
             // in som vinst genom att hela montageintäkten tas med men bara montörens andel
-            // räknas som kostnad.
-            const totalRevenueExVat = (totalMaterialIncVat + totalRotInstallIncVat + totalNonRotInstallIncVat) / VAT_FACTOR;
+            // räknas som kostnad. Rader utan känt inköpspris exkluderas helt (varken intäkt eller
+            // kostnad räknas för dem), så marginalen bara speglar de rader vi faktiskt vet kostnaden på.
+            const discountFraction = totalMaterialBeforeGlobalDiscount > 0 ? totalMaterialIncVat / totalMaterialBeforeGlobalDiscount : 1;
+            const marginRevenueIncVat = marginEligibleMaterialRevenue * discountFraction;
+            const totalRevenueExVat = (marginRevenueIncVat + totalRotInstallIncVat + totalNonRotInstallIncVat) / VAT_FACTOR;
             const totalCostExVat = totalMaterialCostExVat + (totalInstallerCut / VAT_FACTOR);
+            const profitKr = totalRevenueExVat > 0 ? (totalRevenueExVat - totalCostExVat) : null;
             const marginPercent = totalRevenueExVat > 0 ? ((totalRevenueExVat - totalCostExVat) / totalRevenueExVat) * 100 : null;
 
             document.getElementById('sumMaterialEx').innerText = (totalMaterialIncVat/1.25).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
@@ -2046,7 +2055,7 @@
             document.getElementById('sumTotal').innerText = finalToPay.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
             document.getElementById('sumCompanyCut').innerText = totalCompanyCut.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
             document.getElementById('sumInstallerCut').innerText = totalInstallerCut.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
-            document.getElementById('sumMargin').innerHTML = marginBadgeHtml(marginPercent);
+            document.getElementById('sumMargin').innerHTML = marginBadgeHtml(marginPercent, profitKr);
 
             // Gångjärn: en lucka under 1100mm behöver 2 gångjärn, 1100mm och uppåt behöver 3.
             // Handtag/knoppar: en per lådfront. Räknas bara på rader med sparade komponent-mått
@@ -2449,7 +2458,7 @@
                 priceIncVat: product.has_variations === 1 ? 0 : (parseFloat(product.standard_price) || 0),
                 installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare,
                 qty: 1, discount: 0, drawingPlacementId: placement.id,
-                costExVat: product.has_variations === 1 ? 0 : (parseFloat(product.purchase_price) || 0)
+                costExVat: (product.has_variations === 1 || !hasCostData(product.purchase_price)) ? null : parseFloat(product.purchase_price)
             });
         }
 
