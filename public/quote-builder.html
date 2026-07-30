@@ -206,6 +206,7 @@
                         <div class="flex justify-between text-blue-700"><span><span data-company-name>Klarälvskök</span>s del:</span><span id="sumCompanyCut" class="font-bold kundlage-price">0.00 kr</span></div>
                         <div class="flex justify-between text-blue-700 mt-0.5"><span>Montörens del:</span><span id="sumInstallerCut" class="font-bold kundlage-price">0.00 kr</span></div>
                         <div class="flex justify-between text-blue-700 mt-0.5 border-t border-blue-100 pt-0.5"><span>Marginal (ex moms):</span><span id="sumMargin" class="font-bold">0%</span></div>
+                        <div id="sumMarginNote" class="text-[10px] text-amber-600 mt-0.5"></div>
                     </div>
 
                     <div class="space-y-1.5">
@@ -1957,7 +1958,7 @@
             const startFeeProduct = parseFloat(document.getElementById('startFeeProduct').value) || 0; const startFeeNonRot = parseFloat(document.getElementById('startFeeNonRot').value) || 0; const startFeeRotComp = parseFloat(document.getElementById('startFeeRotComp').value) || 0; const startFeeRotInst = parseFloat(document.getElementById('startFeeRotInst').value) || 0; const colorFee = parseFloat(document.getElementById('feeColor').value) || 0;
             const useRot = document.getElementById('useRotCheckbox').checked;
             
-            let totalMaterialBeforeGlobalDiscount = 0, totalRotInstallIncVat = 0, totalNonRotInstallIncVat = 0, totalCompanyCut = 0, totalInstallerCut = 0, totalMaterialCostExVat = 0, marginEligibleMaterialRevenue = 0;
+            let totalMaterialBeforeGlobalDiscount = 0, totalRotInstallIncVat = 0, totalNonRotInstallIncVat = 0, totalCompanyCut = 0, totalInstallerCut = 0, totalMaterialCostExVat = 0, marginEligibleMaterialRevenue = 0, excludedMaterialRevenueIncVat = 0, excludedRowCount = 0;
 
             // Kompakt, grupperad radvy istället för ett kort per rad - så man ser fler av
             // (ibland närmare 50) raderna samtidigt utan att scrolla förbi varje enskild rad.
@@ -1971,6 +1972,9 @@
                 if (hasCostData(item.costExVat)) {
                     totalMaterialCostExVat += parseFloat(item.costExVat) * item.qty;
                     marginEligibleMaterialRevenue += rowMaterialTotal;
+                } else {
+                    excludedMaterialRevenueIncVat += rowMaterialTotal;
+                    excludedRowCount++;
                 }
                 const entry = { item, index, rowMaterialTotal, rowInstallTotal };
                 (item.componentType ? frontEntries : otherEntries).push(entry);
@@ -2056,6 +2060,10 @@
             document.getElementById('sumCompanyCut').innerText = totalCompanyCut.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
             document.getElementById('sumInstallerCut').innerText = totalInstallerCut.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
             document.getElementById('sumMargin').innerHTML = marginBadgeHtml(marginPercent, profitKr);
+            const marginNoteEl = document.getElementById('sumMarginNote');
+            marginNoteEl.innerHTML = excludedRowCount > 0
+                ? `<i class="fas fa-triangle-exclamation"></i> ${excludedRowCount} rad${excludedRowCount === 1 ? '' : 'er'} (${excludedMaterialRevenueIncVat.toLocaleString('sv-SE', {maximumFractionDigits:0})} kr) saknar inköpspris och räknas ej med i marginalen`
+                : '';
 
             // Gångjärn: en lucka under 1100mm behöver 2 gångjärn, 1100mm och uppåt behöver 3.
             // Handtag/knoppar: en per lådfront. Räknas bara på rader med sparade komponent-mått
