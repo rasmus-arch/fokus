@@ -1787,6 +1787,26 @@
             document.getElementById('saveStatus').innerText = '';
         }
 
+        // Räknar om costExVat på offertens rader utifrån dagens inköpspriser (för offerter som
+        // sparades innan kostnadsspårning per rad fanns). Skriver direkt i databasen, så vi laddar
+        // om offerten efteråt - eventuella osparade ändringar i byggaren går då förlorade.
+        async function recalcQuoteCosts() {
+            if (!quoteId) return;
+            if (!confirm('Detta räknar om kostnadsdata utifrån dagens inköpspriser och laddar om offerten från servern. Osparade ändringar i byggaren just nu går förlorade. Fortsätt?')) return;
+            try {
+                const res = await fetch(`/api/quotes/${quoteId}/recalculate-costs`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) { alert(data.message || 'Något gick fel.'); return; }
+                let msg = data.message;
+                if (data.unrecomputableCount > 0) msg += `\n\n${data.unrecomputableCount} rad(er) (t.ex. luckor/lådfronter eller bänkskivor) saknar en sparad referens och kunde inte återskapas automatiskt - ta bort och lägg till dem på nytt om du vill ha kostnad på dem också.`;
+                alert(msg);
+                await loadQuoteData();
+            } catch (e) {
+                console.error(e);
+                alert('Något gick fel.');
+            }
+        }
+
         // ==========================================
         // FÖRSÄTTSBLAD (endast OFFERT)
         // ==========================================
@@ -2062,7 +2082,7 @@
             document.getElementById('sumMargin').innerHTML = marginBadgeHtml(marginPercent, profitKr);
             const marginNoteEl = document.getElementById('sumMarginNote');
             marginNoteEl.innerHTML = excludedRowCount > 0
-                ? `<i class="fas fa-triangle-exclamation"></i> ${excludedRowCount} rad${excludedRowCount === 1 ? '' : 'er'} (${excludedMaterialRevenueIncVat.toLocaleString('sv-SE', {maximumFractionDigits:0})} kr) saknar inköpspris och räknas ej med i marginalen`
+                ? `<i class="fas fa-triangle-exclamation"></i> ${excludedRowCount} rad${excludedRowCount === 1 ? '' : 'er'} (${excludedMaterialRevenueIncVat.toLocaleString('sv-SE', {maximumFractionDigits:0})} kr) saknar inköpspris och räknas ej med i marginalen${quoteId ? ' <button onclick="recalcQuoteCosts()" class="underline hover:text-amber-800">Uppdatera kostnadsdata</button>' : ''}`
                 : '';
 
             // Gångjärn: en lucka under 1100mm behöver 2 gångjärn, 1100mm och uppåt behöver 3.

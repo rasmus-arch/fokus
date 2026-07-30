@@ -22,6 +22,9 @@
                     <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
                     <input type="text" id="searchInput" placeholder="Sök på offert eller kund..." class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-md text-sm outline-none focus:border-blue-500 shadow-sm">
                 </div>
+                <button id="recalcCostsBtn" onclick="recalcAllQuoteCosts()" title="Räknar om kostnadsdata för äldre offerter/order som sparades innan kostnadsspårning fanns, utifrån dagens inköpspriser" class="shrink-0 bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 px-3 py-2 rounded-md text-sm font-medium shadow-sm whitespace-nowrap">
+                    <i class="fas fa-rotate mr-1"></i> Uppdatera kostnadsdata
+                </button>
                 <button id="trashToggleBtn" onclick="toggleTrashView()" class="shrink-0 bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-2 rounded-md text-sm font-medium shadow-sm whitespace-nowrap">
                     <i class="fas fa-trash mr-1"></i> Papperskorg
                 </button>
@@ -46,6 +49,26 @@
             fetchQuotes();
             document.getElementById('searchInput').addEventListener('input', renderQuotes);
         });
+
+        // Räknar om costExVat på rader i ALLA offerter/order (delad tabell) utifrån dagens
+        // inköpspriser - för de som sparades innan kostnadsspårning per rad fanns. Se
+        // POST /api/quotes/recalculate-costs i server.js för matchningslogiken/begränsningarna.
+        async function recalcAllQuoteCosts() {
+            if (!confirm('Räkna om kostnadsdata utifrån dagens inköpspriser för alla offerter och order som saknar det? Det här kan inte ångras (fast befintlig kostnadsdata skrivs aldrig över).')) return;
+            const btn = document.getElementById('recalcCostsBtn');
+            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Räknar om...';
+            try {
+                const res = await fetch('/api/quotes/recalculate-costs', { method: 'POST' });
+                const data = await res.json();
+                alert(data.message || 'Klart.');
+                fetchQuotes();
+            } catch (e) {
+                console.error(e);
+                alert('Något gick fel.');
+            } finally {
+                btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate mr-1"></i> Uppdatera kostnadsdata';
+            }
+        }
 
         function toggleTrashView() {
             viewingTrash = !viewingTrash;
