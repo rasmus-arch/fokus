@@ -842,8 +842,14 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             // fångar upp), vilket visar sig som ett obegripligt 503 istället för ett läsbart fel.
             try {
             let totalMaterialBeforeGlobalDiscount = 0;
+            // Varje rads eget montagepris (produkter, luckor/fronter, bänkskivor) räknades tidigare
+            // aldrig in i PDF:ens monteringssumma - bara de separata monteringsvillkoren
+            // (demontering, bortforsling osv) längre ner. Samma konvention som offertbyggarens
+            // egen totalsumma: radens installIncVat räknas alltid som ROT-berättigat arbete.
+            let totalRotInstallIncVat = 0;
             for (let item of cart) {
                 const rowMaterialTotal = (item.priceIncVat * (1 - (item.discount / 100))) * item.qty; totalMaterialBeforeGlobalDiscount += rowMaterialTotal;
+                totalRotInstallIncVat += (parseFloat(item.installIncVat) || 0) * item.qty;
                 let pdfImageCell;
                 if (item.colorId) {
                     const dbColor = dbColors.find(c => c.id == item.colorId);
@@ -866,7 +872,7 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             }
 
             const conditionsList = [ { id: 'demontering_luckor', label: 'Demontering luckbyte', hasQty: false, price: 2000, isRot: true }, { id: 'demontering_helkok', label: 'Demontering helkök per stomme', hasQty: true, price: 600, isRot: true }, { id: 'bortforsling', label: 'Bortforsling', hasQty: false, price: 2000, isRot: false }, { id: 'bortforsling_vit', label: 'Bortforsling av vitvaror (vid köp av nya)', hasQty: true, price: 1000, isRot: false }, { id: 'inkoppling_vit', label: 'Inkoppling av vitvaror', hasQty: true, price: 1000, isRot: true }, { id: 'el', label: 'In/Urkoppling el', hasQty: false, hasCustomPrice: true, price: 0, isRot: true }, { id: 'vvs', label: 'In/Urkoppling VVS', hasQty: false, hasCustomPrice: true, price: 0, isRot: true } ];
-            let totalRotInstallIncVat = 0; let totalNonRotInstallIncVat = 0;
+            let totalNonRotInstallIncVat = 0;
             conditionsList.forEach(cond => {
                 const current = selectedConditions[cond.id];
                 if (current && current.responsibility === 'Klarälvskök') {
