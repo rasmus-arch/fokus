@@ -175,6 +175,44 @@ function calcQuoteMargin(quote) {
     return { percent: (profitKr / totalRevenueExVat) * 100, kr: profitKr, excludedRevenueIncVat, excludedCount };
 }
 
+// Läsbara etiketter för anledningarna POST /api/quotes/:id/recalculate-costs kan ge till varför
+// en rad INTE kunde få kostnadsdata - se recalcQuoteCartCosts i server.js.
+const RECALC_REASON_LABELS = {
+    'lucka-saknar-inköpspris': 'Lucka/lådfront - dörrmodellens prisrad saknar inköpspris',
+    'lucka-ingen-matchning-mot-dörrmodell': 'Lucka/lådfront - ingen matchande prisrad hittades i dörrmodellens prislista',
+    'bänkskiva': 'Bänkskiva - saknar sparad referens till färg/tjocklek och kan inte återskapas automatiskt',
+    'ingen-produktkoppling': 'Rad utan koppling till en produkt (t.ex. fritextrad)',
+    'produkt-borttagen': 'Produkten är borttagen ur katalogen',
+    'variant-hittades-ej': 'Variabel produkt - varianten hittades inte eller saknar inköpspris',
+    'produkt-saknar-inköpspris': 'Produkten saknar inköpspris i katalogen'
+};
+// Bygger en läsbar textsammanfattning (för alert()) av de rader som INTE kunde få kostnadsdata,
+// grupperat per anledning - så det syns konkret VILKA rader det handlar om istället för bara ett tal.
+function describeRecalcDetails(details) {
+    if (!details || details.length === 0) return '';
+    const byReason = {};
+    details.forEach(d => { (byReason[d.reason] = byReason[d.reason] || []).push(d.name); });
+    let msg = '\n\nRader som fortfarande saknar kostnadsdata:';
+    Object.keys(byReason).forEach(reason => {
+        const names = byReason[reason];
+        const shown = names.slice(0, 10);
+        msg += `\n\n${RECALC_REASON_LABELS[reason] || reason} (${names.length} st):\n- ${shown.join('\n- ')}`;
+        if (names.length > shown.length) msg += `\n... och ${names.length - shown.length} till`;
+    });
+    return msg;
+}
+// Samma sak som describeRecalcDetails, fast för bulk-körningen (alla offerter på en gång) som
+// bara skickar tillbaka antal per anledning istället för varje enskilt radnamn (för stor mängd
+// annars) - se reasonCounts från POST /api/quotes/recalculate-costs.
+function describeRecalcReasonCounts(reasonCounts) {
+    if (!reasonCounts || Object.keys(reasonCounts).length === 0) return '';
+    let msg = '\n\nRader som fortfarande saknar kostnadsdata:';
+    Object.keys(reasonCounts).forEach(reason => {
+        msg += `\n- ${RECALC_REASON_LABELS[reason] || reason}: ${reasonCounts[reason]} st`;
+    });
+    return msg;
+}
+
 // Enkel HTML-escaping för text som interpolers i innerHTML-mallar (produktnamn, kundnamn,
 // leaddata från externa webbformulär osv). Använd runt värden som kan innehålla < > & " '
 // för att undvika att data av misstag tolkas som HTML/script.

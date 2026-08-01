@@ -603,82 +603,119 @@ app.put('/api/quotes/:id', requireAuth, requireStaff, (req, res) => {
 // Räknar om costExVat för raderna i en kundvagn utifrån dagens inköpspriser i produktkatalogen.
 // Används för offerter/order som sparades innan kostnadsspårning per rad fanns, så deras rader
 // saknar costExVat helt och exkluderas ur marginalen (se hasCostData i common.js). Rör bara rader
-// som redan saknar kostnad - befintlig kostnadsdata skrivs aldrig över. Kan bara återskapa kostnad
-// för rader kopplade till en produkt-id (vanliga/variabla/m²-produkter) - lösa luckor/lådfronter
-// och bänkskivor saknar en sparad referens till vilken prisrad/modell de kom från och kan inte
-// återskapas automatiskt (de kräver att raden tas bort och läggs till på nytt).
+// som redan saknar kostnad - befintlig kostnadsdata skrivs aldrig över.
+// Luckor/lådfronter (componentType satt) matchas mot dörrmodellens prislista precis som
+// lookupFrontPriceRow gör client-side i offertbyggaren - referensen finns kvar i
+// quote_data.kitchenSpecs.doorModelId även om varje rad inte pekar direkt på en prisrad.
+// Bänkskivor saknar helt en sparad referens till vilken prisrad (färg/tjocklek/djupband) de kom
+// från och kan inte återskapas automatiskt (kräver att raden tas bort och läggs till på nytt).
 function hasCostDataServer(v) {
     return v !== null && v !== undefined && v !== '' && !isNaN(parseFloat(v));
 }
-function recalcQuoteCartCosts(quoteCart, products) {
+function recalcQuoteCartCosts(quoteCart, products, doorPriceItems) {
     let updatedCount = 0, unrecomputableCount = 0, stillMissingCount = 0;
+    const details = [];
     const productsById = new Map(products.map(p => [p.id, p]));
     quoteCart.forEach(item => {
         if (hasCostDataServer(item.costExVat)) return;
-        if (item.componentType || item.sku === 'BÄNKSKIVA' || !item.id) { unrecomputableCount++; return; }
+        const label = item.name || item.sku || '(rad utan namn)';
+
+        if (item.componentType) {
+            const matchRow = (doorPriceItems || []).find(p =>
+                p.component_type === item.componentType &&
+                item.pieceHeight >= p.height_min && item.pieceHeight <= p.height_max &&
+                item.pieceWidth >= p.width_min && item.pieceWidth <= p.width_max
+            );
+            if (matchRow && hasCostDataServer(matchRow.purchase_price)) {
+                item.costExVat = parseFloat(matchRow.purchase_price);
+                updatedCount++;
+            } else {
+                unrecomputableCount++;
+                details.push({ name: label, sku: item.sku, reason: matchRow ? 'lucka-saknar-inköpspris' : 'lucka-ingen-matchning-mot-dörrmodell' });
+            }
+            return;
+        }
+        if (item.sku === 'BÄNKSKIVA' || !item.id) {
+            unrecomputableCount++;
+            details.push({ name: label, sku: item.sku, reason: item.sku === 'BÄNKSKIVA' ? 'bänkskiva' : 'ingen-produktkoppling' });
+            return;
+        }
         const product = productsById.get(item.id);
-        if (!product) { stillMissingCount++; return; }
+        if (!product) { stillMissingCount++; details.push({ name: label, sku: item.sku, reason: 'produkt-borttagen' }); return; }
         let newCost = null;
         if (product.has_variations) {
             const variations = typeof product.variations === 'string' ? JSON.parse(product.variations || '[]') : (product.variations || []);
             const variation = variations.find(v => v.sku === item.sku);
             if (variation && hasCostDataServer(variation.purchase_price)) newCost = parseFloat(variation.purchase_price);
         } else if (product.pricing_type === 'per_sqm') {
-            if (hasCostDataServer(product.purchase_price) && parseFloat(product.price_per_sqm) > 0) {
-                newCost = (parseFloat(item.priceIncVat) / parseFloat(product.price_per_sqm)) * parseFloat(product.purchase_price);
+            const pricePerSqm = parseFloat(product.price_per_sqm);
+            if (hasCostDataServer(product.purchase_price) && pricePerSqm > 0 && hasCostDataServer(item.priceIncVat)) {
+                const areaM2 = parseFloat(item.priceIncVat) / pricePerSqm;
+                if (!isNaN(areaM2)) newCost = areaM2 * parseFloat(product.purchase_price);
             }
         } else if (hasCostDataServer(product.purchase_price)) {
             newCost = parseFloat(product.purchase_price);
         }
-        if (newCost !== null) { item.costExVat = newCost; updatedCount++; }
-        else stillMissingCount++;
+        if (newCost !== null && !isNaN(newCost)) { item.costExVat = newCost; updatedCount++; }
+        else {
+            stillMissingCount++;
+            details.push({ name: label, sku: item.sku, reason: product.has_variations ? 'variant-hittades-ej' : 'produkt-saknar-inköpspris' });
+        }
     });
-    return { updatedCount, unrecomputableCount, stillMissingCount };
+    return { updatedCount, unrecomputableCount, stillMissingCount, details };
 }
-app.post('/api/quotes/:id/recalculate-costs', requireAuth, requireStaff, (req, res) => {
-    db.query('SELECT quote_data FROM quotes WHERE id = ?', [req.params.id], (err, results) => {
-        if (err) return res.status(500).json({ message: err.message });
+function dbQueryP(sql, params) {
+    return new Promise((resolve, reject) => db.query(sql, params, (err, results) => err ? reject(err) : resolve(results)));
+}
+function getDoorPriceItemsForModel(doorModelId) {
+    if (!doorModelId) return Promise.resolve([]);
+    return new Promise(resolve => {
+        resolveDoorModelScope(doorModelId, (col, id) => {
+            db.query(`SELECT component_type, height_min, height_max, width_min, width_max, purchase_price FROM door_price_items WHERE ${col} = ?`, [id], (err, rows) => resolve(rows || []));
+        });
+    });
+}
+app.post('/api/quotes/:id/recalculate-costs', requireAuth, requireStaff, async (req, res) => {
+    try {
+        const results = await dbQueryP('SELECT quote_data FROM quotes WHERE id = ?', [req.params.id]);
         if (!results || results.length === 0) return res.status(404).json({ message: 'Offerten hittades inte.' });
         const qd = typeof results[0].quote_data === 'string' ? JSON.parse(results[0].quote_data || '{}') : (results[0].quote_data || {});
         const cart = Array.isArray(qd.quoteCart) ? qd.quoteCart : [];
-        db.query('SELECT id, has_variations, variations, pricing_type, price_per_sqm, purchase_price FROM products', (err2, products) => {
-            if (err2) return res.status(500).json({ message: err2.message });
-            const summary = recalcQuoteCartCosts(cart, products || []);
-            qd.quoteCart = cart;
-            db.query('UPDATE quotes SET quote_data = ? WHERE id = ?', [JSON.stringify(qd), req.params.id], (err3) => {
-                if (err3) return res.status(500).json({ message: err3.message });
-                res.json({ message: `${summary.updatedCount} rader uppdaterade.`, ...summary });
-            });
-        });
-    });
+        const products = await dbQueryP('SELECT id, has_variations, variations, pricing_type, price_per_sqm, purchase_price FROM products', []);
+        const doorPriceItems = await getDoorPriceItemsForModel(qd.kitchenSpecs && qd.kitchenSpecs.doorModelId);
+        const summary = recalcQuoteCartCosts(cart, products || [], doorPriceItems);
+        qd.quoteCart = cart;
+        await dbQueryP('UPDATE quotes SET quote_data = ? WHERE id = ?', [JSON.stringify(qd), req.params.id]);
+        res.json({ message: `${summary.updatedCount} rader uppdaterade.`, ...summary });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 });
-app.post('/api/quotes/recalculate-costs', requireAuth, requireStaff, (req, res) => {
-    db.query('SELECT id, quote_data FROM quotes WHERE deleted_at IS NULL', (err, quotes) => {
-        if (err) return res.status(500).json({ message: err.message });
-        db.query('SELECT id, has_variations, variations, pricing_type, price_per_sqm, purchase_price FROM products', (err2, products) => {
-            if (err2) return res.status(500).json({ message: err2.message });
-            const toUpdate = [];
-            (quotes || []).forEach(q => {
-                const qd = typeof q.quote_data === 'string' ? JSON.parse(q.quote_data || '{}') : (q.quote_data || {});
-                const cart = Array.isArray(qd.quoteCart) ? qd.quoteCart : [];
-                if (cart.length === 0) return;
-                const summary = recalcQuoteCartCosts(cart, products || []);
-                if (summary.updatedCount > 0) { qd.quoteCart = cart; toUpdate.push({ id: q.id, quote_data: JSON.stringify(qd), updatedCount: summary.updatedCount }); }
-            });
-            if (toUpdate.length === 0) return res.json({ message: 'Inga rader kunde uppdateras.', totalUpdatedRows: 0, totalQuotesChanged: 0 });
-            let remaining = toUpdate.length, hadError = false;
-            const totalUpdatedRows = toUpdate.reduce((s, u) => s + u.updatedCount, 0);
-            toUpdate.forEach(u => {
-                db.query('UPDATE quotes SET quote_data = ? WHERE id = ?', [u.quote_data, u.id], (err3) => {
-                    if (err3) hadError = true;
-                    if (--remaining === 0) {
-                        if (hadError) return res.status(500).json({ message: 'Något gick fel för en eller flera offerter.' });
-                        res.json({ message: `${totalUpdatedRows} rader uppdaterade i ${toUpdate.length} offerter/order.`, totalUpdatedRows, totalQuotesChanged: toUpdate.length });
-                    }
-                });
-            });
-        });
-    });
+app.post('/api/quotes/recalculate-costs', requireAuth, requireStaff, async (req, res) => {
+    try {
+        const quotes = await dbQueryP('SELECT id, quote_data FROM quotes WHERE deleted_at IS NULL', []);
+        const products = await dbQueryP('SELECT id, has_variations, variations, pricing_type, price_per_sqm, purchase_price FROM products', []);
+        const doorPriceItemsCache = new Map();
+        const toUpdate = [];
+        const reasonCounts = {};
+        for (const q of (quotes || [])) {
+            const qd = typeof q.quote_data === 'string' ? JSON.parse(q.quote_data || '{}') : (q.quote_data || {});
+            const cart = Array.isArray(qd.quoteCart) ? qd.quoteCart : [];
+            if (cart.length === 0) continue;
+            const doorModelId = qd.kitchenSpecs && qd.kitchenSpecs.doorModelId;
+            if (doorModelId && !doorPriceItemsCache.has(doorModelId)) doorPriceItemsCache.set(doorModelId, await getDoorPriceItemsForModel(doorModelId));
+            const doorPriceItems = doorModelId ? doorPriceItemsCache.get(doorModelId) : [];
+            const summary = recalcQuoteCartCosts(cart, products || [], doorPriceItems);
+            summary.details.forEach(d => { reasonCounts[d.reason] = (reasonCounts[d.reason] || 0) + 1; });
+            if (summary.updatedCount > 0) { qd.quoteCart = cart; toUpdate.push({ id: q.id, quote_data: JSON.stringify(qd), updatedCount: summary.updatedCount }); }
+        }
+        if (toUpdate.length === 0) return res.json({ message: 'Inga rader kunde uppdateras.', totalUpdatedRows: 0, totalQuotesChanged: 0, reasonCounts });
+        const totalUpdatedRows = toUpdate.reduce((s, u) => s + u.updatedCount, 0);
+        await Promise.all(toUpdate.map(u => dbQueryP('UPDATE quotes SET quote_data = ? WHERE id = ?', [u.quote_data, u.id])));
+        res.json({ message: `${totalUpdatedRows} rader uppdaterade i ${toUpdate.length} offerter/order.`, totalUpdatedRows, totalQuotesChanged: toUpdate.length, reasonCounts });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 });
 
 // Laddar upp en bild till offertens försättsblad (hero/handtag/modell/färg). Filen sparas

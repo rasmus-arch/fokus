@@ -1797,9 +1797,7 @@
                 const res = await fetch(`/api/quotes/${quoteId}/recalculate-costs`, { method: 'POST' });
                 const data = await res.json();
                 if (!res.ok) { alert(data.message || 'Något gick fel.'); return; }
-                let msg = data.message;
-                if (data.unrecomputableCount > 0) msg += `\n\n${data.unrecomputableCount} rad(er) (t.ex. luckor/lådfronter eller bänkskivor) saknar en sparad referens och kunde inte återskapas automatiskt - ta bort och lägg till dem på nytt om du vill ha kostnad på dem också.`;
-                alert(msg);
+                alert(data.message + describeRecalcDetails(data.details));
                 await loadQuoteData();
             } catch (e) {
                 console.error(e);
