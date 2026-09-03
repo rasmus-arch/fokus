@@ -966,8 +966,17 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             // (demontering, bortforsling osv) längre ner. Samma konvention som offertbyggarens
             // egen totalsumma: radens installIncVat räknas alltid som ROT-berättigat arbete.
             let totalRotInstallIncVat = 0;
+            // Radrabatter (den röda %-rutan på varje rad i offertbyggaren) bakades tidigare bara
+            // tyst in i totalsumman utan att synas någonstans i PDF:en - varken på raden eller som
+            // en egen totalrad, till skillnad från den globala rabatten som alltid får en egen
+            // "Rabatt:"-rad. totalRowDiscountAmount/totalMaterialFullPrice låter oss visa dem.
+            let totalMaterialFullPrice = 0; let totalRowDiscountAmount = 0;
             for (let item of cart) {
-                const rowMaterialTotal = (item.priceIncVat * (1 - (item.discount / 100))) * item.qty; totalMaterialBeforeGlobalDiscount += rowMaterialTotal;
+                const rowFullPrice = (parseFloat(item.priceIncVat) || 0) * item.qty;
+                const rowDiscountPercent = parseFloat(item.discount) || 0;
+                const rowDiscountAmount = rowFullPrice * (rowDiscountPercent / 100);
+                const rowMaterialTotal = rowFullPrice - rowDiscountAmount;
+                totalMaterialFullPrice += rowFullPrice; totalRowDiscountAmount += rowDiscountAmount; totalMaterialBeforeGlobalDiscount += rowMaterialTotal;
                 totalRotInstallIncVat += (parseFloat(item.installIncVat) || 0) * item.qty;
                 let pdfImageCell;
                 if (item.colorId) {
@@ -987,7 +996,9 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
                     }
                     pdfImageCell = await buildPdfImageCell(itemImageUrl, imgSize);
                 }
-                tableBody.push([ pdfImageCell, [{ text: item.name, bold: true, color: '#000000', margin: [0, 5] }], { text: item.qty.toString(), alignment: 'center', margin: [0, 15], color: '#000000' } ]);
+                const nameCell = [{ text: item.name, bold: true, color: '#000000', margin: [0, 5] }];
+                if (rowDiscountPercent > 0) nameCell.push({ text: `Rabatt: ${rowDiscountPercent.toLocaleString('sv-SE')}%`, fontSize: 8, color: '#c0392b' });
+                tableBody.push([ pdfImageCell, nameCell, { text: item.qty.toString(), alignment: 'center', margin: [0, 15], color: '#000000' } ]);
             }
 
             const conditionsList = [ { id: 'demontering_luckor', label: 'Demontering luckbyte', hasQty: false, price: 2000, isRot: true }, { id: 'demontering_helkok', label: 'Demontering helkök per stomme', hasQty: true, price: 600, isRot: true }, { id: 'bortforsling', label: 'Bortforsling', hasQty: false, price: 2000, isRot: false }, { id: 'bortforsling_vit', label: 'Bortforsling av vitvaror (vid köp av nya)', hasQty: true, price: 1000, isRot: false }, { id: 'inkoppling_vit', label: 'Inkoppling av vitvaror', hasQty: true, price: 1000, isRot: true }, { id: 'el', label: 'In/Urkoppling el', hasQty: false, hasCustomPrice: true, price: 0, isRot: true }, { id: 'vvs', label: 'In/Urkoppling VVS', hasQty: false, hasCustomPrice: true, price: 0, isRot: true } ];
@@ -1019,7 +1030,14 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             // betala" lyfts istället ut som en egen färgad totalsumma-banner nedanför, för
             // både köpeavtal och offert.
             const totalsRows = [
-                [ { text: 'Produktkostnad innan rabatt:', color: '#000000' }, { text: totalMaterialBeforeGlobalDiscount.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
+                // Radrabatter (satta per rad i offertbyggaren) syns bara som en egen rad här
+                // när minst en rad faktiskt har en - annars ser den vanliga offerten (utan
+                // radrabatter) likadan ut som förut.
+                ...(totalRowDiscountAmount > 0 ? [
+                    [ { text: 'Produktkostnad (ordinarie pris):', color: '#000000' }, { text: totalMaterialFullPrice.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
+                    [ { text: 'Radrabatter:', color: '#000000' }, { text: `- ${totalRowDiscountAmount.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`, alignment: 'right', color: '#000000' } ]
+                ] : []),
+                [ { text: totalRowDiscountAmount > 0 ? 'Produktkostnad (efter radrabatt, innan rabatt):' : 'Produktkostnad innan rabatt:', color: '#000000' }, { text: totalMaterialBeforeGlobalDiscount.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
                 [ { text: 'Rabatt:', color: '#000000' }, { text: `- ${globalDiscountAmount.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`, alignment: 'right', color: '#000000' } ],
                 [ { text: 'Summa produktkostnad:', bold: true, color: '#000000' }, { text: totalMaterialIncVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', bold: true, color: '#000000' } ],
                 [ { text: 'Rot-berättigad monteringskostnad:', color: '#000000' }, { text: totalRotInstallIncVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
