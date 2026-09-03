@@ -2051,8 +2051,10 @@
                 }
             });
 
-            totalMaterialBeforeGlobalDiscount += startFeeProduct + colorFee; totalCompanyCut += startFeeProduct + colorFee + startFeeNonRot + startFeeRotComp;
-            totalNonRotInstallIncVat += startFeeNonRot; totalRotInstallIncVat += (startFeeRotComp + startFeeRotInst); totalInstallerCut += startFeeRotInst;
+            totalMaterialBeforeGlobalDiscount += startFeeProduct + colorFee; totalCompanyCut += startFeeProduct + colorFee + startFeeRotComp;
+            // Montage (Ej ROT) går i sin helhet till montören (precis som ROT-Montör-fältet) - det
+            // är inte en avgift företaget tjänar på, till skillnad från Material/Färgtillägg/ROT-K-kök.
+            totalNonRotInstallIncVat += startFeeNonRot; totalRotInstallIncVat += (startFeeRotComp + startFeeRotInst); totalInstallerCut += startFeeNonRot + startFeeRotInst;
             // Startavgifter/färgtillägg har ingen inköpskostnad - de är ren vinst och räknas alltid med i marginalunderlaget.
             marginEligibleMaterialRevenue += startFeeProduct + colorFee;
 
