@@ -596,7 +596,10 @@
             <h3 class="font-bold text-gray-800 mb-3 border-b pb-2">Lägg till Fritext-rad</h3>
             <div class="space-y-3 text-sm">
                 <div><label class="block text-xs font-semibold text-gray-600">Beskrivning</label><input type="text" id="ftName" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
-                <div><label class="block text-xs font-semibold text-gray-600">Pris Material (ink moms)</label><input type="number" id="ftPrice" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label class="block text-xs font-semibold text-gray-600">Pris Material (ink moms)</label><input type="number" id="ftPrice" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
+                    <div><label class="block text-xs font-semibold text-gray-600">Inköpspris (ex moms, valfritt)</label><input type="number" id="ftPurchase" value="" placeholder="okänt" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
+                </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div><label class="block text-xs font-semibold text-gray-600">Pris Montage <span data-company-name>K-kök</span> (ink moms)</label><input type="number" id="ftInstallCompany" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
                     <div><label class="block text-xs font-semibold text-gray-600">Pris Montage Montör (ink moms)</label><input type="number" id="ftInstallInstaller" value="0" class="w-full border border-gray-300 rounded px-2 py-1.5 mt-1"></div>
@@ -1672,10 +1675,11 @@
 
         function addFreeTextRow() {
             const name = document.getElementById('ftName').value; const price = parseFloat(document.getElementById('ftPrice').value) || 0;
+            const purchaseRaw = document.getElementById('ftPurchase').value;
             const installCompany = parseFloat(document.getElementById('ftInstallCompany').value) || 0; const installInstaller = parseFloat(document.getElementById('ftInstallInstaller').value) || 0;
             if(!name) return alert("Beskrivning saknas");
-            quoteCart.push({ cartId: 'ft_' + Date.now(), id: null, sku: 'FRITEXT', name: name, priceIncVat: price, installIncVat: (installCompany + installInstaller), companyShare: installCompany, installerShare: installInstaller, qty: 1, discount: 0, isFreeText: true });
-            document.getElementById('ftName').value = ''; document.getElementById('ftPrice').value = '0'; document.getElementById('ftInstallCompany').value = '0'; document.getElementById('ftInstallInstaller').value = '0';
+            quoteCart.push({ cartId: 'ft_' + Date.now(), id: null, sku: 'FRITEXT', name: name, priceIncVat: price, installIncVat: (installCompany + installInstaller), companyShare: installCompany, installerShare: installInstaller, qty: 1, discount: 0, isFreeText: true, costExVat: hasCostData(purchaseRaw) ? parseFloat(purchaseRaw) : null });
+            document.getElementById('ftName').value = ''; document.getElementById('ftPrice').value = '0'; document.getElementById('ftPurchase').value = ''; document.getElementById('ftInstallCompany').value = '0'; document.getElementById('ftInstallInstaller').value = '0';
             document.getElementById('freeTextModal').classList.add('hidden'); renderCart();
         }
 
