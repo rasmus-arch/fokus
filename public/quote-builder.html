@@ -215,7 +215,8 @@
                         <div class="flex justify-between text-gray-500 border-t pt-1"><span>Arbete, ROT (inkl. moms)</span><span id="sumInstall" class="kundlage-price">0.00 kr</span></div>
                         <div class="flex justify-between text-gray-500"><span>Total Moms (25%)</span><span id="sumVat" class="kundlage-price">0.00 kr</span></div>
                         <div class="flex justify-between font-medium text-green-600 border-b pb-1.5"><span>ROT-avdrag (-30%)</span><span id="sumRot" class="kundlage-price">- 0.00 kr</span></div>
-                        <div class="flex justify-between text-base font-bold text-gray-900 pt-1"><span>Att betala</span><span id="sumTotal" class="kundlage-price">0.00 kr</span></div>
+                        <div class="flex justify-between text-gray-400 text-[11px]"><span>Öresavrundning</span><span id="sumRounding" class="kundlage-price">0.00 kr</span></div>
+                        <div class="flex justify-between text-base font-bold text-gray-900 pt-1"><span>Att betala</span><span id="sumTotal" class="kundlage-price">0 kr</span></div>
                     </div>
 
                     <div class="bg-gray-50 border border-gray-200 p-2 rounded text-[11px] mt-3">
@@ -2060,7 +2061,12 @@
 
             let globalDiscountAmount = globalDiscountType === '%' ? totalMaterialBeforeGlobalDiscount * (globalDiscountVal / 100) : globalDiscountVal;
             let totalMaterialIncVat = Math.max(0, totalMaterialBeforeGlobalDiscount - globalDiscountAmount);
-            const rotDeduction = useRot ? (totalRotInstallIncVat * 0.30) : 0; const finalToPay = totalMaterialIncVat + totalRotInstallIncVat + totalNonRotInstallIncVat - rotDeduction;
+            const rotDeduction = useRot ? (totalRotInstallIncVat * 0.30) : 0;
+            const preRoundToPay = totalMaterialIncVat + totalRotInstallIncVat + totalNonRotInstallIncVat - rotDeduction;
+            // Öresavrundning: summan avrundas till närmsta hela krona i offert/köpeavtal.
+            // Mellanskillnaden visas som en egen rad så det syns att inget "försvinner".
+            const finalToPay = Math.round(preRoundToPay);
+            const roundingAdjustment = finalToPay - preRoundToPay;
 
             // Marginal räknas alltid ex moms: (intäkt - kostnad) / intäkt. ROT-avdraget påverkar
             // inte marginalen - det är en skattereduktion för kunden, inte en rabatt på det
@@ -2080,7 +2086,8 @@
             document.getElementById('sumInstall').innerText = totalRotInstallIncVat.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
             document.getElementById('sumVat').innerText = ((totalMaterialIncVat+totalRotInstallIncVat+totalNonRotInstallIncVat)-(totalMaterialIncVat/1.25)-(totalRotInstallIncVat/1.25)-(totalNonRotInstallIncVat/1.25)).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
             document.getElementById('sumRot').innerText = '- ' + rotDeduction.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
-            document.getElementById('sumTotal').innerText = finalToPay.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumRounding').innerText = (roundingAdjustment >= 0 ? '+ ' : '- ') + Math.abs(roundingAdjustment).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
+            document.getElementById('sumTotal').innerText = finalToPay.toLocaleString('sv-SE', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + ' kr';
             document.getElementById('sumCompanyCut').innerText = totalCompanyCut.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
             document.getElementById('sumInstallerCut').innerText = totalInstallerCut.toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' kr';
             document.getElementById('sumMargin').innerHTML = marginBadgeHtml(marginPercent, profitKr);
