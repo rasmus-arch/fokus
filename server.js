@@ -1033,6 +1033,10 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
                 [ { text: 'Produktkostnad innan rabatt:', color: '#000000' }, { text: totalMaterialFullPrice.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
                 [ { text: 'Rabatt:', color: '#000000' }, { text: `- ${totalDiscountAmount.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`, alignment: 'right', color: '#000000' } ],
                 [ { text: 'Summa produktkostnad:', bold: true, color: '#000000' }, { text: totalMaterialIncVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', bold: true, color: '#000000' } ],
+                // Tjänster, ej ROT (t.ex. startavgiften "Montage (Ej ROT)") saknade tidigare en
+                // egen rad här - beloppet räknades in i "Summa montering efter rotavdrag" utan att
+                // synas någonstans innan dess, samma buggmönster som radrabatterna hade.
+                [ { text: 'Tjänster, ej ROT:', color: '#000000' }, { text: totalNonRotInstallIncVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
                 [ { text: 'Rot-berättigad monteringskostnad:', color: '#000000' }, { text: totalRotInstallIncVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
                 [ { text: 'ROT-avdrag (30%):', color: '#000000' }, { text: useRot ? `- ${rotDeduction.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr` : '0 kr', alignment: 'right', color: '#000000' } ],
                 [ { text: 'Summa montering efter rotavdrag:', bold: true, color: '#000000' }, { text: (totalAssemblyCost - rotDeduction).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', bold: true, color: '#000000' } ],
