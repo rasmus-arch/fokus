@@ -1017,11 +1017,11 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             let globalDiscountAmount = globalDiscountType === '%' ? totalMaterialBeforeGlobalDiscount * (globalDiscountVal / 100) : globalDiscountVal;
             let totalMaterialIncVat = Math.max(0, totalMaterialBeforeGlobalDiscount - globalDiscountAmount);
             const rotDeduction = useRot ? (totalRotInstallIncVat * 0.30) : 0; const totalAssemblyCost = totalRotInstallIncVat + totalNonRotInstallIncVat;
-            const preRoundToPay = totalMaterialIncVat + totalAssemblyCost - rotDeduction;
-            // Öresavrundning: summan avrundas till närmsta hela krona - mellanskillnaden visas
-            // som en egen rad i totalsumman så det syns att inget "försvinner".
-            const finalToPay = Math.round(preRoundToPay);
-            const roundingAdjustment = finalToPay - preRoundToPay;
+            const finalToPay = Math.round(totalMaterialIncVat + totalAssemblyCost - rotDeduction);
+            // Öresavrundning: alla belopp i offert/köpeavtal avrundas till närmsta hela krona för
+            // visningen (ingen rad visar öre längre) - underlaget bakom räknas fortfarande exakt,
+            // det är bara PDF-presentationen som göms bakom hela kronor för ett renare intryck.
+            const kr = n => Math.round(n).toLocaleString('sv-SE') + ' kr';
 
             // Totalsumma-raderna slutar på "Summa montering efter rotavdrag" - "Totalt att
             // betala" lyfts istället ut som en egen färgad totalsumma-banner nedanför, för
@@ -1030,17 +1030,16 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
             // "Rabatt:"-raden - "Produktkostnad innan rabatt:" visar alltid det odiskonterade priset.
             const totalDiscountAmount = totalRowDiscountAmount + globalDiscountAmount;
             const totalsRows = [
-                [ { text: 'Produktkostnad innan rabatt:', color: '#000000' }, { text: totalMaterialFullPrice.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
-                [ { text: 'Rabatt:', color: '#000000' }, { text: `- ${totalDiscountAmount.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`, alignment: 'right', color: '#000000' } ],
-                [ { text: 'Summa produktkostnad:', bold: true, color: '#000000' }, { text: totalMaterialIncVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', bold: true, color: '#000000' } ],
+                [ { text: 'Produktkostnad innan rabatt:', color: '#000000' }, { text: kr(totalMaterialFullPrice), alignment: 'right', color: '#000000' } ],
+                [ { text: 'Rabatt:', color: '#000000' }, { text: `- ${kr(totalDiscountAmount)}`, alignment: 'right', color: '#000000' } ],
+                [ { text: 'Summa produktkostnad:', bold: true, color: '#000000' }, { text: kr(totalMaterialIncVat), alignment: 'right', bold: true, color: '#000000' } ],
                 // Tjänster, ej ROT (t.ex. startavgiften "Montage (Ej ROT)") saknade tidigare en
                 // egen rad här - beloppet räknades in i "Summa montering efter rotavdrag" utan att
                 // synas någonstans innan dess, samma buggmönster som radrabatterna hade.
-                [ { text: 'Tjänster, ej ROT:', color: '#000000' }, { text: totalNonRotInstallIncVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
-                [ { text: 'Rot-berättigad monteringskostnad:', color: '#000000' }, { text: totalRotInstallIncVat.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', color: '#000000' } ],
-                [ { text: 'ROT-avdrag (30%):', color: '#000000' }, { text: useRot ? `- ${rotDeduction.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr` : '0 kr', alignment: 'right', color: '#000000' } ],
-                [ { text: 'Summa montering efter rotavdrag:', bold: true, color: '#000000' }, { text: (totalAssemblyCost - rotDeduction).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr', alignment: 'right', bold: true, color: '#000000' } ],
-                [ { text: 'Öresavrundning:', color: '#000000' }, { text: `${roundingAdjustment >= 0 ? '+' : '-'} ${Math.abs(roundingAdjustment).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`, alignment: 'right', color: '#000000' } ]
+                [ { text: 'Tjänster, ej ROT:', color: '#000000' }, { text: kr(totalNonRotInstallIncVat), alignment: 'right', color: '#000000' } ],
+                [ { text: 'Rot-berättigad monteringskostnad:', color: '#000000' }, { text: kr(totalRotInstallIncVat), alignment: 'right', color: '#000000' } ],
+                [ { text: 'ROT-avdrag (30%):', color: '#000000' }, { text: useRot ? `- ${kr(rotDeduction)}` : '0 kr', alignment: 'right', color: '#000000' } ],
+                [ { text: 'Summa montering efter rotavdrag:', bold: true, color: '#000000' }, { text: kr(totalAssemblyCost - rotDeduction), alignment: 'right', bold: true, color: '#000000' } ]
             ];
 
             // Valfritt försättsblad (stor logga, rubrik, hero-bild och en rad med bilder på
@@ -1087,7 +1086,7 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
                     { text: 'PRODUKTER, MATERIAL & VALDA TJÄNSTER', bold: true, color: accentColor, margin: [0, 0, 0, 8] },
                     { table: { headerRows: 1, widths: [imgSize + 5, '*', 40], body: tableBody }, layout: 'lightHorizontalLines' },
                     { columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 40, 0, 0], table: { widths: ['*', 'auto'], body: totalsRows }, layout: 'noBorders' } ] },
-                    { columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 8, 0, 0], table: { widths: ['*', 'auto'], body: [ [ { text: 'Totalt att betala:', fontSize: 13, bold: true, color: '#ffffff', margin: [10, 10, 0, 10] }, { text: finalToPay.toLocaleString('sv-SE', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' kr', fontSize: 13, bold: true, alignment: 'right', color: '#ffffff', margin: [0, 10, 10, 10] } ] ] }, layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => accentColor } } ] }
+                    { columns: [ { width: '*', text: '' }, { width: 300, margin: [0, 8, 0, 0], table: { widths: ['*', 'auto'], body: [ [ { text: 'Totalt att betala:', fontSize: 13, bold: true, color: '#ffffff', margin: [10, 10, 0, 10] }, { text: kr(finalToPay), fontSize: 13, bold: true, alignment: 'right', color: '#ffffff', margin: [0, 10, 10, 10] } ] ] }, layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => accentColor } } ] }
                 ], styles: { th: { bold: true, fillColor: '#000000', color: '#ffffff', padding: 6 }, thOffer: { bold: true, fillColor: accentColor, color: '#ffffff', padding: 6 } }
             };
 
