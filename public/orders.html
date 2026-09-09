@@ -33,7 +33,6 @@
                         <p class="text-xs text-gray-400" id="omCustomer">Kund: ...</p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button id="duplicateOrderBtn" class="hidden text-xs text-gray-400 hover:text-white font-medium transition mr-3"><i class="far fa-copy mr-1"></i> Duplicera</button>
                         <button id="adminRevertBtn" class="hidden text-xs text-gray-400 hover:text-red-400 font-medium transition mr-3"><i class="fas fa-undo mr-1"></i> Ändra till offert</button>
                         <button id="adminEditBtn" class="hidden text-xs bg-yellow-500 hover:bg-yellow-600 text-yellow-900 font-bold px-3 py-1.5 rounded"><i class="fas fa-lock-open mr-1"></i> Lås upp i Byggare (Admin)</button>
                         <button onclick="closeOrderModal()" class="text-gray-300 hover:text-white px-2"><i class="fas fa-times text-2xl"></i></button>
@@ -221,16 +220,12 @@
 
             const revertBtn = document.getElementById('adminRevertBtn');
             const editBtn = document.getElementById('adminEditBtn');
-            const duplicateBtn = document.getElementById('duplicateOrderBtn');
 
             if (userRole !== 'Montör') {
                 revertBtn.classList.remove('hidden');
                 revertBtn.onclick = () => revertToQuote(order.id);
-                duplicateBtn.classList.remove('hidden');
-                duplicateBtn.onclick = () => duplicateOrder(order.id);
             } else {
                 revertBtn.classList.add('hidden');
-                duplicateBtn.classList.add('hidden');
             }
 
             if (userRole === 'Admin') {
@@ -310,23 +305,6 @@
                     fetchOrders(); // Uppdatera listan i bakgrunden
                 }
             } catch (err) { console.error(err); }
-        }
-
-        // Duplicerar en order - kopian blir en ny offert (utkast), inte en ny order, så den
-        // dyker upp i offertlistan (quotes.html) istället för här. Samma /duplicate-endpoint
-        // som redan används från quotes.html.
-        async function duplicateOrder(orderId) {
-            if (!confirm("Vill du skapa en kopia av denna order? Kopian blir en ny offert (utkast) i offertlistan.")) return;
-            try {
-                const res = await fetch(`/api/quotes/${orderId}/duplicate`, { method: 'POST' });
-                if (res.ok) {
-                    closeOrderModal();
-                    alert("Kopia skapad! Den hittar du som ett nytt utkast under Offerter.");
-                    window.location.href = '/quotes.html';
-                } else {
-                    alert("Kunde inte duplicera ordern.");
-                }
-            } catch (err) { console.error(err); alert("Något gick fel."); }
         }
 
         async function revertToQuote(orderId) {
