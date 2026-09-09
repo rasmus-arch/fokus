@@ -77,6 +77,10 @@
     <script>
         let allPackages = []; let allProducts = []; let currentPackageId = null; let currentItems = [];
 
+        // productsById ger O(1)-uppslag av pris/namn i renderPackageItems() istället för att
+        // scanna igenom hela produktlistan (allProducts.find(...)) för varje rad i paketet.
+        let productsById = new Map();
+
         async function fetchProducts() {
             try {
                 const res = await fetch('/api/products');
@@ -84,9 +88,14 @@
                 // Bara enkla produkter (inga varianter/m²-pris) går att lägga i ett paket - de kräver
                 // ett val (variant/mått) som ett paket inte kan göra åt säljaren automatiskt.
                 allProducts = products.filter(p => p.has_variations !== 1 && p.pricing_type !== 'per_sqm');
-                const sel = document.getElementById('pAddProductSelect');
-                sel.innerHTML = '<option value="">-- Välj produkt att lägga till --</option>';
-                allProducts.forEach(p => { sel.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)} (${(parseFloat(p.standard_price)||0).toLocaleString('sv-SE')} kr)</option>`; });
+                productsById = new Map(allProducts.map(p => [p.id, p]));
+                // Bygger hela <option>-listan som en array och sätter innerHTML en enda gång -
+                // "innerHTML += " i en loop tvingar webbläsaren att tolka om HELA det redan
+                // uppbyggda innerHTML:et vid varje varv (O(n²)), vilket med hundratals produkter
+                // gjorde sidan märkbart långsam/låst.
+                const options = ['<option value="">-- Välj produkt att lägga till --</option>'];
+                allProducts.forEach(p => options.push(`<option value="${p.id}">${escapeHtml(p.name)} (${(parseFloat(p.standard_price)||0).toLocaleString('sv-SE')} kr)</option>`));
+                document.getElementById('pAddProductSelect').innerHTML = options.join('');
             } catch (e) { console.error(e); }
         }
 
@@ -98,13 +107,13 @@
 
         function renderPackageList() {
             const div = document.getElementById('packageList');
-            div.innerHTML = '';
             if (allPackages.length === 0) { div.innerHTML = '<p class="text-xs text-gray-400 italic">Inga paket ännu.</p>'; return; }
-            allPackages.forEach(pkg => {
+            const rows = allPackages.map(pkg => {
                 const active = pkg.id === currentPackageId;
                 const itemCount = (parseJsonField(pkg.items, []) || []).length;
-                div.innerHTML += `<button onclick="selectPackage(${pkg.id})" class="w-full text-left px-3 py-2 rounded text-sm ${active ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-gray-100 text-gray-700'}">${escapeHtml(pkg.name)} <span class="text-[10px] text-gray-400">(${itemCount} art.)</span></button>`;
+                return `<button onclick="selectPackage(${pkg.id})" class="w-full text-left px-3 py-2 rounded text-sm ${active ? 'bg-blue-100 text-blue-800 font-semibold' : 'hover:bg-gray-100 text-gray-700'}">${escapeHtml(pkg.name)} <span class="text-[10px] text-gray-400">(${itemCount} art.)</span></button>`;
             });
+            div.innerHTML = rows.join('');
         }
 
         async function addPackage() {
@@ -131,16 +140,17 @@
 
         function renderPackageItems() {
             const tbody = document.getElementById('packageItemsBody');
-            tbody.innerHTML = '';
-            let total = 0;
             if (currentItems.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-xs text-gray-400 italic">Inga produkter i paketet ännu.</td></tr>';
+                document.getElementById('packageTotalPrice').innerText = '0 kr';
+                return;
             }
-            currentItems.forEach((item, idx) => {
-                const p = allProducts.find(x => x.id === item.product_id);
+            let total = 0;
+            const rows = currentItems.map((item, idx) => {
+                const p = productsById.get(item.product_id);
                 const price = p ? (parseFloat(p.standard_price) || 0) : 0;
                 total += price * (item.qty || 1);
-                tbody.innerHTML += `
+                return `
                     <tr class="border-b border-gray-100">
                         <td class="p-2">${p ? escapeHtml(p.name) : `<span class="text-red-500 italic">Okänd produkt (id ${item.product_id})</span>`}</td>
                         <td class="p-2 text-right"><input type="number" min="1" value="${item.qty || 1}" onchange="updateItemQty(${idx}, this.value)" class="w-16 px-1 py-1 border rounded text-right"></td>
@@ -148,6 +158,7 @@
                         <td class="p-2 text-center"><button onclick="removeItemFromPackage(${idx})" class="text-red-400 hover:text-red-600"><i class="fas fa-trash"></i></button></td>
                     </tr>`;
             });
+            tbody.innerHTML = rows.join('');
             document.getElementById('packageTotalPrice').innerText = total.toLocaleString('sv-SE') + ' kr';
         }
 
