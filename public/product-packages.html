@@ -37,9 +37,12 @@
                     </div>
 
                     <div class="flex gap-2 mb-3">
-                        <select id="pAddProductSelect" class="flex-1 px-3 py-2 border border-gray-300 rounded text-sm bg-white">
-                            <option value="">-- Välj produkt att lägga till --</option>
-                        </select>
+                        <div class="relative flex-1">
+                            <input type="text" id="pAddProductSearch" placeholder="Sök produkt att lägga till (namn eller SKU)..." autocomplete="off"
+                                oninput="onAddProductSearchInput()" onfocus="onAddProductSearchInput()" onkeydown="onAddProductSearchKeydown(event)"
+                                class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                            <div id="pAddProductResults" class="hidden absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-64 overflow-y-auto"></div>
+                        </div>
                         <input type="number" id="pAddProductQty" value="1" min="1" class="w-20 px-2 py-2 border border-gray-300 rounded text-sm text-right">
                         <button onclick="addItemToPackage()" class="bg-gray-800 text-white px-4 rounded text-sm font-medium hover:bg-gray-900">Lägg till</button>
                     </div>
@@ -89,15 +92,50 @@
                 // ett val (variant/mått) som ett paket inte kan göra åt säljaren automatiskt.
                 allProducts = products.filter(p => p.has_variations !== 1 && p.pricing_type !== 'per_sqm');
                 productsById = new Map(allProducts.map(p => [p.id, p]));
-                // Bygger hela <option>-listan som en array och sätter innerHTML en enda gång -
-                // "innerHTML += " i en loop tvingar webbläsaren att tolka om HELA det redan
-                // uppbyggda innerHTML:et vid varje varv (O(n²)), vilket med hundratals produkter
-                // gjorde sidan märkbart långsam/låst.
-                const options = ['<option value="">-- Välj produkt att lägga till --</option>'];
-                allProducts.forEach(p => options.push(`<option value="${p.id}">${escapeHtml(p.name)} (${(parseFloat(p.standard_price)||0).toLocaleString('sv-SE')} kr)</option>`));
-                document.getElementById('pAddProductSelect').innerHTML = options.join('');
             } catch (e) { console.error(e); }
         }
+
+        // Sökbar produktväljare istället för en jättelång <select> med hundratals produkter -
+        // filtrerar på namn/SKU och visar bara de första 20 träffarna.
+        let selectedProductToAdd = null;
+
+        function onAddProductSearchInput() {
+            selectedProductToAdd = null;
+            const term = document.getElementById('pAddProductSearch').value.trim().toLowerCase();
+            const results = document.getElementById('pAddProductResults');
+            if (term === '') { results.classList.add('hidden'); results.innerHTML = ''; return; }
+            const matches = allProducts.filter(p =>
+                p.name.toLowerCase().includes(term) || (p.sku && p.sku.toLowerCase().includes(term))
+            ).slice(0, 20);
+            if (matches.length === 0) {
+                results.innerHTML = '<p class="px-3 py-2 text-xs text-gray-400 italic">Inga produkter matchar.</p>';
+            } else {
+                results.innerHTML = matches.map(p => `
+                    <button type="button" onclick="pickProductToAdd(${p.id})" class="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex justify-between items-center gap-2 border-b border-gray-50 last:border-0">
+                        <span class="truncate">${escapeHtml(p.name)}${p.sku ? ` <span class="text-gray-400 text-xs">(${escapeHtml(p.sku)})</span>` : ''}</span>
+                        <span class="text-gray-500 text-xs whitespace-nowrap">${(parseFloat(p.standard_price)||0).toLocaleString('sv-SE')} kr</span>
+                    </button>`).join('');
+            }
+            results.classList.remove('hidden');
+        }
+
+        function pickProductToAdd(id) {
+            const p = productsById.get(id);
+            if (!p) return;
+            selectedProductToAdd = id;
+            document.getElementById('pAddProductSearch').value = p.name;
+            document.getElementById('pAddProductResults').classList.add('hidden');
+        }
+
+        function onAddProductSearchKeydown(e) {
+            if (e.key === 'Escape') document.getElementById('pAddProductResults').classList.add('hidden');
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#pAddProductSearch') && !e.target.closest('#pAddProductResults')) {
+                document.getElementById('pAddProductResults').classList.add('hidden');
+            }
+        });
 
         async function fetchPackages() {
             const res = await fetch('/api/product-packages');
@@ -163,13 +201,14 @@
         }
 
         function addItemToPackage() {
-            const productId = parseInt(document.getElementById('pAddProductSelect').value);
+            const productId = selectedProductToAdd;
             const qty = parseInt(document.getElementById('pAddProductQty').value) || 1;
-            if (!productId) return;
+            if (!productId) return alert('Sök fram och välj en produkt först.');
             const existing = currentItems.find(i => i.product_id === productId);
             if (existing) existing.qty += qty;
             else currentItems.push({ product_id: productId, qty });
-            document.getElementById('pAddProductSelect').value = '';
+            selectedProductToAdd = null;
+            document.getElementById('pAddProductSearch').value = '';
             document.getElementById('pAddProductQty').value = 1;
             renderPackageItems();
         }
