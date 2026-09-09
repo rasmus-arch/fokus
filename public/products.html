@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
 </head>
 <body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
 
@@ -154,20 +156,6 @@
                                     <option value="">-- Ingen vald --</option>
                                 </select>
                             </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700">Tillhör dörrmodell</label>
-                                <p class="text-[10px] text-gray-400 mb-1">Endast för luckor/fronter som säljs som egen produkt. Filtreras fram i offertbyggaren när kunden valt denna modell.</p>
-                                <select id="pDoorModel" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white">
-                                    <option value="">-- Ingen (visas alltid) --</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700">Tillbehörsgrupp</label>
-                                <p class="text-[10px] text-gray-400 mb-1">För tillbehör (sockel, kakellist m.m.) - dyker upp i offertbyggaren när kunden valt en dörrmodell som pekar på samma grupp. Ställs in per dörrmodell under Dörrmodeller & Prisgrupper.</p>
-                                <select id="pAccessoryGroup" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white">
-                                    <option value="">-- Ingen --</option>
-                                </select>
-                            </div>
                         </div>
 
                         <div id="variationsUI" class="hidden flex-col gap-3 border-t border-blue-200 pt-3">
@@ -268,7 +256,7 @@
 
                     <div class="md:col-span-2">
                         <label class="block text-xs font-medium text-gray-700">Beskrivning</label>
-                        <textarea id="pDesc" rows="3" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm"></textarea>
+                        <div id="pDescEditor" class="mt-1 bg-white text-sm" style="min-height:110px;"></div>
                     </div>
                 </div>
 
@@ -342,6 +330,7 @@
                             <th class="p-1.5 font-semibold w-24">SKU</th>
                             <th class="p-1.5 font-semibold w-32">Kategori</th>
                             <th class="p-1.5 font-semibold w-24">Varumärke</th>
+                            <th class="p-1.5 font-semibold w-32">Leverantör</th>
                             <th class="p-1.5 font-semibold w-28">Prissättning</th>
                             <th class="p-1.5 font-semibold w-20">Inköpspris</th>
                             <th class="p-1.5 font-semibold w-16">Faktor</th>
@@ -371,14 +360,17 @@
         const rowsPerPage = 20;
         let currentGalleryUrls = [];
         let currentAccessoryIds = [];
+        let allSuppliers = [];
+        let descEditor = null;
 
         document.addEventListener('DOMContentLoaded', () => {
             fetchVatRate();
             fetchProducts();
             fetchSuppliersForDropdown();
-            fetchDoorModelsForDropdown();
-            fetchAccessoryGroupsForDropdown();
             fetchFrameTypesForDropdown();
+            // Rich text-redigerare för Beskrivning - låter säljaren formatera texten (fetstil,
+            // punktlistor osv) och sparas som html i products.description.
+            descEditor = new Quill('#pDescEditor', { theme: 'snow', modules: { toolbar: [['bold', 'italic', 'underline'], [{ list: 'ordered' }, { list: 'bullet' }], ['link'], ['clean']] } });
             document.getElementById('searchInput').addEventListener('input', applyFilters);
             document.getElementById('catFilter').addEventListener('change', applyFilters);
             
@@ -804,6 +796,12 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                     <td class="p-1"><input type="text" class="bulk-category w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" list="catList" value="${escapeHtml(p.category || '')}" oninput="scheduleBulkEditSave(${p.id})"></td>
                     <td class="p-1"><input type="text" class="bulk-brand w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${escapeHtml(p.brand || '')}" oninput="scheduleBulkEditSave(${p.id})"></td>
                     <td class="p-1">
+                        <select class="bulk-supplier w-full border px-1 py-1 rounded outline-none focus:border-blue-500 bg-white" onchange="scheduleBulkEditSave(${p.id})">
+                            <option value="">-- Ingen vald --</option>
+                            ${allSuppliers.map(s => `<option value="${s.id}" ${s.id === p.supplier_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td class="p-1">
                         <select class="bulk-pricing w-full border px-1 py-1 rounded outline-none focus:border-blue-500 bg-white" onchange="scheduleBulkEditSave(${p.id})">
                             <option value="unit" ${!isSqm ? 'selected' : ''}>Styckpris</option>
                             <option value="per_sqm" ${isSqm ? 'selected' : ''}>Per m²</option>
@@ -855,6 +853,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
             formData.append('name', val('.bulk-name'));
             formData.append('category', val('.bulk-category'));
             formData.append('brand', val('.bulk-brand'));
+            formData.append('supplier_id', val('.bulk-supplier'));
             // Fält som inte visas i bulk-rutnätet skickas oförändrade med, annars skulle de
             // nollställas av den vanliga UPDATE-satsen i POST /api/products.
             formData.append('description', original.description || '');
@@ -862,7 +861,6 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
             formData.append('retained_gallery', JSON.stringify(parseJsonField(original.gallery, [])));
             formData.append('suggested_accessories', JSON.stringify(parseJsonField(original.suggested_accessories, [])));
             formData.append('frame_type_id', original.frame_type_id || '');
-            formData.append('supplier_id', original.supplier_id || '');
             formData.append('door_model_id', original.door_model_id || '');
             formData.append('door_price_group_id', original.door_price_group_id || '');
             formData.append('has_variations', 'false');
@@ -890,6 +888,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                     // Håll den lokala cachen i synk så huvudlistan stämmer när rutan stängs.
                     Object.assign(original, {
                         name: val('.bulk-name'), sku: val('.bulk-sku') || null, category: val('.bulk-category'), brand: val('.bulk-brand'),
+                        supplier_id: val('.bulk-supplier') === '' ? null : parseInt(val('.bulk-supplier')),
                         purchase_price: parseFloat(val('.bulk-purchase')) || 0, markup_factor: val('.bulk-factor') === '' ? null : parseFloat(val('.bulk-factor')),
                         standard_price: parseFloat(val('.bulk-price')) || 0, price_per_sqm: parseFloat(val('.bulk-price-per-sqm')) || 0, min_billable_sqm: parseFloat(val('.bulk-min-sqm')) || 0,
                         installation_price: parseFloat(val('.bulk-install')) || 0, installer_share: parseFloat(val('.bulk-installer-share')) || 0,
@@ -1089,13 +1088,11 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 document.getElementById('pPurchase').value = p.purchase_price || 0;
                 document.getElementById('pFactor').value = p.markup_factor ?? '';
                 document.getElementById('pSupplier').value = p.supplier_id || '';
-                document.getElementById('pDoorModel').value = p.door_model_id || '';
-                document.getElementById('pAccessoryGroup').value = p.door_price_group_id || '';
                 document.getElementById('pStommeHeight').value = p.height || 0;
                 document.getElementById('pStommeWidth').value = p.width || 0;
                 document.getElementById('pStommeDepth').value = p.length || 0;
                 document.getElementById('pFrameTypeId').value = p.frame_type_id || '';
-                document.getElementById('pDesc').value = p.description || '';
+                descEditor.root.innerHTML = p.description || '';
                 
                 if (p.image_url) { document.getElementById('currentMainImagePreview').src = p.image_url; mainContainer.classList.remove('hidden'); } 
                 else { mainContainer.classList.add('hidden'); }
@@ -1127,9 +1124,8 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
             } else {
                 document.getElementById('modalTitle').innerText = "Lägg till produkt";
                 document.getElementById('pId').value = '';
+                descEditor.root.innerHTML = '';
                 document.getElementById('pSupplier').value = '';
-                document.getElementById('pDoorModel').value = '';
-                document.getElementById('pAccessoryGroup').value = '';
                 document.getElementById('pStommeHeight').value = 0;
                 document.getElementById('pStommeWidth').value = 0;
                 document.getElementById('pStommeDepth').value = 0;
@@ -1160,7 +1156,10 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
             formData.append('name', document.getElementById('pName').value);
             formData.append('category', document.getElementById('pCategory').value);
             formData.append('brand', document.getElementById('pBrand').value);
-            formData.append('description', document.getElementById('pDesc').value);
+            // Quill lämnar kvar "<p><br></p>" som tomt-läge istället för en riktig tom sträng -
+            // sparar en riktig tom sträng istället så "Beskrivning saknas"-fallbacken i
+            // offertbyggarens produktmodal (quote-builder.html) fortsätter fungera som förut.
+            formData.append('description', descEditor.getText().trim() === '' ? '' : descEditor.root.innerHTML);
             formData.append('remove_main_image', document.getElementById('pRemoveMainImage').value);
             formData.append('retained_gallery', JSON.stringify(currentGalleryUrls));
             formData.append('suggested_accessories', JSON.stringify(currentAccessoryIds));
@@ -1169,8 +1168,12 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
             formData.append('length', document.getElementById('pStommeDepth').value || 0);
             formData.append('frame_type_id', document.getElementById('pFrameTypeId').value);
             formData.append('supplier_id', document.getElementById('pSupplier').value);
-            formData.append('door_model_id', document.getElementById('pDoorModel').value);
-            formData.append('door_price_group_id', document.getElementById('pAccessoryGroup').value);
+            // Dörrmodell/tillbehörsgrupp går inte längre att sätta här (togs bort ur formuläret) -
+            // skickar med det befintliga värdet oförändrat så det inte nollställs av UPDATE-satsen.
+            const editingId = document.getElementById('pId').value;
+            const editingProduct = editingId ? allProducts.find(x => x.id === parseInt(editingId)) : null;
+            formData.append('door_model_id', editingProduct ? (editingProduct.door_model_id || '') : '');
+            formData.append('door_price_group_id', editingProduct ? (editingProduct.door_price_group_id || '') : '');
 
             const hasVar = document.getElementById('pHasVariations').checked;
             formData.append('has_variations', hasVar);
@@ -1239,30 +1242,10 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
         async function fetchSuppliersForDropdown() {
             try {
                 const res = await fetch('/api/suppliers');
-                const suppliers = await res.json();
+                allSuppliers = await res.json();
                 const sel = document.getElementById('pSupplier');
                 sel.innerHTML = '<option value="">-- Ingen vald --</option>';
-                suppliers.forEach(s => { sel.innerHTML += `<option value="${s.id}">${s.name} (${s.markup_percent}%)</option>`; });
-            } catch (e) { console.error(e); }
-        }
-
-        async function fetchDoorModelsForDropdown() {
-            try {
-                const res = await fetch('/api/door-models');
-                const models = await res.json();
-                const sel = document.getElementById('pDoorModel');
-                sel.innerHTML = '<option value="">-- Ingen (visas alltid) --</option>';
-                models.forEach(m => { sel.innerHTML += `<option value="${m.id}">${m.name}</option>`; });
-            } catch (e) { console.error(e); }
-        }
-
-        async function fetchAccessoryGroupsForDropdown() {
-            try {
-                const res = await fetch('/api/door-price-groups');
-                const groups = await res.json();
-                const sel = document.getElementById('pAccessoryGroup');
-                sel.innerHTML = '<option value="">-- Ingen --</option>';
-                groups.forEach(g => { sel.innerHTML += `<option value="${g.id}">${g.name}</option>`; });
+                allSuppliers.forEach(s => { sel.innerHTML += `<option value="${s.id}">${s.name} (${s.markup_percent}%)</option>`; });
             } catch (e) { console.error(e); }
         }
 
