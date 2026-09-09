@@ -31,6 +31,9 @@
                 <button onclick="openQuickProductEntry()" class="bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
                     <i class="fas fa-table mr-2"></i> Snabb produktinmatning
                 </button>
+                <button onclick="openBulkEditProducts()" class="bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
+                    <i class="fas fa-table-cells mr-2"></i> Bulk-redigera
+                </button>
                 <button onclick="openProductModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center">
                     <i class="fas fa-plus mr-2"></i> Ny Produkt
                 </button>
@@ -314,6 +317,47 @@
             <div class="p-4 border-t border-gray-200 flex justify-between items-center shrink-0">
                 <button type="button" onclick="addQuickProductRow()" class="text-blue-600 hover:text-blue-800 text-sm font-medium"><i class="fas fa-plus mr-1"></i> Lägg till rad</button>
                 <button type="button" onclick="saveQuickProductRows()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md text-sm font-medium shadow-sm"><i class="fas fa-save mr-2"></i> Spara alla rader</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="bulkEditProductsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-[95vw] max-h-[90vh] flex flex-col">
+            <div class="p-4 border-b border-gray-200 flex justify-between items-start shrink-0 gap-4">
+                <div>
+                    <h3 class="font-bold text-gray-800">Bulk-redigera produkter</h3>
+                    <p class="text-xs text-gray-500 mt-0.5">Bara vanliga produkter utan varianter. Varje fält sparas automatiskt när du lämnar det - ingen "Spara"-knapp behövs.</p>
+                </div>
+                <div class="relative w-56 shrink-0">
+                    <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
+                    <input type="text" id="bulkEditSearchInput" oninput="filterBulkEditRows()" placeholder="Sök artikel eller SKU..." class="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500">
+                </div>
+                <button onclick="closeBulkEditProducts()" class="text-gray-400 hover:text-gray-600 text-xl leading-none"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="flex-1 overflow-auto p-4">
+                <table class="text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-200 sticky top-0 bg-white">
+                            <th class="p-1.5 font-semibold w-40">Namn</th>
+                            <th class="p-1.5 font-semibold w-24">SKU</th>
+                            <th class="p-1.5 font-semibold w-32">Kategori</th>
+                            <th class="p-1.5 font-semibold w-24">Varumärke</th>
+                            <th class="p-1.5 font-semibold w-28">Prissättning</th>
+                            <th class="p-1.5 font-semibold w-20">Inköpspris</th>
+                            <th class="p-1.5 font-semibold w-16">Faktor</th>
+                            <th class="p-1.5 font-semibold w-20">Pris (styck)</th>
+                            <th class="p-1.5 font-semibold w-20">Pris/m²</th>
+                            <th class="p-1.5 font-semibold w-20">Min yta (m²)</th>
+                            <th class="p-1.5 font-semibold w-20">Montage</th>
+                            <th class="p-1.5 font-semibold w-20">Montörsdel</th>
+                            <th class="p-1.5 font-semibold w-16">Höjd</th>
+                            <th class="p-1.5 font-semibold w-16">Bredd</th>
+                            <th class="p-1.5 font-semibold w-16">Djup</th>
+                            <th class="p-1.5 w-8"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="bulkEditRows"></tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -720,6 +764,147 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
             const result = Math.round(purchase * factor * VAT_FACTOR * 100) / 100;
             const isPerSqm = row.querySelector('select[name="qpePricing"]').value === 'per_sqm';
             row.querySelector(isPerSqm ? 'input[name="qpePricePerSqm"]' : 'input[name="qpePrice"]').value = result;
+        }
+
+        // ==========================================
+        // BULK-REDIGERA (rutnät för att redigera befintliga vanliga produkter i rad, som ett
+        // excelark - varje fält sparas automatiskt (debounce) via samma POST /api/products som
+        // den vanliga produktmodalen använder. Fält som inte visas i rutnätet (beskrivning,
+        // bilder, tillbehör, stomtyp/leverantör/dörrmodell) skickas med oförändrade från den
+        // redan hämtade produktdatan, så de inte nollställs av misstag.
+        // ==========================================
+        let bulkEditTimers = {};
+
+        function openBulkEditProducts() {
+            document.getElementById('bulkEditSearchInput').value = '';
+            document.getElementById('bulkEditRows').innerHTML = allProducts.filter(p => p.has_variations !== 1).map(bulkEditRowHtml).join('');
+            document.getElementById('bulkEditProductsModal').classList.remove('hidden');
+        }
+
+        function closeBulkEditProducts() {
+            document.getElementById('bulkEditProductsModal').classList.add('hidden');
+            applyFilters(); // Uppdatera huvudlistan (t.ex. marginalkolumnen) med det som ändrats
+        }
+
+        function filterBulkEditRows() {
+            const term = document.getElementById('bulkEditSearchInput').value.toLowerCase();
+            document.querySelectorAll('#bulkEditRows tr').forEach(tr => {
+                const match = tr.dataset.name.includes(term) || tr.dataset.sku.includes(term);
+                tr.classList.toggle('hidden', !match);
+            });
+        }
+
+        function bulkEditRowHtml(p) {
+            const isSqm = p.pricing_type === 'per_sqm';
+            const name = p.name || ''; const sku = p.sku || '';
+            return `
+                <tr data-id="${p.id}" data-name="${escapeHtml(name.toLowerCase())}" data-sku="${escapeHtml(sku.toLowerCase())}" class="border-b border-gray-100">
+                    <td class="p-1"><input type="text" class="bulk-name w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${escapeHtml(name)}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="text" class="bulk-sku w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${escapeHtml(sku)}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="text" class="bulk-category w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" list="catList" value="${escapeHtml(p.category || '')}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="text" class="bulk-brand w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${escapeHtml(p.brand || '')}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1">
+                        <select class="bulk-pricing w-full border px-1 py-1 rounded outline-none focus:border-blue-500 bg-white" onchange="scheduleBulkEditSave(${p.id})">
+                            <option value="unit" ${!isSqm ? 'selected' : ''}>Styckpris</option>
+                            <option value="per_sqm" ${isSqm ? 'selected' : ''}>Per m²</option>
+                        </select>
+                    </td>
+                    <td class="p-1"><input type="number" class="bulk-purchase w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${p.purchase_price ?? 0}" oninput="recalcBulkRowPrice(this); scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="number" step="0.01" class="bulk-factor w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" placeholder="t.ex. 2" value="${p.markup_factor ?? ''}" oninput="recalcBulkRowPrice(this); scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="number" class="bulk-price w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${p.standard_price ?? 0}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="number" class="bulk-price-per-sqm w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${p.price_per_sqm ?? 0}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="number" step="0.01" class="bulk-min-sqm w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${p.min_billable_sqm ?? 0}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="number" class="bulk-install w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${p.installation_price ?? 0}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="number" class="bulk-installer-share w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${p.installer_share ?? 0}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="number" class="bulk-height w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${p.height ?? 0}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="number" class="bulk-width w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${p.width ?? 0}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1"><input type="number" class="bulk-length w-full border px-1.5 py-1 rounded outline-none focus:border-blue-500" value="${p.length ?? 0}" oninput="scheduleBulkEditSave(${p.id})"></td>
+                    <td class="p-1 text-center bulk-status w-8"></td>
+                </tr>`;
+        }
+
+        // Samma Inköpspris x Faktor x moms-uträkning som i snabbinmatningen, men för en rad i
+        // bulk-redigeringen.
+        function recalcBulkRowPrice(inputEl) {
+            const row = inputEl.closest('tr');
+            const purchase = parseFloat(row.querySelector('.bulk-purchase').value) || 0;
+            const factorRaw = row.querySelector('.bulk-factor').value;
+            if (factorRaw === '') return;
+            const factor = parseFloat(factorRaw) || 0;
+            const result = Math.round(purchase * factor * VAT_FACTOR * 100) / 100;
+            const isPerSqm = row.querySelector('.bulk-pricing').value === 'per_sqm';
+            row.querySelector(isPerSqm ? '.bulk-price-per-sqm' : '.bulk-price').value = result;
+        }
+
+        function scheduleBulkEditSave(id) {
+            const statusEl = document.querySelector(`#bulkEditRows tr[data-id="${id}"] .bulk-status`);
+            if (statusEl) statusEl.innerHTML = '<i class="fas fa-circle text-gray-300" style="font-size:6px" title="Osparade ändringar"></i>';
+            clearTimeout(bulkEditTimers[id]);
+            bulkEditTimers[id] = setTimeout(() => saveBulkEditRow(id), 700);
+        }
+
+        async function saveBulkEditRow(id) {
+            const row = document.querySelector(`#bulkEditRows tr[data-id="${id}"]`);
+            const original = allProducts.find(p => p.id === id);
+            if (!row || !original) return;
+            const statusEl = row.querySelector('.bulk-status');
+            const val = sel => row.querySelector(sel).value;
+
+            const formData = new FormData();
+            formData.append('id', id);
+            formData.append('name', val('.bulk-name'));
+            formData.append('category', val('.bulk-category'));
+            formData.append('brand', val('.bulk-brand'));
+            // Fält som inte visas i bulk-rutnätet skickas oförändrade med, annars skulle de
+            // nollställas av den vanliga UPDATE-satsen i POST /api/products.
+            formData.append('description', original.description || '');
+            formData.append('remove_main_image', 'false');
+            formData.append('retained_gallery', JSON.stringify(parseJsonField(original.gallery, [])));
+            formData.append('suggested_accessories', JSON.stringify(parseJsonField(original.suggested_accessories, [])));
+            formData.append('frame_type_id', original.frame_type_id || '');
+            formData.append('supplier_id', original.supplier_id || '');
+            formData.append('door_model_id', original.door_model_id || '');
+            formData.append('door_price_group_id', original.door_price_group_id || '');
+            formData.append('has_variations', 'false');
+            formData.append('variations', '[]');
+
+            formData.append('height', val('.bulk-height') || 0);
+            formData.append('width', val('.bulk-width') || 0);
+            formData.append('length', val('.bulk-length') || 0);
+            formData.append('sku', val('.bulk-sku'));
+            formData.append('standard_price', val('.bulk-price') || 0);
+            formData.append('installation_price', val('.bulk-install') || 0);
+            formData.append('installer_share', val('.bulk-installer-share') || 0);
+            formData.append('purchase_price', val('.bulk-purchase') || 0);
+            formData.append('pricing_type', val('.bulk-pricing'));
+            formData.append('price_per_sqm', val('.bulk-price-per-sqm') || 0);
+            formData.append('min_billable_sqm', val('.bulk-min-sqm') || 0);
+            formData.append('markup_factor', val('.bulk-factor'));
+
+            if (statusEl) statusEl.innerHTML = '<i class="fas fa-spinner fa-spin text-gray-400"></i>';
+            try {
+                const res = await fetch('/api/products', { method: 'POST', body: formData });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok) {
+                    if (statusEl) statusEl.innerHTML = '<i class="fas fa-check text-green-500" title="Sparat"></i>';
+                    // Håll den lokala cachen i synk så huvudlistan stämmer när rutan stängs.
+                    Object.assign(original, {
+                        name: val('.bulk-name'), sku: val('.bulk-sku') || null, category: val('.bulk-category'), brand: val('.bulk-brand'),
+                        purchase_price: parseFloat(val('.bulk-purchase')) || 0, markup_factor: val('.bulk-factor') === '' ? null : parseFloat(val('.bulk-factor')),
+                        standard_price: parseFloat(val('.bulk-price')) || 0, price_per_sqm: parseFloat(val('.bulk-price-per-sqm')) || 0, min_billable_sqm: parseFloat(val('.bulk-min-sqm')) || 0,
+                        installation_price: parseFloat(val('.bulk-install')) || 0, installer_share: parseFloat(val('.bulk-installer-share')) || 0,
+                        height: parseFloat(val('.bulk-height')) || 0, width: parseFloat(val('.bulk-width')) || 0, length: parseFloat(val('.bulk-length')) || 0,
+                        pricing_type: val('.bulk-pricing')
+                    });
+                    row.dataset.name = (val('.bulk-name') || '').toLowerCase();
+                    row.dataset.sku = (val('.bulk-sku') || '').toLowerCase();
+                } else {
+                    if (statusEl) statusEl.innerHTML = `<i class="fas fa-triangle-exclamation text-red-500" title="${escapeHtml(data.message || 'Kunde inte spara')}"></i>`;
+                }
+            } catch (e) {
+                console.error(e);
+                if (statusEl) statusEl.innerHTML = '<i class="fas fa-triangle-exclamation text-red-500" title="Nätverksfel"></i>';
+            }
         }
 
         // ==========================================
