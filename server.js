@@ -730,8 +730,13 @@ app.post('/api/quotes/:id/duplicate', requireAuth, requireStaff, (req, res) => {
         if (err) return res.status(500).json({ message: err.message });
         if (!quoteResults || quoteResults.length === 0) return res.status(404).json({ message: 'Offerten hittades inte' });
         const o = quoteResults[0];
+        // quote_data är en JSON-kolumn - mysql2 packar redan upp den till ett objekt vid SELECT
+        // (samma mönster som på flera andra ställen i filen), så den måste stringifieras om
+        // innan den skrivs in i den nya raden - annars försöker mysql2 tolka objektet som ett
+        // SET-uttryck ("a = 1, b = 2") istället för ett JSON-värde, vilket ger ett SQL-fel.
+        const quoteDataToInsert = typeof o.quote_data === 'string' ? o.quote_data : JSON.stringify(o.quote_data || {});
         db.query('INSERT INTO quotes (customer_id, quote_name, status, quote_data, global_discount, discount_type, internal_comment, public_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [o.customer_id, o.quote_name + ' (Kopia)', 'Utkast', o.quote_data, o.global_discount, o.discount_type, o.internal_comment, o.public_comment], (err2, newQuoteResult) => {
+            [o.customer_id, o.quote_name + ' (Kopia)', 'Utkast', quoteDataToInsert, o.global_discount, o.discount_type, o.internal_comment, o.public_comment], (err2, newQuoteResult) => {
             if (err2) return res.status(500).json({ message: err2.message });
             db.query('INSERT INTO quote_items (quote_id, product_id, sku, name, price_inc_vat, install_inc_vat, qty, is_free_text) SELECT ?, product_id, sku, name, price_inc_vat, install_inc_vat, qty, is_free_text FROM quote_items WHERE quote_id = ?', [newQuoteResult.insertId, req.params.id], dbResult(res, 'Duplicerad!'));
         });
