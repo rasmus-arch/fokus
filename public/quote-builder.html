@@ -226,7 +226,7 @@
                     <div class="bg-gray-50 border border-gray-200 p-2 rounded text-[11px] mt-3">
                         <p class="text-[9px] uppercase text-gray-400 font-semibold mb-1">Beställningsunderlag</p>
                         <div class="flex justify-between text-gray-600"><span><i class="fas fa-grip-lines-vertical mr-1 text-gray-400"></i>Gångjärn (uppskattat)</span><span id="sumHinges" class="font-bold">0 st</span></div>
-                        <div class="flex justify-between text-gray-600 mt-0.5"><span><i class="fas fa-circle-dot mr-1 text-gray-400"></i>Handtag/knoppar (lådfronter)</span><span id="sumHandles" class="font-bold">0 st</span></div>
+                        <div class="flex justify-between text-gray-600 mt-0.5"><span><i class="fas fa-circle-dot mr-1 text-gray-400"></i>Handtag/knoppar (luckor &amp; lådfronter)</span><span id="sumHandles" class="font-bold">0 st</span></div>
                     </div>
                 </div>
             </div>
@@ -2111,15 +2111,19 @@
                 ? `<i class="fas fa-triangle-exclamation"></i> ${excludedRowCount} rad${excludedRowCount === 1 ? '' : 'er'} (${excludedMaterialRevenueIncVat.toLocaleString('sv-SE', {maximumFractionDigits:0})} kr) saknar inköpspris och räknas ej med i marginalen${quoteId ? ' <button onclick="recalcQuoteCosts()" class="underline hover:text-amber-800">Uppdatera kostnadsdata</button>' : ''}`
                 : '';
 
-            // Gångjärn: en lucka under 1100mm behöver 2 gångjärn, 1100mm och uppåt behöver 3.
-            // Handtag/knoppar: en per lådfront. Räknas bara på rader med sparade komponent-mått
-            // (componentType/pieceHeight), dvs fronter tillagda via skåp-auto eller lös lucka/front.
+            // Gångjärn: en lucka under 1000mm höjd behöver 2 gångjärn, 1000-1900mm behöver 3,
+            // över 1900mm behöver 4. Lådfronter sitter på lådskenor och behöver inga gångjärn.
+            // Handtag/knoppar: en per lucka/lådfront. Räknas bara på rader med sparade
+            // komponent-mått (componentType/pieceHeight), dvs fronter tillagda via skåp-auto
+            // eller lös lucka/front.
             let hingeCount = 0, handleCount = 0;
             quoteCart.forEach(item => {
-                if (item.componentType === 'lucka' && item.pieceHeight) {
-                    hingeCount += (item.pieceHeight < 1100 ? 2 : 3) * item.qty;
-                } else if (item.componentType === 'ladfront') {
+                if (item.componentType === 'lucka' || item.componentType === 'ladfront') {
                     handleCount += item.qty;
+                }
+                if (item.componentType === 'lucka' && item.pieceHeight) {
+                    const perDoor = item.pieceHeight < 1000 ? 2 : (item.pieceHeight <= 1900 ? 3 : 4);
+                    hingeCount += perDoor * item.qty;
                 }
             });
             document.getElementById('sumHinges').innerText = hingeCount + ' st';
