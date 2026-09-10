@@ -21,7 +21,7 @@
                 <label class="block text-xs font-medium text-gray-600 uppercase tracking-wider">E-postadress</label>
                 <div class="relative mt-1">
                     <i class="fas fa-envelope absolute left-3 top-3 text-gray-400 text-sm"></i>
-                    <input type="email" id="email" required placeholder="namn@klaralvskok.se" class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm outline-none focus:border-blue-500">
+                    <input type="email" id="email" required placeholder="namn@företag.se" class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm outline-none focus:border-blue-500">
                 </div>
             </div>
 
@@ -52,6 +52,13 @@
                     img.src = s.logo_url;
                     img.classList.remove('hidden');
                     document.getElementById('loginLogoFallback').classList.add('hidden');
+                }
+                // E-post-placeholdern var tidigare hårdkodad till "@klaralvskok.se" - inte
+                // touchad av common.js:s titel-/data-company-name-bytet (det rör bara
+                // document.title och textContent, inte placeholder-attribut). Visar nu det
+                // faktiska företagets e-postdomän när den finns satt under Företagsinfo.
+                if (s && s.email && s.email.includes('@')) {
+                    document.getElementById('email').placeholder = 'namn@' + s.email.split('@')[1];
                 }
             } catch (e) {}
         })();
