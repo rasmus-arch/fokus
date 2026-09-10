@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kom igång - Klarälvskök</title>
+    <title>Manual - Klarälvskök</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -11,73 +11,151 @@
 
     <div id="sidebar-container" class="shrink-0"></div>
 
-    <main class="flex-1 flex flex-col h-screen overflow-y-auto p-4 md:p-6 lg:p-8 w-full max-w-full relative">
-        <div class="mb-6">
-            <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Kom igång</h2>
-            <p class="text-xs md:text-sm text-gray-500 mt-1">Checklista över grundläggande konfiguration - bra att gå igenom vid en ny installation.</p>
-        </div>
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto w-full max-w-full relative">
+        <div class="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto w-full">
+            <div class="mb-6">
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Manual</h2>
+                <p class="text-xs md:text-sm text-gray-500 mt-1">Så funkar systemet - från ny kund till avslutat montage.</p>
+            </div>
 
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 max-w-2xl">
-            <div class="p-4 border-b border-gray-100 flex items-center justify-between">
-                <span class="text-sm font-medium text-gray-700">Färdigt</span>
-                <span id="progressText" class="text-sm font-bold text-gray-800">0 / 0</span>
+            <!-- Innehållsförteckning -->
+            <nav class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6 text-sm">
+                <p class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold mb-2">Innehåll</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                    <a href="#oversikt" class="text-blue-600 hover:underline">1. Översikt av flödet</a>
+                    <a href="#kundregister" class="text-blue-600 hover:underline">2. Kundregister</a>
+                    <a href="#offerter" class="text-blue-600 hover:underline">3. Bygga en offert</a>
+                    <a href="#status" class="text-blue-600 hover:underline">4. Statusflöde (Utkast → Offert → Order)</a>
+                    <a href="#ordrar-montage" class="text-blue-600 hover:underline">5. Ordrar &amp; montage</a>
+                    <a href="#produkter" class="text-blue-600 hover:underline">6. Produktregister</a>
+                    <a href="#dorrbank" class="text-blue-600 hover:underline">7. Dörrmodeller &amp; bänkskivor</a>
+                    <a href="#stomtyper" class="text-blue-600 hover:underline">8. Stomtyper</a>
+                    <a href="#anvandare" class="text-blue-600 hover:underline">9. Användare &amp; roller</a>
+                    <a href="#kundlage" class="text-blue-600 hover:underline">10. Kundläge</a>
+                    <a href="#foretagsinfo" class="text-blue-600 hover:underline">11. Företagsinfo</a>
+                    <a href="#ovrigt" class="text-blue-600 hover:underline">12. Kunskapsbank &amp; Statistik</a>
+                </div>
+            </nav>
+
+            <div class="space-y-6 pb-12">
+
+                <section id="oversikt" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-route text-blue-600 mr-2"></i>1. Översikt av flödet</h3>
+                    <p class="text-sm text-gray-600 mb-3">Systemet följer ett köks naturliga resa genom företaget:</p>
+                    <div class="flex flex-wrap items-center gap-2 text-xs font-medium mb-3">
+                        <span class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full">Kund läggs in</span>
+                        <i class="fas fa-arrow-right text-gray-300"></i>
+                        <span class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full">Offert byggs</span>
+                        <i class="fas fa-arrow-right text-gray-300"></i>
+                        <span class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full">Kunden godkänner → blir Order</span>
+                        <i class="fas fa-arrow-right text-gray-300"></i>
+                        <span class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full">Leverans &amp; montage</span>
+                        <i class="fas fa-arrow-right text-gray-300"></i>
+                        <span class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full">Klart</span>
+                    </div>
+                    <p class="text-sm text-gray-600">En och samma post (en "offert") följer med hela vägen - det skapas ingen ny post när en offert blir en order. Det som ändras är bara <strong>status</strong> samt att ett ordernummer tilldelas.</p>
+                </section>
+
+                <section id="kundregister" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-users text-blue-600 mr-2"></i>2. Kundregister</h3>
+                    <p class="text-sm text-gray-600 mb-2">Under <strong>Kundregister</strong> läggs kunder in med namn, adress, kontaktuppgifter och - för bostadsrätter - fastighetsbeteckning/BRF-orgnr eller lägenhetsnummer. Från en kunds kort ser du alla dennes offerter/ordrar och kan starta en ny offert direkt.</p>
+                    <p class="text-sm text-gray-600">Nya offerter kopplas alltid till en befintlig kund i registret - finns kunden inte än läggs den till samtidigt som offerten skapas.</p>
+                </section>
+
+                <section id="offerter" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-file-invoice text-blue-600 mr-2"></i>3. Bygga en offert</h3>
+                    <p class="text-sm text-gray-600 mb-3">Offertbyggaren är hjärtat i systemet. Till vänster väljer du produkter ur produktregistret, till höger byggs offertens innehåll upp rad för rad. Utöver vanliga produkter finns fyra sätt att lägga till rader:</p>
+                    <ul class="text-sm text-gray-600 space-y-2 mb-3 list-disc pl-5">
+                        <li><strong>Bänkskiva</strong> - en liten kalkylator där du väljer material, färg, tjocklek och mäter upp skivans form (raka bänkar, hörn, ö). Priset räknas fram per löpmeter utifrån bänkskivepriserna som är upplagda under <em>Bänkskivor</em> i adminmenyn.</li>
+                        <li><strong>Lucka/Front</strong> - lägg till en enskild lucka eller lådfront manuellt, prissatt mot vald dörrmodell.</li>
+                        <li><strong>Paket</strong> - färdiga produktpaket (t.ex. "Startpaket vitvaror") som lägger till flera rader på en gång. Paket administreras under <em>Paket</em>.</li>
+                        <li><strong>Fritext</strong> - en egen rad med valfritt namn och pris, för sånt som inte finns i produktregistret. Ange gärna inköpspris också, annars räknas inte raden med i marginalrapporten.</li>
+                    </ul>
+                    <p class="text-sm text-gray-600 mb-3"><strong>Automatiska luckor/lådfronter:</strong> när en skåpstomme med en stomtyp kopplad (se avsnitt 8) läggs till i offerten, och en dörrmodell är vald under "Specifikationer", räknas luckor/lådfronter ut automatiskt utifrån stommens mått och läggs till som egna rader - helt utan manuellt jobb.</p>
+                    <p class="text-sm text-gray-600 mb-3"><strong>Rabatt:</strong> du kan sätta en rabatt per rad, eller en global rabatt (kronor eller procent) för hela offerten under sammanställningen längst ner.</p>
+                    <p class="text-sm text-gray-600 mb-3"><strong>ROT-avdrag:</strong> kryssrutan "Använd ROT" styr om 30 % av arbetskostnaden dras av som ROT på offerten. Vissa tjänster (t.ex. "Montage, ej ROT") räknas alltid som arbete utanför ROT, oavsett kryssrutan.</p>
+                    <p class="text-sm text-gray-600">När offerten är klar går det att skriva ut en PDF (offert eller, efter godkännande, köpeavtal) direkt från sidan - båda använder företagets logga, färger och avtalstext från Företagsinfo.</p>
+                </section>
+
+                <section id="status" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-signal text-blue-600 mr-2"></i>4. Statusflöde</h3>
+                    <div class="space-y-3 text-sm">
+                        <div class="flex gap-3">
+                            <span class="shrink-0 w-24 text-center bg-gray-200 text-gray-700 rounded-full py-0.5 text-xs font-bold">Utkast</span>
+                            <p class="text-gray-600">Offerten byggs fortfarande - inget har skickats till kunden än.</p>
+                        </div>
+                        <div class="flex gap-3">
+                            <span class="shrink-0 w-24 text-center bg-blue-100 text-blue-700 rounded-full py-0.5 text-xs font-bold">Offert</span>
+                            <p class="text-gray-600">Skickad till kund, väntar på svar.</p>
+                        </div>
+                        <div class="flex gap-3">
+                            <span class="shrink-0 w-24 text-center bg-green-100 text-green-700 rounded-full py-0.5 text-xs font-bold">Order</span>
+                            <p class="text-gray-600">Kunden har godkänt. Vid det här bytet tilldelas automatiskt ett <strong>ordernummer</strong> (inom säljarens eget nummerintervall om ett sådant är inställt under Användare, annars nästa lediga nummer). Offerten dyker nu upp under <em>Ordrar</em> och kan planeras in för montage.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="ordrar-montage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-truck-loading text-blue-600 mr-2"></i>5. Ordrar &amp; montage</h3>
+                    <p class="text-sm text-gray-600 mb-2">Under <strong>Ordrar</strong> ser du alla ordrar med ordernummer, kan bifoga dokument (t.ex. inskannade avtal eller ritningar) och kryssa av varje rad som <em>packad</em>/<em>levererad</em>/<em>monterad</em> - bra stöd inför och under montagebesöket.</p>
+                    <p class="text-sm text-gray-600 mb-2">Under <strong>Montage</strong> ser montörer (och säljare/admin) en kalender-/listvy över inplanerade jobb. Här sätts fabriksdatum, montagestart/-slut och monteringsstatus, och en montör kan tilldelas ordern.</p>
+                    <p class="text-sm text-gray-600">Montörer har en förenklad meny - de ser bara Ordrar och Montage, inte offerter/kundregister/produktregister.</p>
+                </section>
+
+                <section id="produkter" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-boxes text-blue-600 mr-2"></i>6. Produktregister</h3>
+                    <p class="text-sm text-gray-600 mb-2">Under <strong>Produkter</strong> läggs alla artiklar upp: vitvaror, handtag, skåpstommar, bänkskivetillbehör osv. Varje produkt har inköpspris, försäljningspris, ev. installationspris och montörens andel av det.</p>
+                    <ul class="text-sm text-gray-600 space-y-1.5 mb-2 list-disc pl-5">
+                        <li><strong>Varianter</strong> - en produkt kan ha flera varianter (t.ex. olika färger) med egna priser/bilder under samma produktkort.</li>
+                        <li><strong>Bulk-redigera</strong> - ett kalkylbladsliknande läge för att snabbt uppdatera pris, inköpspris, leverantör m.m. på många produkter i rad, utan att öppna varje produkt för sig. Sparas automatiskt per fält.</li>
+                        <li><strong>Leverantörer</strong> - egen sida för att hålla koll på vilka leverantörer produkterna köps från.</li>
+                        <li><strong>Paket</strong> - grupperar flera produkter till ett paket som läggs till i offerten i ett klick (se avsnitt 3).</li>
+                    </ul>
+                </section>
+
+                <section id="dorrbank" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-swatchbook text-blue-600 mr-2"></i>7. Dörrmodeller &amp; bänkskivor</h3>
+                    <p class="text-sm text-gray-600 mb-2"><strong>Dörrmodeller</strong> är prislistor för luckor och lådfronter - en modell (t.ex. "Vit Slät") har egna priser per komponenttyp (lucka/lådfront), uppdelat på mått-intervall om man vill ha olika pris på t.ex. stora och små luckor. Flera dörrmodeller kan dela samma prislista via en <em>prisgrupp</em>, om de kostar exakt lika mycket.</p>
+                    <p class="text-sm text-gray-600"><strong>Bänkskivor</strong> byggs upp av material (t.ex. Laminat) → färger/dekorer inom materialet → priser per löpmeter (uppdelat på tjocklek och djup) → valfria kantprofiler och tilläggstjänster (t.ex. håltagning för spis). Material med många färger som kostar lika kan slå ihop dem i en <em>prisgrupp</em> istället för att lägga in priset på varje färg för sig.</p>
+                </section>
+
+                <section id="stomtyper" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-cubes text-blue-600 mr-2"></i>8. Stomtyper</h3>
+                    <p class="text-sm text-gray-600 mb-2">En <strong>stomtyp</strong> beskriver hur en skåpstommes front är uppbyggd - en enda lucka, två/tre/fyra lådfronter, eller en egen kombination. Kopplas en stomtyp till en produkt (under produktens redigeringsvy) räknar offertbyggaren automatiskt ut hur många luckor/lådfronter som behövs och i vilka mått, utifrån stommens bredd och höjd - se avsnitt 3.</p>
+                    <p class="text-sm text-gray-600">Detta gör att samma skåpstomme kan återanvändas med vilken dörrmodell som helst, utan att man behöver lägga upp en unik "lucka-produkt" för varje kombination av stomme och dörrmodell.</p>
+                </section>
+
+                <section id="anvandare" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-user-shield text-blue-600 mr-2"></i>9. Användare &amp; roller</h3>
+                    <ul class="text-sm text-gray-600 space-y-1.5 list-disc pl-5">
+                        <li><strong>Superadmin/Admin</strong> - full åtkomst, inklusive produktregister, prislistor, användare och företagsinställningar.</li>
+                        <li><strong>Säljare</strong> - kundregister, offerter och ordrar, men inte administrationsdelen.</li>
+                        <li><strong>Montör</strong> - ser bara Ordrar och Montage, för att packa/leverera/montera och rapportera status.</li>
+                    </ul>
+                    <p class="text-sm text-gray-600 mt-2">Varje säljare kan ha ett eget <em>ordernummerintervall</em> inställt (under Användare), så att ordernummer från olika säljare inte krockar med varandra.</p>
+                </section>
+
+                <section id="kundlage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-eye-slash text-blue-600 mr-2"></i>10. Kundläge</h3>
+                    <p class="text-sm text-gray-600">Knappen <strong>"Kundläge"</strong> längst ner i menyn döljer alla interna siffror (inköpspris, marginal, montörsandel osv.) i hela gränssnittet med ett klick - praktiskt om du vill visa skärmen för kunden under ett möte utan att av misstag exponera vad ni tjänar. Klicka igen för att slå på det igen.</p>
+                </section>
+
+                <section id="foretagsinfo" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-cog text-blue-600 mr-2"></i>11. Företagsinfo</h3>
+                    <p class="text-sm text-gray-600">Här ställs det gemensamma in: företagsnamn, organisationsnummer, adress, logotyp, momssats (styr alla automatiska prisuträkningar), avtalstext till köpeavtalet, samt vilka färger PDF-dokumenten ska ha.</p>
+                </section>
+
+                <section id="ovrigt" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                    <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-book-open text-blue-600 mr-2"></i>12. Kunskapsbank &amp; Statistik</h3>
+                    <p class="text-sm text-gray-600 mb-2"><strong>Kunskapsbank</strong> är en samling korta artiklar/uppslag - bra för att samla intern kunskap (t.ex. montagetips) som alla i teamet kan slå upp.</p>
+                    <p class="text-sm text-gray-600"><strong>Statistik</strong> ger en överblick över försäljning över tid, t.ex. antal offerter/ordrar och omsättning.</p>
+                </section>
+
             </div>
-            <div class="h-2 bg-gray-100">
-                <div id="progressBar" class="h-2 bg-green-500 transition-all" style="width: 0%"></div>
-            </div>
-            <ul id="checklist" class="divide-y divide-gray-100"></ul>
         </div>
     </main>
 
     <script src="/common.js"></script>
     <script src="/menu.js"></script>
-    <script>
-        const CHECKLIST_ITEMS = [
-            { key: 'company_name', label: 'Företagsnamn ifyllt', href: '/settings.html', hint: 'Visas i menyn, på offerter och köpeavtal.' },
-            { key: 'logo', label: 'Logotyp uppladdad', href: '/settings.html', hint: 'Visas i sidomenyn och överst på PDF-dokument.' },
-            { key: 'vat_rate', label: 'Momssats inställd', href: '/settings.html', hint: 'Styr alla automatiska prisuträkningar (Faktor-fälten m.m.).' },
-            { key: 'agreement_text', label: 'Köpevillkor/avtalstext ifylld', href: '/settings.html', hint: 'Visas på köpeavtalet vid signering.' },
-            { key: 'suppliers', label: 'Minst en leverantör upplagd', href: '/suppliers.html', hint: 'Behövs för att koppla inköpspriser/påslag till produkter.' },
-            { key: 'products', label: 'Minst en produkt i produktregistret', href: '/products.html', hint: 'Utan produkter går det inte att bygga offerter.' },
-            { key: 'door_models', label: 'Minst en dörrmodell upplagd', href: '/door-models.html', hint: 'Behövs för att kunna lägga till luckor/lådfronter i offerter.' },
-            { key: 'extra_users', label: 'Minst en ytterligare användare skapad', href: '/users.html', hint: 'Så att säljare/montörer kan logga in med egna konton.' }
-        ];
-
-        async function loadStatus() {
-            try {
-                const res = await fetch('/api/onboarding-status');
-                if (!res.ok) { document.getElementById('checklist').innerHTML = '<li class="p-4 text-sm text-gray-500">Endast administratörer kan se den här sidan.</li>'; return; }
-                const status = await res.json();
-                render(status);
-            } catch (e) { console.error(e); }
-        }
-
-        function render(status) {
-            const list = document.getElementById('checklist');
-            list.innerHTML = '';
-            let done = 0;
-            CHECKLIST_ITEMS.forEach(item => {
-                const ok = !!status[item.key];
-                if (ok) done++;
-                const icon = ok
-                    ? '<i class="fas fa-circle-check text-green-500 text-lg"></i>'
-                    : '<i class="fas fa-circle text-gray-300 text-lg"></i>';
-                list.innerHTML += `
-                    <li class="p-4 flex items-center gap-3 ${ok ? '' : 'hover:bg-gray-50'}">
-                        <div class="shrink-0">${icon}</div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-sm font-medium ${ok ? 'text-gray-500 line-through' : 'text-gray-800'}">${item.label}</p>
-                            <p class="text-xs text-gray-400 mt-0.5">${item.hint}</p>
-                        </div>
-                        ${ok ? '' : `<a href="${item.href}" class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded transition">Ordna</a>`}
-                    </li>
-                `;
-            });
-            document.getElementById('progressText').innerText = `${done} / ${CHECKLIST_ITEMS.length}`;
-            document.getElementById('progressBar').style.width = `${Math.round((done / CHECKLIST_ITEMS.length) * 100)}%`;
-        }
-
-        loadStatus();
-    </script>
 </body>
 </html>
