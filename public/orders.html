@@ -56,6 +56,9 @@
                             <a id="btnOrderContractPdf" href="#" target="_blank" class="w-full mt-3 bg-gray-800 text-white font-medium py-2 rounded shadow text-xs hover:bg-gray-900 flex justify-center items-center transition">
                                 <i class="fas fa-file-signature mr-2 text-yellow-400"></i> Skriv ut Köpeavtal (PDF)
                             </a>
+                            <a id="btnPurchaseListPdf" href="#" target="_blank" class="w-full mt-2 bg-white text-gray-700 font-medium py-2 rounded shadow border border-gray-300 text-xs hover:bg-gray-50 flex justify-center items-center transition">
+                                <i class="fas fa-truck-loading mr-2 text-blue-500"></i> Beställningsunderlag (PDF)
+                            </a>
                         </div>
                         
                         <div class="bg-yellow-50 p-4 rounded shadow-sm border border-yellow-200 text-sm flex flex-col gap-2">
@@ -217,6 +220,7 @@
             document.getElementById('omPublicComment').value = order.public_comment || '';
 
             document.getElementById('btnOrderContractPdf').href = apiLinkWithToken(`/api/quotes/${order.id}/pdf`);
+            document.getElementById('btnPurchaseListPdf').href = apiLinkWithToken(`/api/orders/${order.id}/purchase-list-pdf`);
 
             const revertBtn = document.getElementById('adminRevertBtn');
             const editBtn = document.getElementById('adminEditBtn');

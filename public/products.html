@@ -1254,7 +1254,7 @@ document.getElementById('excelFileInput').addEventListener('change', async funct
                 allSuppliers = await res.json();
                 const sel = document.getElementById('pSupplier');
                 sel.innerHTML = '<option value="">-- Ingen vald --</option>';
-                allSuppliers.forEach(s => { sel.innerHTML += `<option value="${s.id}">${s.name} (${s.markup_percent}%)</option>`; });
+                allSuppliers.forEach(s => { sel.innerHTML += `<option value="${s.id}">${s.name}</option>`; });
             } catch (e) { console.error(e); }
         }
 

@@ -14,8 +14,8 @@
     <main class="flex-1 flex flex-col h-screen overflow-y-auto p-6">
         <div class="flex justify-between items-center mb-6">
             <div>
-                <h2 class="text-2xl font-semibold text-gray-800">Leverantörer & Prispåslag</h2>
-                <p class="text-sm text-gray-500 mt-1">Sätt standardpåslag per leverantör och räkna om priser i produktkatalogen</p>
+                <h2 class="text-2xl font-semibold text-gray-800">Leverantörer</h2>
+                <p class="text-sm text-gray-500 mt-1">Håll koll på vilka leverantörer produkterna köps från</p>
             </div>
         </div>
 
@@ -27,11 +27,6 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Namn</label>
                         <input type="text" id="sName" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Prispåslag (%)</label>
-                        <p class="text-xs text-gray-400 mb-1">Används för att räkna ut försäljningspris från inköpspris: pris = inköpspris × (1 + påslag/100)</p>
-                        <input type="number" step="0.01" id="sMarkup" value="0" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Kontaktinfo</label>
@@ -50,7 +45,6 @@
                     <thead>
                         <tr class="border-b border-gray-200 bg-gray-50 text-gray-600 text-sm font-medium">
                             <th class="p-3">Namn</th>
-                            <th class="p-3">Påslag</th>
                             <th class="p-3">Kontakt</th>
                             <th class="p-3 text-right">Åtgärd</th>
                         </tr>
@@ -73,7 +67,7 @@
             tbody.innerHTML = '';
 
             if (allSuppliers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-400 italic">Inga leverantörer tillagda ännu.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-400 italic">Inga leverantörer tillagda ännu.</td></tr>';
                 return;
             }
 
@@ -81,10 +75,8 @@
                 tbody.innerHTML += `
                     <tr class="border-b border-gray-100 hover:bg-gray-50">
                         <td class="p-3 font-medium">${s.name}</td>
-                        <td class="p-3"><span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 font-semibold">${s.markup_percent}%</span></td>
                         <td class="p-3 text-xs text-gray-500 whitespace-pre-line max-w-xs truncate">${s.contact_info || '-'}</td>
                         <td class="p-3 text-right space-x-3 whitespace-nowrap">
-                            <button onclick="recalculate(${s.id}, '${s.name.replace(/'/g, "\\'")}')" class="text-blue-600 hover:text-blue-900" title="Räkna om priser för alla produkter från denna leverantör"><i class="fas fa-calculator"></i> Räkna om priser</button>
                             <button onclick="editSupplier(${s.id})" class="text-gray-500 hover:text-gray-800"><i class="fas fa-edit"></i></button>
                             <button onclick="deleteSupplier(${s.id})" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
                         </td>
@@ -98,7 +90,6 @@
             const id = document.getElementById('sId').value;
             const payload = {
                 name: document.getElementById('sName').value,
-                markup_percent: document.getElementById('sMarkup').value,
                 contact_info: document.getElementById('sContact').value
             };
 
@@ -117,7 +108,6 @@
             document.getElementById('formTitle').innerText = 'Redigera leverantör';
             document.getElementById('sId').value = s.id;
             document.getElementById('sName').value = s.name;
-            document.getElementById('sMarkup').value = s.markup_percent;
             document.getElementById('sContact').value = s.contact_info || '';
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -130,13 +120,6 @@
 
         function deleteSupplier(id) {
             confirmAndDelete('Ta bort leverantören? Produkter kopplade till den påverkas inte, men kopplingen tas bort.', `/api/suppliers/${id}`, fetchSuppliers);
-        }
-
-        async function recalculate(id, name) {
-            if (!confirm(`Räkna om försäljningspris för alla produkter från "${name}" utifrån inköpspris × påslag? Detta skriver över nuvarande försäljningspriser (gäller bara produkter utan varianter).`)) return;
-            const res = await fetch(`/api/suppliers/${id}/recalculate`, { method: 'POST' });
-            const data = await res.json();
-            alert(data.message);
         }
 
         fetchSuppliers();
