@@ -72,20 +72,25 @@
                 </div>
                 
                 <div class="flex-1 bg-gray-50 flex flex-col overflow-y-auto min-h-0">
-                    <div class="p-3 md:p-4 bg-white border-b border-gray-200 shrink-0">
-                        <h4 class="font-semibold text-gray-800 text-xs md:text-sm mb-2"><i class="fas fa-paint-roller text-blue-600 mr-2"></i> Specifikationer</h4>
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
-                            <div>
-                                <label class="block text-[10px] text-gray-400 uppercase">Material bänkskiva</label>
-                                <input type="text" id="qsMaterial" oninput="scheduleAutoSave()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-blue-500" placeholder="Fylls i automatiskt när du lägger till en bänkskiva">
-                            </div>
-                            <div><label class="block text-[10px] text-gray-400 uppercase">Färg bänkskiva</label><input type="text" id="qsColor" oninput="scheduleAutoSave()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-blue-500"></div>
-                            <div><label class="block text-[10px] text-gray-400 uppercase">Modell lucka</label><input type="text" id="qsDoor" oninput="scheduleAutoSave()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-blue-500"></div>
-                            <div class="sm:col-span-3">
-                                <label class="block text-[10px] text-gray-400 uppercase">Dörrmodell (för automatisk lucka/lådfront-prissättning)</label>
-                                <select id="qsDoorModelId" onchange="onDoorModelChange()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded bg-white text-xs outline-none focus:border-blue-500">
-                                    <option value="">-- Ingen vald --</option>
-                                </select>
+                    <div class="bg-white border-b border-gray-200 shrink-0">
+                        <div class="p-3 md:p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition" onclick="toggleSpecs()">
+                            <h4 class="font-semibold text-gray-800 text-xs md:text-sm min-w-0"><i class="fas fa-paint-roller text-blue-600 mr-2"></i> Specifikationer <span id="specSummary" class="font-normal text-gray-400"></span></h4>
+                            <i id="specIcon" class="fas fa-chevron-down text-gray-400 shrink-0 ml-2"></i>
+                        </div>
+                        <div id="specWrapper" class="hidden px-3 md:px-4 pb-3 md:pb-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
+                                <div>
+                                    <label class="block text-[10px] text-gray-400 uppercase">Material bänkskiva</label>
+                                    <input type="text" id="qsMaterial" oninput="scheduleAutoSave(); updateSpecSummary()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-blue-500" placeholder="Fylls i automatiskt när du lägger till en bänkskiva">
+                                </div>
+                                <div><label class="block text-[10px] text-gray-400 uppercase">Färg bänkskiva</label><input type="text" id="qsColor" oninput="scheduleAutoSave(); updateSpecSummary()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-blue-500"></div>
+                                <div><label class="block text-[10px] text-gray-400 uppercase">Modell lucka</label><input type="text" id="qsDoor" oninput="scheduleAutoSave(); updateSpecSummary()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-xs outline-none focus:border-blue-500"></div>
+                                <div class="sm:col-span-3">
+                                    <label class="block text-[10px] text-gray-400 uppercase">Dörrmodell (för automatisk lucka/lådfront-prissättning)</label>
+                                    <select id="qsDoorModelId" onchange="onDoorModelChange()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded bg-white text-xs outline-none focus:border-blue-500">
+                                        <option value="">-- Ingen vald --</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1072,6 +1077,7 @@
             // så säljaren slipper skriva in material/färg en gång till för hand.
             document.getElementById('qsMaterial').value = matName;
             document.getElementById('qsColor').value = colName;
+            updateSpecSummary();
 
             let hoActive = document.getElementById('ctHoActive').checked;
             let hoPart = parseInt(document.getElementById('ctHoPart').value) || 1;
@@ -1546,6 +1552,7 @@
             // Fyller automatiskt i "Modell lucka" på köpeavtalet utifrån vald dörrmodell.
             const model = doorModels.find(m => String(m.id) === String(selectedDoorModelId));
             document.getElementById('qsDoor').value = model ? model.name : '';
+            updateSpecSummary();
             scheduleAutoSave();
             if (!selectedDoorModelId) return;
             try {
@@ -1758,6 +1765,15 @@
         }
 
         function toggleConditions() { const wrapper = document.getElementById('condWrapper'); const icon = document.getElementById('condIcon'); wrapper.classList.toggle('hidden'); icon.classList.toggle('fa-chevron-down'); icon.classList.toggle('fa-chevron-up'); }
+
+        function toggleSpecs() { const wrapper = document.getElementById('specWrapper'); const icon = document.getElementById('specIcon'); wrapper.classList.toggle('hidden'); icon.classList.toggle('fa-chevron-down'); icon.classList.toggle('fa-chevron-up'); }
+
+        // Visar en kort sammanfattning (dörrmodell/material) bredvid "Specifikationer"-rubriken
+        // så man ser vad som är valt utan att behöva fälla ut den hopfällda panelen.
+        function updateSpecSummary() {
+            const parts = [document.getElementById('qsDoor').value, document.getElementById('qsMaterial').value].filter(Boolean);
+            document.getElementById('specSummary').innerText = parts.length ? `(${parts.join(' · ')})` : '';
+        }
         
         async function loadQuoteData() {
             if (!quoteId) { document.getElementById('headerQuoteName').innerText = "Testoffert (Går ej att spara)"; renderConditions(); return; }
@@ -1774,7 +1790,7 @@
                         if (Array.isArray(qd.drawingWalls)) drawingWalls = qd.drawingWalls;
                         if (qd.selectedConditions) { for (const key in qd.selectedConditions) { if(selectedConditions[key]) { selectedConditions[key].responsibility = qd.selectedConditions[key].responsibility || ''; selectedConditions[key].qty = qd.selectedConditions[key].qty || 1; selectedConditions[key].customPrice = qd.selectedConditions[key].customPrice || 0; } } }
                         if (qd.useRot !== undefined) document.getElementById('useRotCheckbox').checked = qd.useRot;
-                        if (qd.kitchenSpecs) { document.getElementById('qsMaterial').value = qd.kitchenSpecs.material || ''; document.getElementById('qsColor').value = qd.kitchenSpecs.color || ''; document.getElementById('qsDoor').value = qd.kitchenSpecs.door || ''; if (qd.kitchenSpecs.doorModelId) { document.getElementById('qsDoorModelId').value = qd.kitchenSpecs.doorModelId; onDoorModelChange(); } }
+                        if (qd.kitchenSpecs) { document.getElementById('qsMaterial').value = qd.kitchenSpecs.material || ''; document.getElementById('qsColor').value = qd.kitchenSpecs.color || ''; document.getElementById('qsDoor').value = qd.kitchenSpecs.door || ''; if (qd.kitchenSpecs.doorModelId) { document.getElementById('qsDoorModelId').value = qd.kitchenSpecs.doorModelId; onDoorModelChange(); } updateSpecSummary(); }
                         if (qd.extraFees) { document.getElementById('startFeeProduct').value = qd.extraFees.startFeeProduct || 0; document.getElementById('startFeeNonRot').value = qd.extraFees.startFeeNonRot || 0; document.getElementById('startFeeRotComp').value = qd.extraFees.startFeeRotComp || 0; document.getElementById('startFeeRotInst').value = qd.extraFees.startFeeRotInst || 0; document.getElementById('colorSelect').value = qd.extraFees.colorSelect || ''; document.getElementById('colorCustom').value = qd.extraFees.colorCustom || ''; document.getElementById('feeColor').value = qd.extraFees.feeColor || 0; toggleCustomColor(); }
                         if (qd.coverPage) {
                             coverPageData = { enabled: false, heroImage: null, handleImage: null, modelImage: null, colorImage: null, ...qd.coverPage };
