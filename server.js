@@ -1143,37 +1143,93 @@ app.get('/api/orders/:id/assembly/pdf', requireAuth, (req, res) => {
     });
 });
 
+// Beställningsunderlag: alla artikelrader i en order, grupperade per leverantör -
+// underlag för att beställa hem material hos respektive leverantör. Rader utan koppling
+// till en katalogprodukt (fritext, samt luckor/lådfronter som prissätts via dörrmodell
+// istället för produktregistret) kan inte knytas till en leverantör och hamnar i en egen
+// grupp längst ner, liksom produkter som saknar leverantör i produktregistret.
+app.get('/api/orders/:id/purchase-list-pdf', requireAuth, (req, res) => {
+    if (!PdfPrinter) return res.status(500).send("PDF-motorn saknas!");
+    const fonts = { Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' } };
+    const printer = new PdfPrinter(fonts);
+    db.query('SELECT q.*, c.name as customer_name FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?', [req.params.id], (err, quoteResults) => {
+        if (err || quoteResults.length === 0) return res.status(404).send('Order hittades ej');
+        const order = quoteResults[0];
+        db.query(
+            `SELECT qi.sku, qi.name, qi.qty, qi.product_id, s.name as supplier_name
+             FROM quote_items qi
+             LEFT JOIN products p ON qi.product_id = p.id
+             LEFT JOIN suppliers s ON p.supplier_id = s.id
+             WHERE qi.quote_id = ?
+             ORDER BY s.name ASC, qi.name ASC`,
+            [req.params.id],
+            (err2, items) => {
+                if (err2) return res.status(500).send('Kunde inte hämta artiklar');
+                db.query('SELECT company_name FROM company_settings WHERE id = 1', (err0, companyRes) => {
+                    const companyName = companyRes && companyRes[0] && companyRes[0].company_name;
+                    if (!companyName) return res.status(400).send('Företagsinformation saknas. Fyll i företagsnamn under Företagsinfo innan du skapar PDF-dokument.');
+
+                    const groups = {};
+                    items.forEach(i => {
+                        const key = i.supplier_name || (i.product_id ? 'Ingen leverantör satt i produktregistret' : 'Ej kopplat till produktregistret (fritext/lucka/lådfront)');
+                        (groups[key] = groups[key] || []).push(i);
+                    });
+                    const groupNames = Object.keys(groups).sort((a, b) => {
+                        // Riktiga leverantörer överst, de två "ospecificerat"-grupperna längst ner.
+                        const aUnspecified = a.startsWith('Ingen leverantör') || a.startsWith('Ej kopplat');
+                        const bUnspecified = b.startsWith('Ingen leverantör') || b.startsWith('Ej kopplat');
+                        if (aUnspecified !== bUnspecified) return aUnspecified ? 1 : -1;
+                        return a.localeCompare(b, 'sv');
+                    });
+
+                    const content = [
+                        { columns: [ { text: companyName, fontSize: 24, bold: true, color: '#000000' }, { text: 'BESTÄLLNINGSUNDERLAG', fontSize: 14, bold: true, color: '#000000', alignment: 'right', margin: [0, 8, 0, 0] } ] },
+                        { canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 1, lineColor: '#000000' }], margin: [0, 10, 0, 20] },
+                        { text: [ { text: 'Order: ', bold: true }, `${order.quote_name}${order.order_number ? ' (#' + order.order_number + ')' : ''}\n`, { text: 'Kund: ', bold: true }, order.customer_name ], margin: [0, 0, 0, 20] }
+                    ];
+                    if (items.length === 0) {
+                        content.push({ text: 'Inga artiklar i denna order.', italics: true, color: '#666666' });
+                    }
+                    groupNames.forEach(name => {
+                        const rows = groups[name];
+                        const tableBody = [ [{ text: 'SKU', style: 'th' }, { text: 'Artikel', style: 'th' }, { text: 'Antal', style: 'th', alignment: 'center' }] ];
+                        rows.forEach(r => tableBody.push([ { text: r.sku || '-' }, { text: r.name }, { text: String(r.qty), alignment: 'center' } ]));
+                        content.push(
+                            { text: name, bold: true, fontSize: 12, color: '#000000', margin: [0, 12, 0, 5] },
+                            { table: { headerRows: 1, widths: [90, '*', 50], body: tableBody }, layout: 'lightHorizontalLines' }
+                        );
+                    });
+
+                    const docDefinition = {
+                        defaultStyle: { font: 'Helvetica', fontSize: 10, color: '#000000' },
+                        content,
+                        styles: { th: { bold: true, fillColor: '#000000', color: 'white', padding: 5 } }
+                    };
+                    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+                    res.setHeader('Content-Type', 'application/pdf');
+                    res.setHeader('Content-Disposition', `inline; filename="Bestallningsunderlag_${order.id}.pdf"`);
+                    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+                    res.setHeader('Pragma', 'no-cache');
+                    pdfDoc.pipe(res); pdfDoc.end();
+                });
+            }
+        );
+    });
+});
+
 // ==========================================
-// LEVERANTÖRER & PRISPÅSLAG
+// LEVERANTÖRER
 // ==========================================
 app.get('/api/suppliers', requireAuth, requireStaff, (req, res) => db.query('SELECT * FROM suppliers ORDER BY name ASC', (err, results) => res.json(results || [])));
 app.post('/api/suppliers', requireAuth, requireAdmin, (req, res) => {
-    const { name, markup_percent, contact_info } = req.body;
-    db.query('INSERT INTO suppliers (name, markup_percent, contact_info) VALUES (?, ?, ?)', [name, markup_percent || 0, contact_info || ''], dbResult(res, 'Leverantör sparad!', result => ({ id: result.insertId })));
+    const { name, contact_info } = req.body;
+    db.query('INSERT INTO suppliers (name, contact_info) VALUES (?, ?)', [name, contact_info || ''], dbResult(res, 'Leverantör sparad!', result => ({ id: result.insertId })));
 });
 app.put('/api/suppliers/:id', requireAuth, requireAdmin, (req, res) => {
-    const { name, markup_percent, contact_info } = req.body;
-    db.query('UPDATE suppliers SET name=?, markup_percent=?, contact_info=? WHERE id=?', [name, markup_percent || 0, contact_info || '', req.params.id], dbResult(res, 'Uppdaterad!'));
+    const { name, contact_info } = req.body;
+    db.query('UPDATE suppliers SET name=?, contact_info=? WHERE id=?', [name, contact_info || '', req.params.id], dbResult(res, 'Uppdaterad!'));
 });
 app.delete('/api/suppliers/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM suppliers WHERE id = ?', [req.params.id], dbResult(res, 'Raderad!')));
-
-// Räkna om försäljningspris (standard_price) för alla produkter kopplade till en leverantör,
-// utifrån inköpspris (purchase_price) * (1 + prispåslag%) * (1 + moms%). Rör bara produkter utan varianter.
-// Samma formel som dörrmodeller/variantpriser använder, för konsekvens.
-app.post('/api/suppliers/:id/recalculate', requireAuth, requireAdmin, (req, res) => {
-    db.query('SELECT markup_percent FROM suppliers WHERE id = ?', [req.params.id], (err, supRes) => {
-        if (err || !supRes || supRes.length === 0) return res.status(404).json({ message: 'Leverantör hittades inte' });
-        const markup = parseFloat(supRes[0].markup_percent) || 0;
-        getVatFactor(vatFactor => {
-            // pricing_type='per_sqm'-produkter utesluts - deras pris räknas ut per kvadratmeter i
-            // offertbyggaren, inte som ett fast styckpris, så samma påslagsformel gäller inte dem.
-            db.query("UPDATE products SET standard_price = ROUND(purchase_price * ? * ?, 2) WHERE supplier_id = ? AND has_variations = 0 AND pricing_type != 'per_sqm' AND purchase_price > 0", [1 + (markup / 100), vatFactor, req.params.id], (err, result) => {
-                if (err) return res.status(500).json({ message: err.message });
-                res.json({ message: `Priser omräknade för ${result.affectedRows} produkter.` });
-            });
-        });
-    });
-});
 
 // ==========================================
 // FÖRETAGSINSTÄLLNINGAR (för vidareförsäljning av systemet)
