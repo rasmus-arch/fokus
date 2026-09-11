@@ -44,8 +44,11 @@
         let viewingTrash = false;
         const TRASH_RETENTION_DAYS = 10;
 
-        document.addEventListener("DOMContentLoaded", () => {
-            fetchVatRate();
+        document.addEventListener("DOMContentLoaded", async () => {
+            // Momssatsen måste vara inläst innan offerterna renderas - annars räknas
+            // marginalen på korten ut mot fel (standard-)momssats för företag som inte
+            // har 25% moms.
+            await fetchVatRate();
             fetchQuotes();
             document.getElementById('searchInput').addEventListener('input', renderQuotes);
         });
