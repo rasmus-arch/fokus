@@ -914,11 +914,17 @@ app.get('/api/statistics/fun-facts', requireAuth, requireStaff, (req, res) => {
     });
 });
 
+// Gemensam pdfmake-printer (samma Helvetica-typsnittsuppsättning) för alla PDF-endpoints
+// nedan - undviker att samma fonts-objekt/printer-instansiering upprepas i varje endpoint.
+function getPdfPrinter() {
+    const fonts = { Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' } };
+    return new PdfPrinter(fonts);
+}
+
 // PDF GENERATORS BEHÅLLS INTAKTA (Förkortade kommentarer)
 app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
     if (!PdfPrinter) return res.status(500).send("PDF-motorn saknas!");
-    const fonts = { Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' } };
-    const printer = new PdfPrinter(fonts);
+    const printer = getPdfPrinter();
     db.query('SELECT q.*, c.name as customer_name, c.address, c.address2, c.apartment_number, c.brf_org_nr, c.property_designation, c.email, c.phone, c.personnummer FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?', [req.params.id], (err, results) => {
         if (err || results.length === 0) return res.status(404).send('Hittades inte');
         const order = results[0];
@@ -1111,7 +1117,7 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
 
 app.get('/api/orders/:id/assembly/pdf', requireAuth, (req, res) => {
     if (!PdfPrinter) return res.status(500).send("PDF-motorn saknas!");
-    const fonts = { Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' } }; const printer = new PdfPrinter(fonts);
+    const printer = getPdfPrinter();
     db.query('SELECT q.*, c.name as customer_name, c.address, c.phone, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.id = ?', [req.params.id], (err, quoteResults) => {
         if (err || quoteResults.length === 0) return res.status(404).send('Order hittades ej');
         db.query('SELECT sku, name, assembly_comment FROM quote_items WHERE quote_id = ? AND is_free_text = 0', [req.params.id], (err, items) => {
@@ -1150,8 +1156,7 @@ app.get('/api/orders/:id/assembly/pdf', requireAuth, (req, res) => {
 // grupp längst ner, liksom produkter som saknar leverantör i produktregistret.
 app.get('/api/orders/:id/purchase-list-pdf', requireAuth, (req, res) => {
     if (!PdfPrinter) return res.status(500).send("PDF-motorn saknas!");
-    const fonts = { Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' } };
-    const printer = new PdfPrinter(fonts);
+    const printer = getPdfPrinter();
     db.query('SELECT q.*, c.name as customer_name FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?', [req.params.id], (err, quoteResults) => {
         if (err || quoteResults.length === 0) return res.status(404).send('Order hittades ej');
         const order = quoteResults[0];
