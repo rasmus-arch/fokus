@@ -82,17 +82,29 @@ app.post('/api/users', requireAuth, requireAdmin, (req, res) => {
 });
 app.put('/api/users/:id', requireAuth, requireAdmin, (req, res) => {
     const { name, email, password, role, order_range_start, order_range_end } = req.body;
+    // Inloggade sessioner (sessions.name/role) speglar en ögonblicksbild av användaren
+    // tagen vid inloggning, och requireAuth slår aldrig upp users-tabellen på nytt -
+    // utan denna synk skulle en nedgraderad/borttagen admin behålla sin gamla behörighet
+    // på en redan utfärdad session i upp till 30 dagar.
+    const syncSessions = () => db.query('UPDATE sessions SET name = ?, role = ? WHERE user_id = ?', [name, role, req.params.id], () => {});
     if (password) {
         db.query('UPDATE users SET name=?, email=?, role=?, order_range_start=?, order_range_end=?, password=? WHERE id=?',
             [name, email, role, order_range_start || null, order_range_end || null, hashPassword(password), req.params.id],
-            dbResult(res, 'Användare uppdaterad!'));
+            dbResult(res, 'Användare uppdaterad!', () => { syncSessions(); return {}; }));
     } else {
         db.query('UPDATE users SET name=?, email=?, role=?, order_range_start=?, order_range_end=? WHERE id=?',
             [name, email, role, order_range_start || null, order_range_end || null, req.params.id],
-            dbResult(res, 'Användare uppdaterad!'));
+            dbResult(res, 'Användare uppdaterad!', () => { syncSessions(); return {}; }));
     }
 });
-app.delete('/api/users/:id', requireAuth, requireAdmin, (req, res) => db.query('DELETE FROM users WHERE id = ?', [req.params.id], dbResult(res, 'Borttagen')));
+app.delete('/api/users/:id', requireAuth, requireAdmin, (req, res) => {
+    // Tar bort ev. inloggade sessioner samtidigt - annars fortsätter ett redan utfärdat
+    // sessionstoken att fungera (requireAuth slår aldrig upp users-tabellen på nytt) tills
+    // det åldras bort efter 30 dagar, trots att användaren är borttagen.
+    db.query('DELETE FROM sessions WHERE user_id = ?', [req.params.id], () => {
+        db.query('DELETE FROM users WHERE id = ?', [req.params.id], dbResult(res, 'Borttagen'));
+    });
+});
 
 // Kända lead-fält matchas via nyckelord oavsett vad formulärverktyget döpt dem till.
 // Fält som INTE matchar någon känd kategori tappas inte bort - de sparas i extra_data (JSON)
@@ -1270,33 +1282,6 @@ app.post('/api/settings/webhook-token/regenerate', requireAuth, requireAdmin, (r
     db.query('UPDATE company_settings SET webhook_token = ? WHERE id = 1', [token], (err) => {
         if (err) return res.status(500).json({ message: err.message });
         res.json({ message: 'Ny webhook-URL genererad!', webhook_token: token });
-    });
-});
-
-// "Kom igång"-checklista: samlar ihop grundläggande setup-status på ett ställe så att
-// man snabbt ser vad som saknas innan systemet börjar användas skarpt (t.ex. vid en ny
-// installation åt en annan kökshandlare).
-app.get('/api/onboarding-status', requireAuth, requireAdmin, (req, res) => {
-    db.query('SELECT company_name, logo_url, agreement_text, vat_rate FROM company_settings WHERE id = 1', (err, companyRows) => {
-        const company = (companyRows && companyRows[0]) || {};
-        db.query('SELECT COUNT(*) as c FROM products', (err2, productRows) => {
-            db.query('SELECT COUNT(*) as c FROM door_models', (err3, doorRows) => {
-                db.query('SELECT COUNT(*) as c FROM suppliers', (err4, supplierRows) => {
-                    db.query('SELECT COUNT(*) as c FROM users', (err5, userRows) => {
-                        res.json({
-                            company_name: !!(company.company_name && company.company_name.trim()),
-                            logo: !!(company.logo_url && company.logo_url.trim()),
-                            agreement_text: !!(company.agreement_text && company.agreement_text.trim()),
-                            vat_rate: company.vat_rate !== null && company.vat_rate !== undefined,
-                            products: (productRows && productRows[0] ? productRows[0].c : 0) > 0,
-                            door_models: (doorRows && doorRows[0] ? doorRows[0].c : 0) > 0,
-                            suppliers: (supplierRows && supplierRows[0] ? supplierRows[0].c : 0) > 0,
-                            extra_users: (userRows && userRows[0] ? userRows[0].c : 0) > 1
-                        });
-                    });
-                });
-            });
-        });
     });
 });
 

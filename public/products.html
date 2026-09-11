@@ -373,8 +373,9 @@
         let descEditor = null;
 
         document.addEventListener('DOMContentLoaded', () => {
-            fetchVatRate();
-            fetchProducts();
+            // Momssatsen måste vara inläst innan produkterna renderas - annars räknas
+            // marginalkolumnen ut mot fel (standard-)momssats för företag som inte har 25% moms.
+            fetchVatRate().then(fetchProducts);
             fetchSuppliersForDropdown();
             fetchFrameTypesForDropdown();
             // Rich text-redigerare för Beskrivning - låter säljaren formatera texten (fetstil,

@@ -87,12 +87,8 @@
                     localStorage.setItem('userName', data.name);
                     localStorage.setItem('userToken', data.token);
 
-                    // Skicka administratörer och säljare till CRM-systemet direkt
-                    if (data.role === 'Montör') {
-                        alert("Välkommen! Montage-vyn är redo att öppnas.");
-                    } else {
-                        window.location.href = '/leads.html';
-                    }
+                    // Skicka administratörer och säljare till CRM-systemet, montörer till Montage
+                    window.location.href = data.role === 'Montör' ? '/montage.html' : '/leads.html';
                 } else {
                     errorDiv.innerText = data.message || "Felaktiga inloggningsuppgifter.";
                     errorDiv.classList.remove('hidden');

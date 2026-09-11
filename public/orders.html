@@ -419,8 +419,11 @@
             }
         });
 
-        fetchVatRate();
-        fetchInstallers().then(() => fetchOrders());
+        // Momssatsen måste vara inläst innan ordrarna renderas - annars räknas
+        // marginalen på korten ut mot fel (standard-)momssats för företag som inte
+        // har 25% moms. Körs parallellt med fetchInstallers (oberoende av varandra),
+        // men ordrarna renderas inte förrän båda är klara.
+        Promise.all([fetchVatRate(), fetchInstallers()]).then(() => fetchOrders());
     </script>
 </body>
 </html>
