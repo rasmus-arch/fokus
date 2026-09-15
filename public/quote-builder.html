@@ -164,6 +164,16 @@
                     </div>
 
                     <div class="p-3 md:p-4 bg-white border-t border-gray-200 shrink-0">
+                        <h4 class="font-semibold text-gray-800 text-xs md:text-sm mb-2"><i class="fas fa-panorama text-blue-600 mr-2"></i> Bilder till kund</h4>
+                        <p class="text-[10px] text-gray-400 mb-2">Visas i ett eget bildspel på den digitala offertlänken (t.ex. inspirationsbilder, skisser, referensbilder) - utöver de bilder som redan visas automatiskt per produktrad.</p>
+                        <div id="quoteImageGallery" class="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-2"></div>
+                        <label class="block">
+                            <input type="file" id="quoteImageInput" accept="image/*" multiple class="hidden" onchange="uploadQuoteImages(this.files)">
+                            <span class="inline-flex items-center text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded cursor-pointer transition"><i class="fas fa-upload mr-1.5"></i> Ladda upp bilder</span>
+                        </label>
+                    </div>
+
+                    <div class="p-3 md:p-4 bg-white border-t border-gray-200 shrink-0">
                         <div class="flex items-center justify-between mb-2">
                             <h4 class="font-semibold text-gray-800 text-xs md:text-sm"><i class="fas fa-images text-blue-600 mr-2"></i> Försättsblad (OFFERT)</h4>
                             <label class="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
@@ -1821,6 +1831,7 @@
                     const pdfBtn = document.getElementById('btnQuotePdf'); pdfBtn.href = apiLinkWithToken(`/api/quotes/${quoteId}/pdf`); pdfBtn.classList.remove('hidden');
                     document.getElementById('btnShareLink').classList.remove('hidden');
                     renderCustomerResponseBadge(data.customer_response, data.customer_response_at, data.customer_decline_reason);
+                    loadQuoteImages();
                 }
             } catch (e) {}
             renderConditions(); renderCart();
@@ -1870,6 +1881,41 @@
                 if (!res.ok) return alert(data.message || 'Kunde inte skapa ny länk.');
                 document.getElementById('shareLinkUrl').value = `${location.origin}/offer.html?token=${data.token}`;
             } catch (e) { alert('Kunde inte skapa ny länk.'); }
+        }
+
+        // Bilder till kund - återanvänder samma fil-lagring (order_files) som ordrars
+        // bild/dokumentgalleri (se orders.html), bara filtrerat till bildtyper och kopplat
+        // redan på offertstadiet istället för att vänta tills offerten blivit en order.
+        async function loadQuoteImages() {
+            if (!quoteId) return;
+            const gallery = document.getElementById('quoteImageGallery');
+            try {
+                const res = await fetch(`/api/orders/${quoteId}/files`);
+                const files = await res.json();
+                const images = files.filter(f => f.file_type === 'image');
+                gallery.innerHTML = images.map(f => `
+                    <div class="relative group aspect-square bg-gray-100 rounded border border-gray-200 overflow-hidden">
+                        <img src="${f.file_url}" class="w-full h-full object-cover">
+                        <button onclick="deleteQuoteImage(${f.id})" class="absolute top-0.5 right-0.5 bg-red-600 text-white rounded w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-[10px]" title="Ta bort"><i class="fas fa-trash"></i></button>
+                    </div>
+                `).join('');
+            } catch (e) {}
+        }
+
+        async function uploadQuoteImages(fileList) {
+            if (!quoteId) { alert('Spara offerten först (den behöver ett ID) innan du kan ladda upp bilder.'); return; }
+            for (const file of fileList) {
+                const formData = new FormData();
+                formData.append('file', file);
+                try { await fetch(`/api/orders/${quoteId}/files`, { method: 'POST', body: formData }); } catch (e) {}
+            }
+            document.getElementById('quoteImageInput').value = '';
+            loadQuoteImages();
+        }
+
+        async function deleteQuoteImage(fileId) {
+            if (!confirm('Ta bort bilden?')) return;
+            try { await fetch(`/api/orders/files/${fileId}`, { method: 'DELETE' }); loadQuoteImages(); } catch (e) {}
         }
 
         // Räknar om costExVat på offertens rader utifrån dagens inköpspriser (för offerter som
