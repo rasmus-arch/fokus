@@ -240,6 +240,7 @@
                         <div class="flex justify-between text-blue-700 mt-0.5"><span>Montörens del:</span><span id="sumInstallerCut" class="font-bold kundlage-price">0.00 kr</span></div>
                         <div class="flex justify-between text-blue-700 mt-0.5 border-t border-blue-100 pt-0.5"><span>Marginal (ex moms):</span><span id="sumMargin" class="font-bold">0%</span></div>
                         <div id="sumMarginNote" class="text-[10px] text-amber-600 mt-0.5"></div>
+                        <button type="button" onclick="openInstallBreakdownModal()" class="w-full mt-1.5 pt-1.5 border-t border-blue-100 text-[10px] text-blue-600 hover:text-blue-800 underline text-center kundlage-price">Monteringskostnad per rad</button>
                     </div>
 
                     <div class="space-y-1.5">
@@ -704,6 +705,10 @@
     <script src="/menu.js"></script>
     <script>
         let products = []; let quoteCart = []; const quoteId = new URLSearchParams(window.location.search).get('id');
+        // Fylls i av renderCart() - en rad per post som har monteringskostnad (produktrader,
+        // villkor och startavgifter), används av openInstallBreakdownModal() för att visa
+        // monteringskostnaden fördelad per rad utan att duplicera beräkningslogiken.
+        let installBreakdownRows = [];
         let currentCustomer = null;
         let coverPageData = { enabled: false, heroImage: null, handleImage: null, modelImage: null, colorImage: null };
         let ctConfig = { materials: [], colors: [], prices: [], services: [], edges: [] };
@@ -2148,6 +2153,7 @@
             const useRot = document.getElementById('useRotCheckbox').checked;
             
             let totalMaterialBeforeGlobalDiscount = 0, totalRotInstallIncVat = 0, totalNonRotInstallIncVat = 0, totalCompanyCut = 0, totalInstallerCut = 0, totalMaterialCostExVat = 0, marginEligibleMaterialRevenue = 0, excludedMaterialRevenueIncVat = 0, excludedRowCount = 0;
+            installBreakdownRows = [];
 
             // Kompakt, grupperad radvy istället för ett kort per rad - så man ser fler av
             // (ibland närmare 50) raderna samtidigt utan att scrolla förbi varje enskild rad.
@@ -2158,6 +2164,7 @@
                 const rowMaterialTotal = (item.priceIncVat * (1 - (item.discount / 100))) * item.qty; const rowInstallTotal = item.installIncVat * item.qty;
                 totalMaterialBeforeGlobalDiscount += rowMaterialTotal; totalRotInstallIncVat += rowInstallTotal;
                 totalCompanyCut += (item.companyShare || 0) * item.qty; totalInstallerCut += (item.installerShare || 0) * item.qty;
+                if (rowInstallTotal > 0) installBreakdownRows.push({ name: item.name, qty: item.qty, installTotal: rowInstallTotal, companyShare: (item.companyShare || 0) * item.qty, installerShare: (item.installerShare || 0) * item.qty });
                 if (hasCostData(item.costExVat)) {
                     totalMaterialCostExVat += parseFloat(item.costExVat) * item.qty;
                     marginEligibleMaterialRevenue += rowMaterialTotal;
@@ -2214,14 +2221,22 @@
                         const qty = cond.hasQty ? current.qty : 1; const rowTotal = unitPrice * qty; const instCut = cond.installerCut * qty;
                         if(cond.isRot) totalRotInstallIncVat += rowTotal; else totalNonRotInstallIncVat += rowTotal;
                         totalInstallerCut += instCut; totalCompanyCut += (rowTotal - instCut);
+                        installBreakdownRows.push({ name: cond.label, qty: qty, installTotal: rowTotal, companyShare: rowTotal - instCut, installerShare: instCut });
                     }
                 }
             });
 
-            totalMaterialBeforeGlobalDiscount += startFeeProduct + colorFee; totalCompanyCut += startFeeProduct + colorFee + startFeeRotComp;
+            // OBS: startFeeProduct/colorFee är ren produktintäkt (inget montage) och ska INTE räknas
+            // in i totalCompanyCut - den visas som "[Företag]s del" och ska bara spegla hur stor
+            // del av MONTERINGSKOSTNADEN som är företagets, inte produktintäkt. De räknas dock med
+            // i totalMaterialBeforeGlobalDiscount/marginEligibleMaterialRevenue som vanligt.
+            totalMaterialBeforeGlobalDiscount += startFeeProduct + colorFee; totalCompanyCut += startFeeRotComp;
             // Montage (Ej ROT) går i sin helhet till montören (precis som ROT-Montör-fältet) - det
             // är inte en avgift företaget tjänar på, till skillnad från Material/Färgtillägg/ROT-K-kök.
             totalNonRotInstallIncVat += startFeeNonRot; totalRotInstallIncVat += (startFeeRotComp + startFeeRotInst); totalInstallerCut += startFeeNonRot + startFeeRotInst;
+            if (startFeeRotComp > 0) installBreakdownRows.push({ name: `Startavgift ROT (${document.querySelector('[data-company-name]')?.textContent || 'Företaget'})`, qty: 1, installTotal: startFeeRotComp, companyShare: startFeeRotComp, installerShare: 0 });
+            if (startFeeRotInst > 0) installBreakdownRows.push({ name: 'Startavgift ROT (Montör)', qty: 1, installTotal: startFeeRotInst, companyShare: 0, installerShare: startFeeRotInst });
+            if (startFeeNonRot > 0) installBreakdownRows.push({ name: 'Startavgift Montage (Ej ROT)', qty: 1, installTotal: startFeeNonRot, companyShare: 0, installerShare: startFeeNonRot });
             // Startavgifter/färgtillägg har ingen inköpskostnad - de är ren vinst och räknas alltid med i marginalunderlaget.
             marginEligibleMaterialRevenue += startFeeProduct + colorFee;
 
@@ -2281,6 +2296,56 @@
             document.getElementById('sumHandles').innerText = handleCount + ' st';
 
             scheduleAutoSave();
+        }
+
+        // Visar monteringskostnaden fördelad per rad (produkter, villkor, startavgifter) - hur
+        // mycket av varje rads montagekostnad som är företagets respektive montörens. Bygger på
+        // installBreakdownRows som fylls i av renderCart() ovan, så ingen duplicerad beräkning.
+        function openInstallBreakdownModal() {
+            const companyName = document.querySelector('[data-company-name]')?.textContent || 'Företaget';
+            const rows = installBreakdownRows;
+            const totalInstall = rows.reduce((s, r) => s + r.installTotal, 0);
+            const totalCompany = rows.reduce((s, r) => s + r.companyShare, 0);
+            const totalInstaller = rows.reduce((s, r) => s + r.installerShare, 0);
+            const kr = n => n.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr';
+
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-center justify-center p-4';
+            modal.onclick = e => { if (e.target === modal) modal.remove(); };
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-semibold text-gray-800">Monteringskostnad per rad</h3>
+                        <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+                    </div>
+                    ${rows.length === 0 ? '<p class="text-sm text-gray-400 italic">Inga rader med monteringskostnad.</p>' : `
+                    <table class="w-full text-xs">
+                        <thead><tr class="text-left text-gray-500 border-b border-gray-200">
+                            <th class="py-1 pr-2 font-semibold">Rad</th>
+                            <th class="py-1 px-2 font-semibold text-right">Montage</th>
+                            <th class="py-1 px-2 font-semibold text-right">${escapeHtml(companyName)}</th>
+                            <th class="py-1 pl-2 font-semibold text-right">Montör</th>
+                        </tr></thead>
+                        <tbody>
+                            ${rows.map(r => `
+                                <tr class="border-b border-gray-100">
+                                    <td class="py-1 pr-2 text-gray-700">${escapeHtml(r.name)}${r.qty > 1 ? ` <span class="text-gray-400">(${r.qty} st)</span>` : ''}</td>
+                                    <td class="py-1 px-2 text-right text-gray-600">${kr(r.installTotal)}</td>
+                                    <td class="py-1 px-2 text-right text-blue-700">${kr(r.companyShare)}</td>
+                                    <td class="py-1 pl-2 text-right text-purple-700">${kr(r.installerShare)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                        <tfoot><tr class="border-t-2 border-gray-300 font-bold">
+                            <td class="py-1.5 pr-2">Totalt</td>
+                            <td class="py-1.5 px-2 text-right">${kr(totalInstall)}</td>
+                            <td class="py-1.5 px-2 text-right text-blue-700">${kr(totalCompany)}</td>
+                            <td class="py-1.5 pl-2 text-right text-purple-700">${kr(totalInstaller)}</td>
+                        </tr></tfoot>
+                    </table>`}
+                </div>
+            `;
+            document.body.appendChild(modal);
         }
 
         // ==========================================
