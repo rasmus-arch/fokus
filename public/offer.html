@@ -35,6 +35,11 @@
                 <ul id="itemsList" class="divide-y divide-gray-100"></ul>
             </div>
 
+            <div id="imageGalleryBox" class="hidden bg-white rounded-lg shadow-sm p-6 md:p-8">
+                <h3 class="font-semibold text-gray-800 mb-4">Bilder</h3>
+                <div id="imageGallery" class="grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
+            </div>
+
             <div class="bg-white rounded-lg shadow-sm p-6 md:p-8">
                 <h3 class="font-semibold text-gray-800 mb-4">Sammanställning</h3>
                 <div id="totalsBox" class="space-y-1.5 text-sm"></div>
@@ -48,6 +53,11 @@
 
             <div id="responseCard" class="bg-white rounded-lg shadow-sm p-6 md:p-8"></div>
         </div>
+    </div>
+
+    <div id="lightbox" class="hidden fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4" onclick="closeLightbox(event)">
+        <button onclick="closeLightbox(event)" class="absolute top-4 right-4 text-white text-3xl leading-none w-10 h-10 flex items-center justify-center hover:text-gray-300">&times;</button>
+        <img id="lightboxImg" class="max-w-full max-h-full object-contain rounded" src="">
     </div>
 
     <script>
@@ -124,7 +134,26 @@
 
             document.getElementById('pdfLink').href = `/api/public/offer/${token}/pdf`;
 
+            if (data.images && data.images.length > 0) {
+                document.getElementById('imageGalleryBox').classList.remove('hidden');
+                document.getElementById('imageGallery').innerHTML = data.images.map((img, idx) => `
+                    <button onclick="openLightbox(${idx})" class="aspect-square rounded overflow-hidden border border-gray-200 hover:opacity-80 transition">
+                        <img src="${img.url}" alt="${img.name || ''}" class="w-full h-full object-cover">
+                    </button>
+                `).join('');
+            }
+
             renderResponseCard(data);
+        }
+
+        function openLightbox(idx) {
+            document.getElementById('lightboxImg').src = offerData.images[idx].url;
+            document.getElementById('lightbox').classList.remove('hidden');
+        }
+
+        function closeLightbox(e) {
+            if (e) e.stopPropagation();
+            document.getElementById('lightbox').classList.add('hidden');
         }
 
         function renderResponseCard(data) {

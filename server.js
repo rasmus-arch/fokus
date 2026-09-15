@@ -1243,33 +1243,36 @@ app.get('/api/public/offer/:token', (req, res) => {
             try { const parsed = typeof order.quote_data === 'string' ? JSON.parse(order.quote_data) : order.quote_data; if (parsed.quoteCart) cart = parsed.quoteCart; } catch (e) {}
         }
         db.query('SELECT company_name, logo_url, pdf_color_primary, pdf_color_accent, org_number FROM company_settings WHERE id = 1', (err2, companyRows) => {
-            const company = (companyRows && companyRows[0]) || {};
-            const totals = computeCustomerFacingTotals(order, cart);
-            const kr = n => Math.round(n).toLocaleString('sv-SE') + ' kr';
-            res.json({
-                quote_name: order.quote_name,
-                customer_name: order.customer_name,
-                order_number: order.order_number || null,
-                public_comment: order.public_comment || '',
-                company: { name: company.company_name || '', logo_url: company.logo_url || '', color_primary: company.pdf_color_primary || '#2E5339', color_accent: company.pdf_color_accent || '#E8A33D', org_number: company.org_number || '' },
-                // Bara kundvänliga fält per rad - inköpspris/marginal/montörsandel skickas aldrig.
-                items: cart.map(i => ({ name: i.name, sku: i.sku, qty: i.qty, imageUrl: i.imageUrl || null, drawingSvg: i.drawingSvg || null })),
-                totals: {
-                    material_full_price: kr(totals.totalMaterialFullPrice),
-                    discount: kr(totals.totalDiscountAmount),
-                    material_inc_vat: kr(totals.totalMaterialIncVat),
-                    non_rot_services: kr(totals.totalNonRotInstallIncVat),
-                    rot_eligible_install: kr(totals.totalRotInstallIncVat),
-                    rot_deduction: totals.useRot ? kr(totals.rotDeduction) : null,
-                    final_to_pay: kr(totals.finalToPay)
-                },
-                // "Kan besvaras" bara om offerten fortfarande väntar på svar - annars visar
-                // klienten bara det slutgiltiga svaret (eller ett meddelande om att den redan
-                // blivit en order via annan väg) istället för Godkänn/Avböj-knapparna.
-                can_respond: order.status === 'Offert' && !order.customer_response,
-                customer_response: order.customer_response || null,
-                customer_response_at: order.customer_response_at,
-                customer_decline_reason: order.customer_decline_reason || null
+            db.query("SELECT file_url, file_name FROM order_files WHERE quote_id = ? AND file_type = 'image' ORDER BY created_at DESC", [order.id], (err3, imageRows) => {
+                const company = (companyRows && companyRows[0]) || {};
+                const totals = computeCustomerFacingTotals(order, cart);
+                const kr = n => Math.round(n).toLocaleString('sv-SE') + ' kr';
+                res.json({
+                    quote_name: order.quote_name,
+                    customer_name: order.customer_name,
+                    order_number: order.order_number || null,
+                    public_comment: order.public_comment || '',
+                    company: { name: company.company_name || '', logo_url: company.logo_url || '', color_primary: company.pdf_color_primary || '#2E5339', color_accent: company.pdf_color_accent || '#E8A33D', org_number: company.org_number || '' },
+                    // Bara kundvänliga fält per rad - inköpspris/marginal/montörsandel skickas aldrig.
+                    items: cart.map(i => ({ name: i.name, sku: i.sku, qty: i.qty, imageUrl: i.imageUrl || null, drawingSvg: i.drawingSvg || null })),
+                    images: (imageRows || []).map(f => ({ url: f.file_url, name: f.file_name })),
+                    totals: {
+                        material_full_price: kr(totals.totalMaterialFullPrice),
+                        discount: kr(totals.totalDiscountAmount),
+                        material_inc_vat: kr(totals.totalMaterialIncVat),
+                        non_rot_services: kr(totals.totalNonRotInstallIncVat),
+                        rot_eligible_install: kr(totals.totalRotInstallIncVat),
+                        rot_deduction: totals.useRot ? kr(totals.rotDeduction) : null,
+                        final_to_pay: kr(totals.finalToPay)
+                    },
+                    // "Kan besvaras" bara om offerten fortfarande väntar på svar - annars visar
+                    // klienten bara det slutgiltiga svaret (eller ett meddelande om att den redan
+                    // blivit en order via annan väg) istället för Godkänn/Avböj-knapparna.
+                    can_respond: order.status === 'Offert' && !order.customer_response,
+                    customer_response: order.customer_response || null,
+                    customer_response_at: order.customer_response_at,
+                    customer_decline_reason: order.customer_decline_reason || null
+                });
             });
         });
     });
