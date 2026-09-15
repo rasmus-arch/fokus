@@ -17,6 +17,10 @@ try {
 }
 
 const app = express();
+// Servern körs alltid bakom cPanel/LiteSpeed:s reverse proxy - utan detta skulle req.ip
+// alltid visa proxyns interna IP istället för kundens riktiga, vilket bl.a. används i
+// den lagrade loggen när en kund godkänner/avböjer en offert via sin delade länk.
+app.set('trust proxy', true);
 
 // GLOBAL REGEL: ingenting i den här appen ska någonsin cachas - varken av webbläsaren,
 // en mellanliggande proxy/CDN (t.ex. LiteSpeed Cache) eller Express egna ETag/Last-Modified-
@@ -612,6 +616,31 @@ app.put('/api/quotes/:id', requireAuth, requireStaff, (req, res) => {
     });
 });
 
+// Delningslänk till kund: skapar (om ingen redan finns) eller returnerar den befintliga
+// hemliga token som ger åtkomst till offertens kundvända vy (se /api/public/offer/:token
+// nedan). Token är slumpad på samma sätt som sessions-tokens (32 slumpade bytes, hex) -
+// omöjlig att gissa, och unik i databasen.
+app.post('/api/quotes/:id/public-link', requireAuth, requireStaff, (req, res) => {
+    db.query('SELECT public_token FROM quotes WHERE id = ?', [req.params.id], (err, rows) => {
+        if (err || !rows.length) return res.status(404).json({ message: 'Offerten hittades inte.' });
+        if (rows[0].public_token) return res.json({ token: rows[0].public_token });
+        const token = crypto.randomBytes(32).toString('hex');
+        db.query('UPDATE quotes SET public_token = ? WHERE id = ?', [token, req.params.id], (err2) => {
+            if (err2) return res.status(500).json({ message: err2.message });
+            res.json({ token });
+        });
+    });
+});
+// Ogiltigförklarar en tidigare delad länk (t.ex. om den skickats till fel person) och
+// utfärdar en ny - kunden måste då få den nya länken på nytt.
+app.post('/api/quotes/:id/public-link/regenerate', requireAuth, requireStaff, (req, res) => {
+    const token = crypto.randomBytes(32).toString('hex');
+    db.query('UPDATE quotes SET public_token = ? WHERE id = ?', [token, req.params.id], (err) => {
+        if (err) return res.status(500).json({ message: err.message });
+        res.json({ token });
+    });
+});
+
 // Räknar om costExVat för raderna i en kundvagn utifrån dagens inköpspriser i produktkatalogen.
 // Används för offerter/order som sparades innan kostnadsspårning per rad fanns, så deras rader
 // saknar costExVat helt och exkluderas ur marginalen (se hasCostData i common.js). Rör bara rader
@@ -933,8 +962,62 @@ function getPdfPrinter() {
     return new PdfPrinter(fonts);
 }
 
+// Speglar (medvetet, inte återanvänder) exakt samma totalsumme-formel som PDF-rutten
+// nedan använder, för den kundvända offertlänken - se /api/public/offer/:token. Görs som
+// en egen kopia istället för att bryta ut PDF-rutten gemensamt med den, eftersom PDF-koden
+// är djupt inbäddad i en stor, redan testad callback-kedja där en refaktorering skulle
+// riskera att råka ändra något i det befintliga PDF-flödet. Om formeln nedan någonsin
+// ändras i PDF-rutten måste samma ändring göras här.
+function computeCustomerFacingTotals(order, cart) {
+    let extraFees = {}; let selectedConditions = {}; let useRot = true;
+    if (order.quote_data) {
+        try {
+            const parsed = typeof order.quote_data === 'string' ? JSON.parse(order.quote_data) : order.quote_data;
+            if (parsed.extraFees) extraFees = parsed.extraFees;
+            if (parsed.selectedConditions) selectedConditions = parsed.selectedConditions;
+            if (parsed.useRot !== undefined) useRot = parsed.useRot;
+        } catch (e) {}
+    }
+    let totalMaterialBeforeGlobalDiscount = 0, totalRotInstallIncVat = 0, totalMaterialFullPrice = 0, totalRowDiscountAmount = 0;
+    (cart || []).forEach(item => {
+        const rowFullPrice = (parseFloat(item.priceIncVat) || 0) * item.qty;
+        const rowDiscountAmount = rowFullPrice * ((parseFloat(item.discount) || 0) / 100);
+        totalMaterialFullPrice += rowFullPrice; totalRowDiscountAmount += rowDiscountAmount;
+        totalMaterialBeforeGlobalDiscount += rowFullPrice - rowDiscountAmount;
+        totalRotInstallIncVat += (parseFloat(item.installIncVat) || 0) * item.qty;
+    });
+    const conditionsList = [ { id: 'demontering_luckor', price: 2000, hasQty: false, isRot: true }, { id: 'demontering_helkok', price: 600, hasQty: true, isRot: true }, { id: 'bortforsling', price: 2000, hasQty: false, isRot: false }, { id: 'bortforsling_vit', price: 1000, hasQty: true, isRot: false }, { id: 'inkoppling_vit', price: 1000, hasQty: true, isRot: true }, { id: 'el', price: 0, hasQty: false, hasCustomPrice: true, isRot: true }, { id: 'vvs', price: 0, hasQty: false, hasCustomPrice: true, isRot: true } ];
+    let totalNonRotInstallIncVat = 0;
+    conditionsList.forEach(cond => {
+        const current = selectedConditions[cond.id];
+        if (current && current.responsibility === 'Klarälvskök') {
+            const qty = cond.hasQty ? (current.qty || 1) : 1; const unitPrice = cond.hasCustomPrice ? (parseFloat(current.customPrice) || 0) : cond.price;
+            if (cond.isRot) totalRotInstallIncVat += unitPrice * qty; else totalNonRotInstallIncVat += unitPrice * qty;
+        }
+    });
+    const startFeeProduct = parseFloat(extraFees.startFeeProduct) || 0; const startFeeNonRot = parseFloat(extraFees.startFeeNonRot) || 0;
+    const startFeeRotComp = parseFloat(extraFees.startFeeRotComp) || 0; const startFeeRotInst = parseFloat(extraFees.startFeeRotInst) || 0; const colorFee = parseFloat(extraFees.feeColor) || 0;
+    totalMaterialBeforeGlobalDiscount += startFeeProduct + colorFee; totalMaterialFullPrice += startFeeProduct + colorFee;
+    totalNonRotInstallIncVat += startFeeNonRot; totalRotInstallIncVat += (startFeeRotComp + startFeeRotInst);
+    const globalDiscountVal = parseFloat(order.global_discount) || 0; const globalDiscountType = order.discount_type || '%';
+    const globalDiscountAmount = globalDiscountType === '%' ? totalMaterialBeforeGlobalDiscount * (globalDiscountVal / 100) : globalDiscountVal;
+    const totalMaterialIncVat = Math.max(0, totalMaterialBeforeGlobalDiscount - globalDiscountAmount);
+    const rotDeduction = useRot ? (totalRotInstallIncVat * 0.30) : 0;
+    const totalAssemblyCost = totalRotInstallIncVat + totalNonRotInstallIncVat;
+    const finalToPay = Math.round(totalMaterialIncVat + totalAssemblyCost - rotDeduction);
+    return {
+        totalDiscountAmount: totalRowDiscountAmount + globalDiscountAmount,
+        totalMaterialFullPrice, totalMaterialIncVat, totalNonRotInstallIncVat, totalRotInstallIncVat,
+        useRot, rotDeduction, finalToPay
+    };
+}
+
 // PDF GENERATORS BEHÅLLS INTAKTA (Förkortade kommentarer)
-app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
+// Bruten ut till en namngiven funktion (inte bara app.get(...,(req,res)=>{})) så att
+// /api/public/offer/:token/pdf nedan kan återanvända exakt samma PDF-generering genom att
+// slå upp rätt quote-id från token och sedan anropa samma funktion, istället för att
+// duplicera hela PDF-uppbyggnaden en gång till.
+function generateQuotePdf(req, res) {
     if (!PdfPrinter) return res.status(500).send("PDF-motorn saknas!");
     const printer = getPdfPrinter();
     db.query('SELECT q.*, c.name as customer_name, c.address, c.address2, c.apartment_number, c.brf_org_nr, c.property_designation, c.email, c.phone, c.personnummer FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?', [req.params.id], (err, results) => {
@@ -1125,7 +1208,99 @@ app.get('/api/quotes/:id/pdf', requireAuth, (req, res) => {
         });
         });
     });
+}
+app.get('/api/quotes/:id/pdf', requireAuth, generateQuotePdf);
+
+// ==========================================
+// KUNDVÄND OFFERTLÄNK (public_token) - INGEN INLOGGNING
+// ==========================================
+// Alla rutter nedan är medvetet HELT oskyddade av requireAuth - de nås av kunden själv via
+// en delad länk, inte av inloggad personal. Säkerheten ligger i att :token är en 32 bytes
+// slumpad hemlighet (crypto.randomBytes, samma standard som sessions-tokens) som bara ger
+// åtkomst till EN specifik offert, aldrig resten av systemet. Svaret allowlistas fält för
+// fält (inte "SELECT q.*") så att interna uppgifter (inköpspris, marginal, montörsandel,
+// intern kommentar, andra kunders data) aldrig kan läcka ut via den här vägen.
+function findQuoteByPublicToken(token, callback) {
+    db.query('SELECT q.*, c.name as customer_name FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.public_token = ?', [token], (err, rows) => {
+        callback(err, rows && rows[0] ? rows[0] : null);
+    });
+}
+
+app.get('/api/public/offer/:token', (req, res) => {
+    findQuoteByPublicToken(req.params.token, (err, order) => {
+        if (err || !order) return res.status(404).json({ message: 'Länken är ogiltig eller har tagits bort.' });
+        if (order.status === 'Utkast') return res.status(403).json({ message: 'Offerten är inte redo att visas än.' });
+        let cart = [];
+        if (order.quote_data) {
+            try { const parsed = typeof order.quote_data === 'string' ? JSON.parse(order.quote_data) : order.quote_data; if (parsed.quoteCart) cart = parsed.quoteCart; } catch (e) {}
+        }
+        db.query('SELECT company_name, logo_url, pdf_color_primary, pdf_color_accent, org_number FROM company_settings WHERE id = 1', (err2, companyRows) => {
+            const company = (companyRows && companyRows[0]) || {};
+            const totals = computeCustomerFacingTotals(order, cart);
+            const kr = n => Math.round(n).toLocaleString('sv-SE') + ' kr';
+            res.json({
+                quote_name: order.quote_name,
+                customer_name: order.customer_name,
+                order_number: order.order_number || null,
+                public_comment: order.public_comment || '',
+                company: { name: company.company_name || '', logo_url: company.logo_url || '', color_primary: company.pdf_color_primary || '#2E5339', color_accent: company.pdf_color_accent || '#E8A33D', org_number: company.org_number || '' },
+                // Bara kundvänliga fält per rad - inköpspris/marginal/montörsandel skickas aldrig.
+                items: cart.map(i => ({ name: i.name, sku: i.sku, qty: i.qty, imageUrl: i.imageUrl || null, drawingSvg: i.drawingSvg || null })),
+                totals: {
+                    material_full_price: kr(totals.totalMaterialFullPrice),
+                    discount: kr(totals.totalDiscountAmount),
+                    material_inc_vat: kr(totals.totalMaterialIncVat),
+                    non_rot_services: kr(totals.totalNonRotInstallIncVat),
+                    rot_eligible_install: kr(totals.totalRotInstallIncVat),
+                    rot_deduction: totals.useRot ? kr(totals.rotDeduction) : null,
+                    final_to_pay: kr(totals.finalToPay)
+                },
+                // "Kan besvaras" bara om offerten fortfarande väntar på svar - annars visar
+                // klienten bara det slutgiltiga svaret (eller ett meddelande om att den redan
+                // blivit en order via annan väg) istället för Godkänn/Avböj-knapparna.
+                can_respond: order.status === 'Offert' && !order.customer_response,
+                customer_response: order.customer_response || null,
+                customer_response_at: order.customer_response_at,
+                customer_decline_reason: order.customer_decline_reason || null
+            });
+        });
+    });
 });
+
+// Låter kunden se/ladda ner exakt samma PDF som säljaren ser, via token istället för
+// inloggning - återanvänder generateQuotePdf() rakt av genom att slå upp rätt quote-id.
+app.get('/api/public/offer/:token/pdf', (req, res) => {
+    findQuoteByPublicToken(req.params.token, (err, order) => {
+        if (err || !order) return res.status(404).send('Länken är ogiltig eller har tagits bort.');
+        if (order.status === 'Utkast') return res.status(403).send('Offerten är inte redo att visas än.');
+        req.params.id = order.id;
+        generateQuotePdf(req, res);
+    });
+});
+
+function respondToPublicOffer(req, res, response) {
+    findQuoteByPublicToken(req.params.token, (err, order) => {
+        if (err || !order) return res.status(404).json({ message: 'Länken är ogiltig eller har tagits bort.' });
+        if (order.status !== 'Offert') return res.status(400).json({ message: 'Offerten går inte längre att svara på.' });
+        if (order.customer_response) return res.status(400).json({ message: 'Den här offerten har redan besvarats.' });
+        let cart = [];
+        if (order.quote_data) {
+            try { const parsed = typeof order.quote_data === 'string' ? JSON.parse(order.quote_data) : order.quote_data; if (parsed.quoteCart) cart = parsed.quoteCart; } catch (e) {}
+        }
+        // Låser fast en ögonblicksbild av exakt vad kunden godkände/avböjde (rader + totalsumma
+        // vid den tidpunkten) - skyddar mot att en senare ändring av offerten retroaktivt
+        // skulle kunna misstolkas som vad kunden ursprungligen tog ställning till.
+        const snapshot = JSON.stringify({ quote_data: order.quote_data, totals: computeCustomerFacingTotals(order, cart) });
+        const reason = response === 'declined' ? (req.body && req.body.reason ? String(req.body.reason).slice(0, 2000) : null) : null;
+        db.query('UPDATE quotes SET customer_response = ?, customer_response_at = NOW(), customer_response_ip = ?, customer_response_user_agent = ?, customer_response_snapshot = ?, customer_decline_reason = ? WHERE id = ?',
+            [response, req.ip || null, (req.headers['user-agent'] || '').slice(0, 255), snapshot, reason, order.id], (err2) => {
+            if (err2) return res.status(500).json({ message: err2.message });
+            res.json({ message: response === 'accepted' ? 'Offerten godkändes!' : 'Offerten avböjdes.' });
+        });
+    });
+}
+app.post('/api/public/offer/:token/accept', (req, res) => respondToPublicOffer(req, res, 'accepted'));
+app.post('/api/public/offer/:token/decline', (req, res) => respondToPublicOffer(req, res, 'declined'));
 
 app.get('/api/orders/:id/assembly/pdf', requireAuth, (req, res) => {
     if (!PdfPrinter) return res.status(500).send("PDF-motorn saknas!");
