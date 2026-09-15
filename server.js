@@ -5,7 +5,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { hashPassword, verifyPassword, initSessions } = require('./lib/auth.js');
 const db = require('./lib/db.js');
-const { upload, uploadDir } = require('./lib/upload.js');
+const { upload, uploadDir, uploadIdPhoto, privateUploadDir } = require('./lib/upload.js');
 const { htmlToPdfmakeNodes, buildPdfImageCell, buildPdfHeroImageBlock, downloadExternalImage } = require('./lib/pdfHelpers.js');
 
 let PdfPrinter = null;
@@ -1229,7 +1229,7 @@ app.get('/api/quotes/:id/pdf', requireAuth, generateQuotePdf);
 // fält (inte "SELECT q.*") så att interna uppgifter (inköpspris, marginal, montörsandel,
 // intern kommentar, andra kunders data) aldrig kan läcka ut via den här vägen.
 function findQuoteByPublicToken(token, callback) {
-    db.query('SELECT q.*, c.name as customer_name FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.public_token = ?', [token], (err, rows) => {
+    db.query('SELECT q.*, c.name as customer_name, c.address, c.address2, c.apartment_number, c.brf_org_nr, c.property_designation, c.email, c.phone, c.personnummer FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.public_token = ?', [token], (err, rows) => {
         callback(err, rows && rows[0] ? rows[0] : null);
     });
 }
@@ -1252,6 +1252,20 @@ app.get('/api/public/offer/:token', (req, res) => {
                     customer_name: order.customer_name,
                     order_number: order.order_number || null,
                     public_comment: order.public_comment || '',
+                    // Förifyllnadsvärden till godkännandeformuläret - kundens egna, redan kända
+                    // uppgifter. Skickas alltid med (oavsett can_respond) så kunden slipper skriva
+                    // om dem, men kunden kan ändra/komplettera dem innan de signerar.
+                    customer: {
+                        name: order.customer_name || '',
+                        personnummer: order.personnummer || '',
+                        address: order.address || '',
+                        address2: order.address2 || '',
+                        apartment_number: order.apartment_number || '',
+                        brf_org_nr: order.brf_org_nr || '',
+                        property_designation: order.property_designation || '',
+                        email: order.email || '',
+                        phone: order.phone || ''
+                    },
                     company: { name: company.company_name || '', logo_url: company.logo_url || '', color_primary: company.pdf_color_primary || '#2E5339', color_accent: company.pdf_color_accent || '#E8A33D', org_number: company.org_number || '' },
                     // Bara kundvänliga fält per rad - inköpspris/marginal/montörsandel skickas aldrig.
                     items: cart.map(i => ({ name: i.name, sku: i.sku, qty: i.qty, imageUrl: i.imageUrl || null, drawingSvg: i.drawingSvg || null })),
@@ -1289,29 +1303,81 @@ app.get('/api/public/offer/:token/pdf', (req, res) => {
     });
 });
 
-function respondToPublicOffer(req, res, response) {
-    findQuoteByPublicToken(req.params.token, (err, order) => {
-        if (err || !order) return res.status(404).json({ message: 'Länken är ogiltig eller har tagits bort.' });
-        if (order.status !== 'Offert') return res.status(400).json({ message: 'Offerten går inte längre att svara på.' });
-        if (order.customer_response) return res.status(400).json({ message: 'Den här offerten har redan besvarats.' });
+// Delad förkontroll för både godkännande och avböjande: slår upp offerten via token, säkerställer
+// att den fortfarande går att svara på, och bygger en låst ögonblicksbild av exakt vad kunden tog
+// ställning till (rader + totalsumma vid den tidpunkten) - skyddar mot att en senare ändring av
+// offerten retroaktivt skulle kunna misstolkas som vad kunden ursprungligen tog ställning till.
+function loadRespondableOffer(token, callback) {
+    findQuoteByPublicToken(token, (err, order) => {
+        if (err || !order) return callback({ status: 404, message: 'Länken är ogiltig eller har tagits bort.' });
+        if (order.status !== 'Offert') return callback({ status: 400, message: 'Offerten går inte längre att svara på.' });
+        if (order.customer_response) return callback({ status: 400, message: 'Den här offerten har redan besvarats.' });
         let cart = [];
         if (order.quote_data) {
             try { const parsed = typeof order.quote_data === 'string' ? JSON.parse(order.quote_data) : order.quote_data; if (parsed.quoteCart) cart = parsed.quoteCart; } catch (e) {}
         }
-        // Låser fast en ögonblicksbild av exakt vad kunden godkände/avböjde (rader + totalsumma
-        // vid den tidpunkten) - skyddar mot att en senare ändring av offerten retroaktivt
-        // skulle kunna misstolkas som vad kunden ursprungligen tog ställning till.
         const snapshot = JSON.stringify({ quote_data: order.quote_data, totals: computeCustomerFacingTotals(order, cart) });
-        const reason = response === 'declined' ? (req.body && req.body.reason ? String(req.body.reason).slice(0, 2000) : null) : null;
-        db.query('UPDATE quotes SET customer_response = ?, customer_response_at = NOW(), customer_response_ip = ?, customer_response_user_agent = ?, customer_response_snapshot = ?, customer_decline_reason = ? WHERE id = ?',
-            [response, req.ip || null, (req.headers['user-agent'] || '').slice(0, 255), snapshot, reason, order.id], (err2) => {
-            if (err2) return res.status(500).json({ message: err2.message });
-            res.json({ message: response === 'accepted' ? 'Offerten godkändes!' : 'Offerten avböjdes.' });
-        });
+        callback(null, order, snapshot);
     });
 }
-app.post('/api/public/offer/:token/accept', (req, res) => respondToPublicOffer(req, res, 'accepted'));
-app.post('/api/public/offer/:token/decline', (req, res) => respondToPublicOffer(req, res, 'declined'));
+
+// Godkännande kräver, utöver klick + logg, ifyllda kunduppgifter, en handritad signatur och ett
+// foto på giltig legitimation (sparas privat, se GET /api/quotes/:id/id-photo) - för att ha
+// bevisning att ta fram om det skulle bli en tvist om vem som godkände offerten.
+app.post('/api/public/offer/:token/accept', uploadIdPhoto.single('id_photo'), (req, res) => {
+    loadRespondableOffer(req.params.token, (errResp, order, snapshot) => {
+        if (errResp) return res.status(errResp.status).json({ message: errResp.message });
+
+        const name = (req.body.name || '').trim();
+        const signature = req.body.signature || '';
+        if (!name) return res.status(400).json({ message: 'Namn saknas.' });
+        if (!signature.startsWith('data:image/')) return res.status(400).json({ message: 'Signatur saknas.' });
+        if (signature.length > 2 * 1024 * 1024) return res.status(400).json({ message: 'Signaturen är för stor.' });
+        if (!req.file) return res.status(400).json({ message: 'Foto på legitimation saknas eller har fel filformat (måste vara en bild).' });
+
+        db.query(`UPDATE quotes SET
+                customer_response = 'accepted', customer_response_at = NOW(), customer_response_ip = ?, customer_response_user_agent = ?,
+                customer_response_snapshot = ?, customer_decline_reason = NULL,
+                customer_signature_data = ?, customer_id_photo_path = ?,
+                customer_confirmed_name = ?, customer_confirmed_personnummer = ?, customer_confirmed_address = ?,
+                customer_confirmed_address2 = ?, customer_confirmed_apartment_number = ?, customer_confirmed_brf_org_nr = ?,
+                customer_confirmed_property_designation = ?, customer_confirmed_email = ?, customer_confirmed_phone = ?
+            WHERE id = ?`,
+            [req.ip || null, (req.headers['user-agent'] || '').slice(0, 255), snapshot,
+                signature, req.file.filename,
+                name, (req.body.personnummer || '').trim(), (req.body.address || '').trim(),
+                (req.body.address2 || '').trim(), (req.body.apartment_number || '').trim(), (req.body.brf_org_nr || '').trim(),
+                (req.body.property_designation || '').trim(), (req.body.email || '').trim(), (req.body.phone || '').trim(),
+                order.id],
+            (err2) => {
+                if (err2) return res.status(500).json({ message: err2.message });
+                res.json({ message: 'Offerten godkändes!' });
+            });
+    });
+});
+
+app.post('/api/public/offer/:token/decline', (req, res) => {
+    loadRespondableOffer(req.params.token, (errResp, order, snapshot) => {
+        if (errResp) return res.status(errResp.status).json({ message: errResp.message });
+        const reason = req.body && req.body.reason ? String(req.body.reason).slice(0, 2000) : null;
+        db.query('UPDATE quotes SET customer_response = ?, customer_response_at = NOW(), customer_response_ip = ?, customer_response_user_agent = ?, customer_response_snapshot = ?, customer_decline_reason = ? WHERE id = ?',
+            ['declined', req.ip || null, (req.headers['user-agent'] || '').slice(0, 255), snapshot, reason, order.id], (err2) => {
+                if (err2) return res.status(500).json({ message: err2.message });
+                res.json({ message: 'Offerten avböjdes.' });
+            });
+    });
+});
+
+// Kundens legitimationsfoto, sparat vid godkännande - inloggningsskyddad, bara för Superadmin/
+// Admin/Säljare, och filen ligger utanför public/ så den aldrig kan nås direkt via URL.
+app.get('/api/quotes/:id/id-photo', requireAuth, requireStaff, (req, res) => {
+    db.query('SELECT customer_id_photo_path FROM quotes WHERE id = ?', [req.params.id], (err, rows) => {
+        if (err || !rows.length || !rows[0].customer_id_photo_path) return res.status(404).json({ message: 'Ingen legitimation sparad för den här offerten.' });
+        // Filnamnet kommer alltid från multers egen slumpgenerering (aldrig direkt från
+        // användarinput) - path.basename() är ändå ett extra skyddslager mot path traversal.
+        res.sendFile(path.join(privateUploadDir, path.basename(rows[0].customer_id_photo_path)));
+    });
+});
 
 app.get('/api/orders/:id/assembly/pdf', requireAuth, (req, res) => {
     if (!PdfPrinter) return res.status(500).send("PDF-motorn saknas!");
