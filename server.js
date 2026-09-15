@@ -621,11 +621,19 @@ app.put('/api/quotes/:id', requireAuth, requireStaff, (req, res) => {
 // nedan). Token är slumpad på samma sätt som sessions-tokens (32 slumpade bytes, hex) -
 // omöjlig att gissa, och unik i databasen.
 app.post('/api/quotes/:id/public-link', requireAuth, requireStaff, (req, res) => {
-    db.query('SELECT public_token FROM quotes WHERE id = ?', [req.params.id], (err, rows) => {
+    db.query('SELECT public_token, status FROM quotes WHERE id = ?', [req.params.id], (err, rows) => {
         if (err || !rows.length) return res.status(404).json({ message: 'Offerten hittades inte.' });
-        if (rows[0].public_token) return res.json({ token: rows[0].public_token });
+        // Att dela offerten med kunden är i praktiken samma sak som att skicka den - så en
+        // offert som fortfarande ligger som Utkast (t.ex. en nyss duplicerad offert) markeras
+        // automatiskt som "Offert" samtidigt, annars nekar /api/public/offer/:token att visa
+        // den ("inte redo att visas än") trots att säljaren just bad om att dela den.
+        const bumpStatus = rows[0].status === 'Utkast' ? ", status = 'Offert'" : '';
+        if (rows[0].public_token) {
+            if (!bumpStatus) return res.json({ token: rows[0].public_token });
+            return db.query(`UPDATE quotes SET status = 'Offert' WHERE id = ?`, [req.params.id], () => res.json({ token: rows[0].public_token }));
+        }
         const token = crypto.randomBytes(32).toString('hex');
-        db.query('UPDATE quotes SET public_token = ? WHERE id = ?', [token, req.params.id], (err2) => {
+        db.query(`UPDATE quotes SET public_token = ?${bumpStatus} WHERE id = ?`, [token, req.params.id], (err2) => {
             if (err2) return res.status(500).json({ message: err2.message });
             res.json({ token });
         });
