@@ -30,14 +30,14 @@
 
             <div id="publicCommentBox" class="hidden bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-gray-700 whitespace-pre-line"></div>
 
-            <div class="bg-white rounded-lg shadow-sm p-6 md:p-8">
-                <h3 class="font-semibold text-gray-800 mb-4">Innehåll</h3>
-                <ul id="itemsList" class="divide-y divide-gray-100"></ul>
-            </div>
-
             <div id="imageGalleryBox" class="hidden bg-white rounded-lg shadow-sm p-6 md:p-8">
                 <h3 class="font-semibold text-gray-800 mb-4">Bilder</h3>
                 <div id="imageGallery" class="grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-sm p-6 md:p-8">
+                <h3 class="font-semibold text-gray-800 mb-4">Innehåll</h3>
+                <ul id="itemsList" class="divide-y divide-gray-100"></ul>
             </div>
 
             <div class="bg-white rounded-lg shadow-sm p-6 md:p-8">
@@ -182,18 +182,98 @@
         function startAccept() {
             document.getElementById('decisionButtons').classList.add('opacity-40', 'pointer-events-none');
             document.getElementById('confirmArea').innerHTML = `
-                <div class="bg-green-50 border border-green-100 rounded-md p-4">
+                <div class="bg-green-50 border border-green-100 rounded-md p-4 space-y-4">
+                    <div>
+                        <h4 class="text-sm font-semibold text-gray-700 mb-2">Dina uppgifter</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <input id="accName" type="text" placeholder="Namn *" class="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-green-500 sm:col-span-2">
+                            <input id="accPersonnummer" type="text" placeholder="Personnummer (ÅÅÅÅMMDD-XXXX)" class="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-green-500">
+                            <input id="accEmail" type="email" placeholder="E-post *" class="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-green-500">
+                            <input id="accAddress" type="text" placeholder="Gatuadress" class="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-green-500 sm:col-span-2">
+                            <input id="accAddress2" type="text" placeholder="Gatuadress rad 2" class="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-green-500 sm:col-span-2">
+                            <input id="accApartment" type="text" placeholder="Lägenhetsnummer" class="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-green-500">
+                            <input id="accPhone" type="text" placeholder="Telefonnummer" class="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-green-500">
+                            <input id="accBrfOrgNr" type="text" placeholder="BRF:s org.nr" class="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-green-500">
+                            <input id="accPropertyDesignation" type="text" placeholder="Fastighetsbeteckning" class="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-green-500">
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-gray-700 mb-2">Foto på giltig legitimation *</h4>
+                        <p class="text-xs text-gray-500 mb-2">Sparas säkert och tas bara fram om det skulle uppstå en tvist om godkännandet.</p>
+                        <input id="accIdPhoto" type="file" accept="image/*" capture="environment" class="text-sm">
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-gray-700 mb-2">Signera med finger/mus *</h4>
+                        <canvas id="sigCanvas" class="w-full h-40 bg-white border border-gray-300 rounded" style="touch-action:none;"></canvas>
+                        <button type="button" onclick="clearSignature()" class="text-xs text-gray-500 mt-1 underline">Rensa signatur</button>
+                    </div>
                     <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
                         <input type="checkbox" id="acceptCheckbox" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-green-600">
-                        Jag har läst igenom offerten ovan och godkänner den.
+                        Jag har läst igenom offerten ovan och bekräftar att mina uppgifter, foto och signatur är korrekta.
                     </label>
-                    <div class="flex gap-2 mt-3">
+                    <div class="flex gap-2">
                         <button onclick="confirmAccept()" class="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-md text-sm transition">Bekräfta godkännande</button>
                         <button onclick="renderResponseCard(offerData)" class="text-gray-500 text-sm px-3">Avbryt</button>
                     </div>
-                    <p id="acceptError" class="hidden text-xs text-red-500 mt-2"></p>
+                    <p id="acceptError" class="hidden text-xs text-red-500"></p>
                 </div>
             `;
+            const c = offerData.customer || {};
+            document.getElementById('accName').value = c.name || '';
+            document.getElementById('accPersonnummer').value = c.personnummer || '';
+            document.getElementById('accEmail').value = c.email || '';
+            document.getElementById('accAddress').value = c.address || '';
+            document.getElementById('accAddress2').value = c.address2 || '';
+            document.getElementById('accApartment').value = c.apartment_number || '';
+            document.getElementById('accPhone').value = c.phone || '';
+            document.getElementById('accBrfOrgNr').value = c.brf_org_nr || '';
+            document.getElementById('accPropertyDesignation').value = c.property_designation || '';
+            initSignaturePad();
+        }
+
+        let sigCtx = null, sigHasInk = false, sigDrawing = false;
+        function initSignaturePad() {
+            const canvas = document.getElementById('sigCanvas');
+            const ratio = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * ratio;
+            canvas.height = rect.height * ratio;
+            sigCtx = canvas.getContext('2d');
+            sigCtx.scale(ratio, ratio);
+            sigCtx.lineWidth = 2;
+            sigCtx.lineCap = 'round';
+            sigCtx.strokeStyle = '#1f2937';
+            sigHasInk = false;
+
+            const pos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+            canvas.addEventListener('pointerdown', e => {
+                sigDrawing = true;
+                const p = pos(e);
+                sigCtx.beginPath();
+                sigCtx.moveTo(p.x, p.y);
+                canvas.setPointerCapture(e.pointerId);
+            });
+            canvas.addEventListener('pointermove', e => {
+                if (!sigDrawing) return;
+                const p = pos(e);
+                sigCtx.lineTo(p.x, p.y);
+                sigCtx.stroke();
+                sigHasInk = true;
+            });
+            canvas.addEventListener('pointerup', () => sigDrawing = false);
+            canvas.addEventListener('pointerleave', () => sigDrawing = false);
+        }
+
+        function clearSignature() {
+            const canvas = document.getElementById('sigCanvas');
+            sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+            sigHasInk = false;
+        }
+
+        function showAcceptError(msg) {
+            const err = document.getElementById('acceptError');
+            err.innerText = msg;
+            err.classList.remove('hidden');
         }
 
         function startDecline() {
@@ -212,20 +292,38 @@
         }
 
         async function confirmAccept() {
-            if (!document.getElementById('acceptCheckbox').checked) {
-                const err = document.getElementById('acceptError');
-                err.innerText = 'Kryssa i rutan för att bekräfta.';
-                err.classList.remove('hidden');
-                return;
-            }
+            const name = document.getElementById('accName').value.trim();
+            const email = document.getElementById('accEmail').value.trim();
+            const idPhotoInput = document.getElementById('accIdPhoto');
+
+            if (!name) return showAcceptError('Fyll i ditt namn.');
+            if (!email) return showAcceptError('Fyll i din e-postadress.');
+            if (!idPhotoInput.files || idPhotoInput.files.length === 0) return showAcceptError('Ladda upp/ta ett foto på din legitimation.');
+            if (!sigHasInk) return showAcceptError('Signera i rutan ovan innan du bekräftar.');
+            if (!document.getElementById('acceptCheckbox').checked) return showAcceptError('Kryssa i rutan för att bekräfta.');
+
+            const canvas = document.getElementById('sigCanvas');
+            const formData = new FormData();
+            formData.append('name', name);
+            formData.append('email', email);
+            formData.append('personnummer', document.getElementById('accPersonnummer').value.trim());
+            formData.append('address', document.getElementById('accAddress').value.trim());
+            formData.append('address2', document.getElementById('accAddress2').value.trim());
+            formData.append('apartment_number', document.getElementById('accApartment').value.trim());
+            formData.append('phone', document.getElementById('accPhone').value.trim());
+            formData.append('brf_org_nr', document.getElementById('accBrfOrgNr').value.trim());
+            formData.append('property_designation', document.getElementById('accPropertyDesignation').value.trim());
+            formData.append('signature', canvas.toDataURL('image/png'));
+            formData.append('id_photo', idPhotoInput.files[0]);
+
             try {
-                const res = await fetch(`/api/public/offer/${token}/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                const res = await fetch(`/api/public/offer/${token}/accept`, { method: 'POST', body: formData });
                 const data = await res.json();
-                if (!res.ok) { const err = document.getElementById('acceptError'); err.innerText = data.message; err.classList.remove('hidden'); return; }
+                if (!res.ok) return showAcceptError(data.message);
                 offerData.customer_response = 'accepted';
                 offerData.customer_response_at = new Date().toISOString();
                 renderResponseCard(offerData);
-            } catch (e) { alert('Kunde inte skicka ditt godkännande. Försök igen.'); }
+            } catch (e) { showAcceptError('Kunde inte skicka ditt godkännande. Försök igen.'); }
         }
 
         async function confirmDecline() {
