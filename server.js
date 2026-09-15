@@ -1252,9 +1252,11 @@ app.get('/api/public/offer/:token', (req, res) => {
                     customer_name: order.customer_name,
                     order_number: order.order_number || null,
                     public_comment: order.public_comment || '',
-                    // Exakt samma källa/prioritering som "KOMMENTAR / ÖVRIGA VILLKOR" i PDF:en
-                    // (se generateQuotePdf) - så köpvillkoren bara behöver ändras på ett ställe.
-                    terms_text: order.public_comment || company.agreement_text || '',
+                    // Alltid företagets faktiska köpvillkor (Företagsinfo) - INTE samma fallback-logik
+                    // som PDF:ens "ÖVRIGA VILLKOR" (som kan bytas ut mot offertens egen kommentar),
+                    // eftersom den kommentaren redan visas separat ovanför (public_comment) och annars
+                    // skulle kunna dölja de riktiga villkoren helt utan att kunden märker det.
+                    terms_text: company.agreement_text || '',
                     // Förifyllnadsvärden till godkännandeformuläret - kundens egna, redan kända
                     // uppgifter. Skickas alltid med (oavsett can_respond) så kunden slipper skriva
                     // om dem, men kunden kan ändra/komplettera dem innan de signerar.
