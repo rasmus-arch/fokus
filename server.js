@@ -1242,7 +1242,7 @@ app.get('/api/public/offer/:token', (req, res) => {
         if (order.quote_data) {
             try { const parsed = typeof order.quote_data === 'string' ? JSON.parse(order.quote_data) : order.quote_data; if (parsed.quoteCart) cart = parsed.quoteCart; } catch (e) {}
         }
-        db.query('SELECT company_name, logo_url, pdf_color_primary, pdf_color_accent, org_number FROM company_settings WHERE id = 1', (err2, companyRows) => {
+        db.query('SELECT company_name, logo_url, pdf_color_primary, pdf_color_accent, org_number, agreement_text FROM company_settings WHERE id = 1', (err2, companyRows) => {
             db.query("SELECT file_url, file_name FROM order_files WHERE quote_id = ? AND file_type = 'image' ORDER BY created_at DESC", [order.id], (err3, imageRows) => {
                 const company = (companyRows && companyRows[0]) || {};
                 const totals = computeCustomerFacingTotals(order, cart);
@@ -1252,6 +1252,9 @@ app.get('/api/public/offer/:token', (req, res) => {
                     customer_name: order.customer_name,
                     order_number: order.order_number || null,
                     public_comment: order.public_comment || '',
+                    // Exakt samma källa/prioritering som "KOMMENTAR / ÖVRIGA VILLKOR" i PDF:en
+                    // (se generateQuotePdf) - så köpvillkoren bara behöver ändras på ett ställe.
+                    terms_text: order.public_comment || company.agreement_text || '',
                     // Förifyllnadsvärden till godkännandeformuläret - kundens egna, redan kända
                     // uppgifter. Skickas alltid med (oavsett can_respond) så kunden slipper skriva
                     // om dem, men kunden kan ändra/komplettera dem innan de signerar.
