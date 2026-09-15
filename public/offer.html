@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Din offert</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans min-h-screen p-4 md:p-8">
+
+    <div class="max-w-2xl mx-auto">
+        <div id="loadingState" class="bg-white rounded-lg shadow-sm p-10 text-center text-gray-400">
+            <i class="fas fa-circle-notch fa-spin text-2xl mb-3"></i>
+            <p>Laddar offert...</p>
+        </div>
+
+        <div id="errorState" class="hidden bg-white rounded-lg shadow-sm p-10 text-center">
+            <i class="fas fa-triangle-exclamation text-3xl text-amber-500 mb-3"></i>
+            <p id="errorMessage" class="text-gray-600"></p>
+        </div>
+
+        <div id="offerContent" class="hidden space-y-4">
+            <div class="bg-white rounded-lg shadow-sm p-6 md:p-8 text-center border-t-4" id="headerCard">
+                <img id="companyLogo" class="h-12 mx-auto mb-3 object-contain hidden">
+                <h2 id="companyName" class="text-lg font-semibold text-gray-700"></h2>
+                <h1 id="quoteTitle" class="text-2xl font-bold text-gray-900 mt-2">Din offert</h1>
+                <p id="customerLine" class="text-sm text-gray-500 mt-1"></p>
+            </div>
+
+            <div id="publicCommentBox" class="hidden bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-gray-700 whitespace-pre-line"></div>
+
+            <div class="bg-white rounded-lg shadow-sm p-6 md:p-8">
+                <h3 class="font-semibold text-gray-800 mb-4">Innehåll</h3>
+                <ul id="itemsList" class="divide-y divide-gray-100"></ul>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-sm p-6 md:p-8">
+                <h3 class="font-semibold text-gray-800 mb-4">Sammanställning</h3>
+                <div id="totalsBox" class="space-y-1.5 text-sm"></div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-sm p-6 md:p-8 text-center">
+                <a id="pdfLink" href="#" target="_blank" class="inline-flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-5 py-2.5 rounded-md text-sm font-medium transition">
+                    <i class="fas fa-file-pdf mr-2 text-red-400"></i> Visa som PDF
+                </a>
+            </div>
+
+            <div id="responseCard" class="bg-white rounded-lg shadow-sm p-6 md:p-8"></div>
+        </div>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(location.search);
+        const token = params.get('token');
+        let offerData = null;
+
+        function krText(s) { return s; }
+
+        async function loadOffer() {
+            if (!token) return showError('Ingen länk angiven.');
+            try {
+                const res = await fetch(`/api/public/offer/${token}`);
+                const data = await res.json();
+                if (!res.ok) return showError(data.message || 'Kunde inte ladda offerten.');
+                offerData = data;
+                render(data);
+            } catch (e) {
+                showError('Kunde inte ansluta till servern. Kontrollera din internetanslutning och försök igen.');
+            }
+        }
+
+        function showError(msg) {
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('errorMessage').innerText = msg;
+            document.getElementById('errorState').classList.remove('hidden');
+        }
+
+        function render(data) {
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('offerContent').classList.remove('hidden');
+
+            document.getElementById('headerCard').style.borderColor = data.company.color_primary;
+            if (data.company.logo_url) {
+                const img = document.getElementById('companyLogo');
+                img.src = data.company.logo_url;
+                img.classList.remove('hidden');
+            } else {
+                document.getElementById('companyName').innerText = data.company.name;
+            }
+            document.getElementById('quoteTitle').innerText = data.order_number ? `Order #${data.order_number}` : 'Din offert';
+            document.getElementById('customerLine').innerText = `${data.quote_name} · ${data.customer_name}`;
+
+            if (data.public_comment) {
+                const box = document.getElementById('publicCommentBox');
+                box.innerText = data.public_comment;
+                box.classList.remove('hidden');
+            }
+
+            const list = document.getElementById('itemsList');
+            list.innerHTML = data.items.length === 0
+                ? '<li class="py-3 text-sm text-gray-400 italic">Inga rader att visa.</li>'
+                : data.items.map(i => `
+                    <li class="py-3 flex items-center gap-3">
+                        ${i.imageUrl ? `<img src="${i.imageUrl}" class="w-12 h-12 object-cover rounded border border-gray-200 shrink-0">` : '<div class="w-12 h-12 rounded bg-gray-50 border border-gray-200 shrink-0 flex items-center justify-center text-gray-300"><i class="fas fa-image"></i></div>'}
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium text-gray-800 truncate">${i.name}</p>
+                            <p class="text-xs text-gray-400">${i.qty} st</p>
+                        </div>
+                    </li>
+                `).join('');
+
+            const t = data.totals;
+            const totalsBox = document.getElementById('totalsBox');
+            let rows = `
+                <div class="flex justify-between text-gray-500"><span>Produktkostnad innan rabatt</span><span>${t.material_full_price}</span></div>
+                <div class="flex justify-between text-gray-500"><span>Rabatt</span><span>- ${t.discount}</span></div>
+                <div class="flex justify-between text-gray-700 font-medium border-t pt-1.5 mt-1"><span>Summa produktkostnad</span><span>${t.material_inc_vat}</span></div>`;
+            if (t.non_rot_services !== '0 kr') rows += `<div class="flex justify-between text-gray-500"><span>Tjänster, ej ROT</span><span>${t.non_rot_services}</span></div>`;
+            rows += `<div class="flex justify-between text-gray-500"><span>Monteringskostnad</span><span>${t.rot_eligible_install}</span></div>`;
+            if (t.rot_deduction) rows += `<div class="flex justify-between text-green-600 font-medium"><span>ROT-avdrag (30%)</span><span>- ${t.rot_deduction}</span></div>`;
+            rows += `<div class="flex justify-between text-lg font-bold text-gray-900 border-t pt-2 mt-2"><span>Att betala</span><span>${t.final_to_pay}</span></div>`;
+            totalsBox.innerHTML = rows;
+
+            document.getElementById('pdfLink').href = `/api/public/offer/${token}/pdf`;
+
+            renderResponseCard(data);
+        }
+
+        function renderResponseCard(data) {
+            const card = document.getElementById('responseCard');
+            if (data.customer_response === 'accepted') {
+                card.innerHTML = `<div class="text-center text-green-700"><i class="fas fa-circle-check text-3xl mb-2"></i><p class="font-semibold">Du godkände den här offerten</p><p class="text-xs text-gray-400 mt-1">${new Date(data.customer_response_at).toLocaleString('sv-SE')}</p></div>`;
+                return;
+            }
+            if (data.customer_response === 'declined') {
+                card.innerHTML = `<div class="text-center text-gray-600"><i class="fas fa-circle-xmark text-3xl mb-2 text-gray-400"></i><p class="font-semibold">Du avböjde den här offerten</p><p class="text-xs text-gray-400 mt-1">${new Date(data.customer_response_at).toLocaleString('sv-SE')}</p></div>`;
+                return;
+            }
+            if (!data.can_respond) {
+                card.innerHTML = `<p class="text-center text-sm text-gray-400 italic">Den här offerten går inte längre att svara på via länken.</p>`;
+                return;
+            }
+            card.innerHTML = `
+                <div id="decisionButtons" class="flex flex-col sm:flex-row gap-3">
+                    <button onclick="startAccept()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-3 rounded-md transition flex items-center justify-center"><i class="fas fa-check mr-2"></i> Godkänn offert</button>
+                    <button onclick="startDecline()" class="flex-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 font-medium py-3 rounded-md transition flex items-center justify-center"><i class="fas fa-times mr-2"></i> Avböj offert</button>
+                </div>
+                <div id="confirmArea" class="mt-4"></div>
+            `;
+        }
+
+        function startAccept() {
+            document.getElementById('decisionButtons').classList.add('opacity-40', 'pointer-events-none');
+            document.getElementById('confirmArea').innerHTML = `
+                <div class="bg-green-50 border border-green-100 rounded-md p-4">
+                    <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input type="checkbox" id="acceptCheckbox" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-green-600">
+                        Jag har läst igenom offerten ovan och godkänner den.
+                    </label>
+                    <div class="flex gap-2 mt-3">
+                        <button onclick="confirmAccept()" class="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-md text-sm transition">Bekräfta godkännande</button>
+                        <button onclick="renderResponseCard(offerData)" class="text-gray-500 text-sm px-3">Avbryt</button>
+                    </div>
+                    <p id="acceptError" class="hidden text-xs text-red-500 mt-2"></p>
+                </div>
+            `;
+        }
+
+        function startDecline() {
+            document.getElementById('decisionButtons').classList.add('opacity-40', 'pointer-events-none');
+            document.getElementById('confirmArea').innerHTML = `
+                <div class="bg-gray-50 border border-gray-200 rounded-md p-4">
+                    <label class="block text-xs text-gray-500 uppercase font-semibold mb-1">Anledning (valfritt)</label>
+                    <textarea id="declineReason" rows="2" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-gray-500"></textarea>
+                    <div class="flex gap-2 mt-3">
+                        <button onclick="confirmDecline()" class="bg-gray-700 hover:bg-gray-800 text-white font-medium px-4 py-2 rounded-md text-sm transition">Bekräfta avböjande</button>
+                        <button onclick="renderResponseCard(offerData)" class="text-gray-500 text-sm px-3">Avbryt</button>
+                    </div>
+                    <p id="declineError" class="hidden text-xs text-red-500 mt-2"></p>
+                </div>
+            `;
+        }
+
+        async function confirmAccept() {
+            if (!document.getElementById('acceptCheckbox').checked) {
+                const err = document.getElementById('acceptError');
+                err.innerText = 'Kryssa i rutan för att bekräfta.';
+                err.classList.remove('hidden');
+                return;
+            }
+            try {
+                const res = await fetch(`/api/public/offer/${token}/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                const data = await res.json();
+                if (!res.ok) { const err = document.getElementById('acceptError'); err.innerText = data.message; err.classList.remove('hidden'); return; }
+                offerData.customer_response = 'accepted';
+                offerData.customer_response_at = new Date().toISOString();
+                renderResponseCard(offerData);
+            } catch (e) { alert('Kunde inte skicka ditt godkännande. Försök igen.'); }
+        }
+
+        async function confirmDecline() {
+            try {
+                const res = await fetch(`/api/public/offer/${token}/decline`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: document.getElementById('declineReason').value }) });
+                const data = await res.json();
+                if (!res.ok) { const err = document.getElementById('declineError'); err.innerText = data.message; err.classList.remove('hidden'); return; }
+                offerData.customer_response = 'declined';
+                offerData.customer_response_at = new Date().toISOString();
+                renderResponseCard(offerData);
+            } catch (e) { alert('Kunde inte skicka ditt svar. Försök igen.'); }
+        }
+
+        loadOffer();
+    </script>
+</body>
+</html>

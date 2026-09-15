@@ -24,14 +24,33 @@
                 <h2 class="text-lg md:text-xl font-semibold text-gray-800">Offertbyggare</h2>
                 <p class="text-xs md:text-sm text-gray-500"><span class="font-bold text-blue-600" id="headerQuoteName">Laddar...</span></p>
                 <p class="text-xs md:text-sm text-gray-500 mt-0.5">Kund: <span id="headerCustomerName" class="font-medium text-gray-700">-</span> <button type="button" onclick="editCurrentCustomer()" class="ml-1 text-blue-600 hover:text-blue-800" title="Ändra kund"><i class="fas fa-edit"></i></button></p>
+                <p id="customerResponseBadge" class="hidden text-xs font-semibold mt-1"></p>
             </div>
             <div class="flex w-full sm:w-auto gap-3 items-center">
                 <span id="saveStatus" class="text-xs text-gray-400 italic whitespace-nowrap"></span>
+                <button id="btnShareLink" onclick="openShareLinkModal()" class="hidden flex-1 sm:flex-none bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-md font-medium transition shadow-sm flex items-center justify-center text-sm">
+                    <i class="fas fa-link mr-2 text-blue-500"></i> Dela med kund
+                </button>
                 <a id="btnQuotePdf" href="#" target="_blank" onclick="saveThenOpenPdf(event)" class="hidden flex-1 sm:flex-none bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-md font-medium transition shadow-sm flex items-center justify-center text-sm">
                     <i class="fas fa-file-pdf mr-2 text-red-400"></i> Skapa PDF
                 </a>
             </div>
         </header>
+
+        <div id="shareLinkModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-4">
+            <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg p-5">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-gray-800"><i class="fas fa-link text-blue-500 mr-2"></i> Dela offert med kund</h3>
+                    <button onclick="document.getElementById('shareLinkModal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700"><i class="fas fa-times"></i></button>
+                </div>
+                <p class="text-xs text-gray-500 mb-3">Kunden kan öppna länken utan att logga in, bläddra igenom offerten och godkänna eller avböja den direkt. Dela aldrig länken offentligt - vem som helst med den kommer åt just den här offerten.</p>
+                <div class="flex gap-2">
+                    <input type="text" id="shareLinkUrl" readonly class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-xs font-mono bg-gray-50 text-gray-600">
+                    <button onclick="copyShareLink()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap"><i class="fas fa-copy mr-1"></i> <span id="copyShareLinkBtnText">Kopiera</span></button>
+                </div>
+                <button onclick="regenerateShareLink()" class="text-[11px] text-red-500 hover:text-red-700 mt-3"><i class="fas fa-rotate mr-1"></i> Ogiltigförklara och skapa ny länk</button>
+            </div>
+        </div>
 
         <div class="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
             <div class="w-full lg:w-3/5 bg-gray-50 flex flex-col border-b lg:border-b-0 lg:border-r border-gray-200 h-[50vh] lg:h-full overflow-hidden">
@@ -1800,11 +1819,57 @@
                         }
                     }
                     const pdfBtn = document.getElementById('btnQuotePdf'); pdfBtn.href = apiLinkWithToken(`/api/quotes/${quoteId}/pdf`); pdfBtn.classList.remove('hidden');
+                    document.getElementById('btnShareLink').classList.remove('hidden');
+                    renderCustomerResponseBadge(data.customer_response, data.customer_response_at, data.customer_decline_reason);
                 }
             } catch (e) {}
             renderConditions(); renderCart();
             quoteLoaded = true;
             document.getElementById('saveStatus').innerText = '';
+        }
+
+        function renderCustomerResponseBadge(response, at, declineReason) {
+            const badge = document.getElementById('customerResponseBadge');
+            if (!response) { badge.classList.add('hidden'); return; }
+            const dateStr = at ? new Date(at).toLocaleString('sv-SE') : '';
+            if (response === 'accepted') {
+                badge.className = 'text-xs font-semibold mt-1 text-green-700';
+                badge.innerHTML = `<i class="fas fa-circle-check mr-1"></i> Kunden godkände offerten via länk ${dateStr}`;
+            } else {
+                badge.className = 'text-xs font-semibold mt-1 text-gray-500';
+                badge.innerHTML = `<i class="fas fa-circle-xmark mr-1"></i> Kunden avböjde offerten via länk ${dateStr}${declineReason ? ` - "${declineReason}"` : ''}`;
+            }
+            badge.classList.remove('hidden');
+        }
+
+        async function openShareLinkModal() {
+            if (!quoteId) return;
+            try {
+                const res = await fetch(`/api/quotes/${quoteId}/public-link`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) return alert(data.message || 'Kunde inte skapa länken.');
+                document.getElementById('shareLinkUrl').value = `${location.origin}/offer.html?token=${data.token}`;
+                document.getElementById('shareLinkModal').classList.remove('hidden');
+            } catch (e) { alert('Kunde inte skapa länken.'); }
+        }
+
+        function copyShareLink() {
+            const input = document.getElementById('shareLinkUrl');
+            navigator.clipboard.writeText(input.value);
+            const btnText = document.getElementById('copyShareLinkBtnText');
+            const original = btnText.innerText;
+            btnText.innerText = 'Kopierad!';
+            setTimeout(() => { btnText.innerText = original; }, 1500);
+        }
+
+        async function regenerateShareLink() {
+            if (!confirm('Den gamla länken slutar fungera direkt. Kunden måste få den nya länken på nytt. Fortsätt?')) return;
+            try {
+                const res = await fetch(`/api/quotes/${quoteId}/public-link/regenerate`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) return alert(data.message || 'Kunde inte skapa ny länk.');
+                document.getElementById('shareLinkUrl').value = `${location.origin}/offer.html?token=${data.token}`;
+            } catch (e) { alert('Kunde inte skapa ny länk.'); }
         }
 
         // Räknar om costExVat på offertens rader utifrån dagens inköpspriser (för offerter som
