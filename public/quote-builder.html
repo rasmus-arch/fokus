@@ -709,6 +709,9 @@
         // villkor och startavgifter), används av openInstallBreakdownModal() för att visa
         // monteringskostnaden fördelad per rad utan att duplicera beräkningslogiken.
         let installBreakdownRows = [];
+        // Fylls i av renderCart() - de produktrader som saknar inköpspris och därför exkluderas
+        // från marginalberäkningen, används av openExcludedRowsModal().
+        let excludedRows = [];
         let currentCustomer = null;
         let coverPageData = { enabled: false, heroImage: null, handleImage: null, modelImage: null, colorImage: null };
         let ctConfig = { materials: [], colors: [], prices: [], services: [], edges: [] };
@@ -2154,6 +2157,7 @@
             
             let totalMaterialBeforeGlobalDiscount = 0, totalRotInstallIncVat = 0, totalNonRotInstallIncVat = 0, totalCompanyCut = 0, totalInstallerCut = 0, totalMaterialCostExVat = 0, marginEligibleMaterialRevenue = 0, excludedMaterialRevenueIncVat = 0, excludedRowCount = 0;
             installBreakdownRows = [];
+            excludedRows = [];
 
             // Kompakt, grupperad radvy istället för ett kort per rad - så man ser fler av
             // (ibland närmare 50) raderna samtidigt utan att scrolla förbi varje enskild rad.
@@ -2171,6 +2175,7 @@
                 } else {
                     excludedMaterialRevenueIncVat += rowMaterialTotal;
                     excludedRowCount++;
+                    excludedRows.push({ name: item.name, sku: item.sku, revenue: rowMaterialTotal });
                 }
                 const entry = { item, index, rowMaterialTotal, rowInstallTotal };
                 (item.componentType ? frontEntries : otherEntries).push(entry);
@@ -2274,7 +2279,7 @@
             document.getElementById('sumMargin').innerHTML = marginBadgeHtml(marginPercent, profitKr);
             const marginNoteEl = document.getElementById('sumMarginNote');
             marginNoteEl.innerHTML = excludedRowCount > 0
-                ? `<i class="fas fa-triangle-exclamation"></i> ${excludedRowCount} rad${excludedRowCount === 1 ? '' : 'er'} (${excludedMaterialRevenueIncVat.toLocaleString('sv-SE', {maximumFractionDigits:0})} kr) saknar inköpspris och räknas ej med i marginalen${quoteId ? ' <button onclick="recalcQuoteCosts()" class="underline hover:text-amber-800">Uppdatera kostnadsdata</button>' : ''}`
+                ? `<i class="fas fa-triangle-exclamation"></i> ${excludedRowCount} rad${excludedRowCount === 1 ? '' : 'er'} (${excludedMaterialRevenueIncVat.toLocaleString('sv-SE', {maximumFractionDigits:0})} kr) saknar inköpspris och räknas ej med i marginalen - <button onclick="openExcludedRowsModal()" class="underline hover:text-amber-800">Visa vilka</button>${quoteId ? ' <button onclick="recalcQuoteCosts()" class="underline hover:text-amber-800">Uppdatera kostnadsdata</button>' : ''}`
                 : '';
 
             // Gångjärn: en lucka under 1000mm höjd behöver 2 gångjärn, 1000-1900mm behöver 3,
@@ -2343,6 +2348,35 @@
                             <td class="py-1.5 pl-2 text-right text-purple-700">${kr(totalInstaller)}</td>
                         </tr></tfoot>
                     </table>`}
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        // Visar vilka rader som saknar inköpspris och därför exkluderas från marginalberäkningen
+        // (excludedRows fylls i av renderCart() ovan) - så man slipper leta rätt på dem manuellt.
+        function openExcludedRowsModal() {
+            const kr = n => n.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr';
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-center justify-center p-4';
+            modal.onclick = e => { if (e.target === modal) modal.remove(); };
+            modal.innerHTML = `
+                <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-semibold text-gray-800"><i class="fas fa-triangle-exclamation text-amber-500 mr-2"></i> Rader utan inköpspris</h3>
+                        <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-3">Dessa rader räknas inte med i marginalberäkningen eftersom inköpspris saknas.</p>
+                    ${excludedRows.length === 0 ? '<p class="text-sm text-gray-400 italic">Inga rader saknar inköpspris.</p>' : `
+                    <ul class="divide-y divide-gray-100 text-xs">
+                        ${excludedRows.map(r => `
+                            <li class="py-1.5 flex justify-between gap-2">
+                                <span class="text-gray-700 truncate" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span>
+                                <span class="text-gray-400 font-mono shrink-0">${escapeHtml(r.sku || '')}</span>
+                                <span class="text-gray-600 font-semibold shrink-0">${kr(r.revenue)}</span>
+                            </li>
+                        `).join('')}
+                    </ul>`}
                 </div>
             `;
             document.body.appendChild(modal);
