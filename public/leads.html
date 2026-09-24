@@ -378,7 +378,7 @@
                 list.innerHTML += `
                     <div class="bg-white border border-gray-200 rounded p-3 text-sm shadow-sm mb-2">
                         <div class="flex justify-between items-center mb-2">
-                            <span class="font-semibold text-gray-800 truncate pr-2">${q.quote_name}</span>
+                            <span class="font-semibold text-gray-800 truncate pr-2">${escapeHtml(q.quote_name)}</span>
                             <span class="text-[10px] font-bold px-2 py-0.5 rounded uppercase shrink-0 ${q.status === 'Order' ? 'bg-green-100 text-green-800' : (q.status === 'Förlorad offert' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800')}">${q.status}</span>
                         </div>
                         <button onclick="window.location.href='/quote-builder.html?id=${q.id}'" class="w-full bg-blue-50 border border-blue-200 text-blue-700 py-1.5 rounded text-xs font-medium hover:bg-blue-100 transition">Öppna Offert</button>

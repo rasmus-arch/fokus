@@ -67,6 +67,19 @@
 
         function krText(s) { return s; }
 
+        // Enkel HTML-escaping - samma som escapeHtml() i common.js (som inte laddas på den här
+        // publika, oinloggade sidan) - för värden som kan innehålla text satt av säljaren
+        // (produktnamn, filnamn på uppladdade bilder) och interpoleras i innerHTML-mallar.
+        function escapeHtml(val) {
+            if (val === null || val === undefined) return '';
+            return String(val)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         async function loadOffer() {
             if (!token) return showError('Ingen länk angiven.');
             try {
@@ -112,9 +125,9 @@
                 ? '<li class="py-3 text-sm text-gray-400 italic">Inga rader att visa.</li>'
                 : data.items.map(i => `
                     <li class="py-3 flex items-center gap-3">
-                        ${i.imageUrl ? `<img src="${i.imageUrl}" class="w-12 h-12 object-cover rounded border border-gray-200 shrink-0">` : '<div class="w-12 h-12 rounded bg-gray-50 border border-gray-200 shrink-0 flex items-center justify-center text-gray-300"><i class="fas fa-image"></i></div>'}
+                        ${i.imageUrl ? `<img src="${escapeHtml(i.imageUrl)}" class="w-12 h-12 object-cover rounded border border-gray-200 shrink-0">` : '<div class="w-12 h-12 rounded bg-gray-50 border border-gray-200 shrink-0 flex items-center justify-center text-gray-300"><i class="fas fa-image"></i></div>'}
                         <div class="min-w-0 flex-1">
-                            <p class="text-sm font-medium text-gray-800 truncate">${i.name}</p>
+                            <p class="text-sm font-medium text-gray-800 truncate">${escapeHtml(i.name)}</p>
                             <p class="text-xs text-gray-400">${i.qty} st</p>
                         </div>
                     </li>
@@ -138,7 +151,7 @@
                 document.getElementById('imageGalleryBox').classList.remove('hidden');
                 document.getElementById('imageGallery').innerHTML = data.images.map((img, idx) => `
                     <button onclick="openLightbox(${idx})" class="aspect-square rounded overflow-hidden border border-gray-200 hover:opacity-80 transition">
-                        <img src="${img.url}" alt="${img.name || ''}" class="w-full h-full object-cover">
+                        <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.name) || ''}" class="w-full h-full object-cover">
                     </button>
                 `).join('');
             }

@@ -226,6 +226,17 @@ function escapeHtml(val) {
         .replace(/'/g, '&#39;');
 }
 
+// Samma som escapeHtml, men för värden som interpoleras i EN SINGEL-CITERAD JS-strängliteral
+// inuti ett onclick="..."-attribut (t.ex. onclick="deleteX(${id}, '${escapeJsAttr(name)}')") -
+// escapar först för JS-strängkontexten (\ och '), sedan för HTML-attributkontexten, så namn som
+// innehåller " eller < aldrig kan bryta sig ur attributet och namn med ' aldrig kan avsluta
+// JS-strängen i förtid. Utan detta kunde ett kundnamn/offertnamn med citationstecken injicera
+// godtycklig HTML/JS i sidan för nästa person som öppnar listan.
+function escapeJsAttr(val) {
+    if (val === null || val === undefined) return '';
+    return escapeHtml(String(val).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
+
 // ==========================================
 // KUNDLÄGE - global på/av-knapp (i sidomenyn) som döljer ALLA priser i gränssnittet, tänkt
 // för att kunna vända skärmen mot kunden (t.ex. i offertbyggaren) utan att visa belopp.
