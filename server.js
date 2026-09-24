@@ -72,18 +72,59 @@ function dbResult(res, successMessage, extra) {
     };
 }
 
+// Enkel rate limiting mot utbrytning av lösenord vid inloggning, helt i minnet (ingen ny
+// npm-dependency att installera på kundernas produktionsservrar, som uppdateras manuellt utan
+// `npm install`). Spärrar per e-post (skyddar ett enskilt konto mot riktad gissning) OCH per
+// IP (skyddar mot att en enda källa sprayar många olika konton) oberoende av varandra. IP-gränsen
+// sätts betydligt högre eftersom flera anställda ofta delar samma kontors-IP - annars kunde en
+// enda kollegas felstavade lösenord låsa ute hela kontoret. Nollställs vid omstart av servern -
+// fortfarande ett stort steg upp från inget skydd alls.
+const LOGIN_MAX_ATTEMPTS_PER_EMAIL = 8;
+const LOGIN_MAX_ATTEMPTS_PER_IP = 40;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15 minuter
+const loginAttemptsByEmail = new Map();
+const loginAttemptsByIp = new Map();
+function isLoginLocked(map, key, maxAttempts) {
+    const entry = map.get(key);
+    if (!entry) return false;
+    if (Date.now() - entry.firstAttemptAt > LOGIN_WINDOW_MS) { map.delete(key); return false; }
+    return entry.count >= maxAttempts;
+}
+function recordFailedLogin(map, key) {
+    const entry = map.get(key);
+    if (!entry || Date.now() - entry.firstAttemptAt > LOGIN_WINDOW_MS) map.set(key, { count: 1, firstAttemptAt: Date.now() });
+    else entry.count++;
+}
+setInterval(() => {
+    const now = Date.now();
+    for (const map of [loginAttemptsByEmail, loginAttemptsByIp]) {
+        for (const [key, entry] of map) { if (now - entry.firstAttemptAt > LOGIN_WINDOW_MS) map.delete(key); }
+    }
+}, 10 * 60 * 1000); // städa bort gamla, förfallna spärrar var 10:e minut så minnet inte växer obegränsat
+
 // ANVÄNDARE & LEADS & KUNDER
 app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
+    const emailKey = (email || '').trim().toLowerCase();
+    const ipKey = req.ip || 'okänd-ip';
+    if (isLoginLocked(loginAttemptsByEmail, emailKey, LOGIN_MAX_ATTEMPTS_PER_EMAIL) || isLoginLocked(loginAttemptsByIp, ipKey, LOGIN_MAX_ATTEMPTS_PER_IP)) {
+        return res.status(429).json({ message: 'För många felaktiga inloggningsförsök. Försök igen om en stund.' });
+    }
     db.query('SELECT * FROM users WHERE email = ?', [email], (err, results) => {
         if (err) return res.status(500).json({ message: 'Serverfel' });
         if (results.length > 0 && verifyPassword(password, results[0].password)) {
+            loginAttemptsByEmail.delete(emailKey);
+            loginAttemptsByIp.delete(ipKey);
             const user = { id: results[0].id, name: results[0].name, role: results[0].role };
             createSession(user, (sessErr, token) => {
                 if (sessErr) return res.status(500).json({ message: 'Kunde inte skapa session.' });
                 res.json({ message: 'Inloggning lyckades', role: user.role, id: user.id, name: user.name, token });
             });
-        } else res.status(401).json({ message: 'Fel e-post eller lösenord.' });
+        } else {
+            recordFailedLogin(loginAttemptsByEmail, emailKey);
+            recordFailedLogin(loginAttemptsByIp, ipKey);
+            res.status(401).json({ message: 'Fel e-post eller lösenord.' });
+        }
     });
 });
 app.post('/api/logout', (req, res) => {
