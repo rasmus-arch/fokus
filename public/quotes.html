@@ -135,16 +135,16 @@
 
                 grid.innerHTML += `
                     <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 hover:shadow-md transition flex flex-col justify-between h-full relative">
-                        <button onclick="deleteQuote(${q.id}, '${(q.quote_name || '').replace(/'/g, "\\'")}')" title="Ta bort" class="absolute top-3 right-3 text-gray-300 hover:text-red-500 transition"><i class="fas fa-trash"></i></button>
+                        <button onclick="deleteQuote(${q.id}, '${escapeJsAttr(q.quote_name || '')}')" title="Ta bort" class="absolute top-3 right-3 text-gray-300 hover:text-red-500 transition"><i class="fas fa-trash"></i></button>
                         <div>
                             <div class="flex justify-between items-start mb-3 border-b border-gray-100 pb-3">
                                 <div>
                                     <span class="${statusColor} text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide border border-opacity-20">${q.status}</span>
-                                    <h3 class="font-bold text-gray-800 text-lg mt-2 leading-tight pr-6">${q.quote_name}</h3>
+                                    <h3 class="font-bold text-gray-800 text-lg mt-2 leading-tight pr-6">${escapeHtml(q.quote_name)}</h3>
                                 </div>
                             </div>
                             <div class="text-sm text-gray-600 space-y-2 mb-6">
-                                <p class="flex items-center"><i class="fas fa-user text-gray-400 w-5 text-center mr-1"></i> <span class="font-medium text-gray-700">${q.customer_name || 'Okänd kund'}</span></p>
+                                <p class="flex items-center"><i class="fas fa-user text-gray-400 w-5 text-center mr-1"></i> <span class="font-medium text-gray-700">${escapeHtml(q.customer_name) || 'Okänd kund'}</span></p>
                                 <p class="flex items-center text-xs"><i class="far fa-calendar-alt text-gray-400 w-5 text-center mr-1"></i> ${dateString}</p>
                                 <p class="flex items-center text-xs" ${marginTitle}><i class="fas fa-chart-line text-gray-400 w-5 text-center mr-1"></i> Marginal: ${marginHtml}</p>
                                 ${customerResponseHtml}
@@ -155,7 +155,7 @@
                             <button onclick="window.location.href='/quote-builder.html?id=${q.id}'" class="bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-center">
                                 <i class="fas fa-hammer mr-2"></i> Byggare
                             </button>
-                            <button onclick="makeOrder(${q.id}, '${q.quote_name.replace(/'/g, "\\'")}')" class="bg-green-600 text-white hover:bg-green-700 px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-center shadow-sm">
+                            <button onclick="makeOrder(${q.id}, '${escapeJsAttr(q.quote_name)}')" class="bg-green-600 text-white hover:bg-green-700 px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-center shadow-sm">
                                 <i class="fas fa-check-circle mr-2"></i> Gör till Order
                             </button>
                             <button onclick="duplicateQuote(${q.id})" class="col-span-2 bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100 px-3 py-2 rounded text-xs font-medium transition flex items-center justify-center mt-1">
@@ -175,11 +175,11 @@
                 <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 flex flex-col justify-between h-full opacity-90">
                     <div>
                         <div class="flex justify-between items-start mb-3 border-b border-gray-100 pb-3">
-                            <h3 class="font-bold text-gray-800 text-lg leading-tight">${q.quote_name}</h3>
+                            <h3 class="font-bold text-gray-800 text-lg leading-tight">${escapeHtml(q.quote_name)}</h3>
                             <span class="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide whitespace-nowrap ml-2">${daysLeft} dag${daysLeft === 1 ? '' : 'ar'} kvar</span>
                         </div>
                         <div class="text-sm text-gray-600 space-y-2 mb-6">
-                            <p class="flex items-center"><i class="fas fa-user text-gray-400 w-5 text-center mr-1"></i> <span class="font-medium text-gray-700">${q.customer_name || 'Okänd kund'}</span></p>
+                            <p class="flex items-center"><i class="fas fa-user text-gray-400 w-5 text-center mr-1"></i> <span class="font-medium text-gray-700">${escapeHtml(q.customer_name) || 'Okänd kund'}</span></p>
                             <p class="flex items-center text-xs"><i class="fas fa-trash text-gray-400 w-5 text-center mr-1"></i> Borttagen ${deletedAt.toLocaleDateString('sv-SE')}</p>
                         </div>
                     </div>
@@ -187,7 +187,7 @@
                         <button onclick="restoreQuote(${q.id})" class="bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-center">
                             <i class="fas fa-undo mr-2"></i> Återställ
                         </button>
-                        <button onclick="permanentlyDeleteQuote(${q.id}, '${(q.quote_name || '').replace(/'/g, "\\'")}')" class="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-center">
+                        <button onclick="permanentlyDeleteQuote(${q.id}, '${escapeJsAttr(q.quote_name || '')}')" class="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-center">
                             <i class="fas fa-times mr-2"></i> Radera permanent
                         </button>
                     </div>

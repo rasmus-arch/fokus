@@ -188,15 +188,15 @@
                         <div class="flex justify-between items-start mb-4 border-b border-gray-100 pb-3">
                             <div>
                                 <span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">Aktiv Order</span>
-                                <h3 class="font-bold text-gray-800 text-lg mt-1">${o.quote_name}</h3>
+                                <h3 class="font-bold text-gray-800 text-lg mt-1">${escapeHtml(o.quote_name)}</h3>
                                 <p class="text-xs text-gray-400">Order ID: #${o.order_number || o.id}</p>
                             </div>
                             <i class="fas fa-chevron-right text-gray-300"></i>
                         </div>
                         <div class="text-sm text-gray-600 space-y-1">
-                            <p><i class="fas fa-user text-gray-400 w-5"></i> ${o.customer_name || 'Okänd kund'}</p>
-                            <p><i class="fas fa-map-marker-alt text-gray-400 w-5"></i> ${o.address || 'Adress saknas'}</p>
-                            <p><i class="fas fa-hard-hat text-gray-400 w-5"></i> <span class="font-medium text-gray-800">${o.installer_name || 'Ingen montör tilldelad'}</span></p>
+                            <p><i class="fas fa-user text-gray-400 w-5"></i> ${escapeHtml(o.customer_name) || 'Okänd kund'}</p>
+                            <p><i class="fas fa-map-marker-alt text-gray-400 w-5"></i> ${escapeHtml(o.address) || 'Adress saknas'}</p>
+                            <p><i class="fas fa-hard-hat text-gray-400 w-5"></i> <span class="font-medium text-gray-800">${escapeHtml(o.installer_name) || 'Ingen montör tilldelad'}</span></p>
                             <p ${marginTitle}><i class="fas fa-chart-line text-gray-400 w-5"></i> Marginal: ${marginHtml}</p>
                         </div>
                     </div>
@@ -269,8 +269,8 @@
                         data.quoteCart.forEach(item => {
                             cartList.innerHTML += `
                                 <li class="flex justify-between items-start border-b border-blue-100 pb-1.5">
-                                    <span class="font-medium text-xs leading-tight pr-2"><b>${item.qty}x</b> ${item.name}</span> 
-                                    <span class="text-blue-400 text-[9px] font-mono shrink-0">${item.sku}</span>
+                                    <span class="font-medium text-xs leading-tight pr-2"><b>${item.qty}x</b> ${escapeHtml(item.name)}</span>
+                                    <span class="text-blue-400 text-[9px] font-mono shrink-0">${escapeHtml(item.sku)}</span>
                                 </li>`;
                         });
                     } else {
@@ -362,7 +362,7 @@
                             <li class="bg-gray-50 border border-gray-200 rounded p-2 flex items-center justify-between hover:bg-gray-100 transition">
                                 <div class="flex items-center truncate pr-2">
                                     <i class="fas fa-file-alt text-red-500 text-lg w-6 text-center shrink-0"></i>
-                                    <span class="text-sm font-medium text-gray-700 truncate">${f.file_name}</span>
+                                    <span class="text-sm font-medium text-gray-700 truncate">${escapeHtml(f.file_name)}</span>
                                 </div>
                                 <div class="flex gap-2 shrink-0">
                                     <a href="${f.file_url}" target="_blank" class="bg-white border border-gray-300 text-gray-600 px-3 py-1 rounded text-xs font-semibold hover:bg-gray-50">Ladda ner</a>

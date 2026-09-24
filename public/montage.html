@@ -126,10 +126,10 @@
 
                 orders.forEach(o => {
                     list.innerHTML += `
-                        <div class="p-3 border border-gray-200 rounded-md bg-gray-50 hover:bg-white hover:shadow-sm cursor-pointer transition" onclick="openManageModal(${o.id}, '${o.quote_name}')">
-                            <h4 class="font-bold text-gray-800 text-sm truncate">${o.quote_name}</h4>
+                        <div class="p-3 border border-gray-200 rounded-md bg-gray-50 hover:bg-white hover:shadow-sm cursor-pointer transition" onclick="openManageModal(${o.id}, '${escapeJsAttr(o.quote_name)}')">
+                            <h4 class="font-bold text-gray-800 text-sm truncate">${escapeHtml(o.quote_name)}</h4>
                             <div class="text-xs text-gray-500 mt-1 flex justify-between">
-                                <span>Montör: ${o.installer_name || 'Ej vald'}</span>
+                                <span>Montör: ${escapeHtml(o.installer_name) || 'Ej vald'}</span>
                             </div>
                         </div>
                     `;
