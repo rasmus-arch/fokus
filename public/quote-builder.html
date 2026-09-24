@@ -1855,7 +1855,7 @@
             const dateStr = data.customer_response_at ? new Date(data.customer_response_at).toLocaleString('sv-SE') : '';
             if (data.customer_response === 'accepted') {
                 badge.className = 'text-xs font-semibold mt-1 text-green-700';
-                badge.innerHTML = `<i class="fas fa-circle-check mr-1"></i> Kunden godkände offerten via länk ${dateStr} <button onclick="openSignatureModal()" class="ml-2 underline font-normal text-blue-600 hover:text-blue-800">Visa signatur & legitimation</button>`;
+                badge.innerHTML = `<i class="fas fa-circle-check mr-1"></i> Kunden godkände offerten via länk ${dateStr} <button onclick="openSignatureModal()" class="ml-2 underline font-normal text-blue-600 hover:text-blue-800">Visa signatur</button>`;
             } else {
                 badge.className = 'text-xs font-semibold mt-1 text-gray-500';
                 badge.innerHTML = `<i class="fas fa-circle-xmark mr-1"></i> Kunden avböjde offerten via länk ${dateStr}${data.customer_decline_reason ? ` - "${escapeHtml(data.customer_decline_reason)}"` : ''}`;
@@ -1864,8 +1864,7 @@
         }
 
         // Visar det kunden bekräftade vid godkännandet (för att kunna ta fram vid en ev. tvist) -
-        // signaturen ligger redan i quote-svaret (customer_signature_data), medan legitimationsfotot
-        // hämtas via en separat inloggningsskyddad rutt (se GET /api/quotes/:id/id-photo).
+        // signaturen ligger redan i quote-svaret (customer_signature_data).
         function openSignatureModal() {
             const q = lastQuoteResponseData || {};
             const rows = [
@@ -1888,13 +1887,9 @@
                         <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
                     </div>
                     <table class="w-full text-xs mb-4">${rows.map(([label, val]) => `<tr><td class="text-gray-500 py-0.5 pr-3">${escapeHtml(label)}</td><td class="font-medium text-gray-800">${escapeHtml(val)}</td></tr>`).join('')}</table>
-                    <div class="mb-4">
+                    <div>
                         <div class="text-xs text-gray-500 mb-1 font-semibold uppercase">Signatur</div>
                         ${q.customer_signature_data && q.customer_signature_data.startsWith('data:image/') ? `<img src="${escapeHtml(q.customer_signature_data)}" class="border border-gray-200 rounded bg-white w-full">` : '<p class="text-xs text-gray-400 italic">Ingen signatur sparad.</p>'}
-                    </div>
-                    <div>
-                        <div class="text-xs text-gray-500 mb-1 font-semibold uppercase">Legitimation</div>
-                        <img src="${apiLinkWithToken(`/api/quotes/${quoteId}/id-photo`)}" class="border border-gray-200 rounded max-w-full" onerror="this.replaceWith(Object.assign(document.createElement('p'), {className: 'text-xs text-gray-400 italic', innerText: 'Ingen legitimation sparad.'}))">
                     </div>
                 </div>
             `;

@@ -2,5 +2,4 @@ node_modules/
 .env
 *.log
 public/uploads/
-private_uploads/
 .htaccess

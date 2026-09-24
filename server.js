@@ -5,7 +5,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { hashPassword, verifyPassword, initSessions } = require('./lib/auth.js');
 const db = require('./lib/db.js');
-const { upload, uploadDir, uploadIdPhoto, privateUploadDir } = require('./lib/upload.js');
+const { upload, uploadDir } = require('./lib/upload.js');
 const { htmlToPdfmakeNodes, buildPdfImageCell, buildPdfHeroImageBlock, downloadExternalImage } = require('./lib/pdfHelpers.js');
 
 let PdfPrinter = null;
@@ -1326,10 +1326,9 @@ function loadRespondableOffer(token, callback) {
     });
 }
 
-// Godkännande kräver, utöver klick + logg, ifyllda kunduppgifter, en handritad signatur och ett
-// foto på giltig legitimation (sparas privat, se GET /api/quotes/:id/id-photo) - för att ha
-// bevisning att ta fram om det skulle bli en tvist om vem som godkände offerten.
-app.post('/api/public/offer/:token/accept', uploadIdPhoto.single('id_photo'), (req, res) => {
+// Godkännande kräver, utöver klick + logg, ifyllda kunduppgifter och en handritad signatur -
+// för att ha bevisning att ta fram om det skulle bli en tvist om vem som godkände offerten.
+app.post('/api/public/offer/:token/accept', (req, res) => {
     loadRespondableOffer(req.params.token, (errResp, order, snapshot) => {
         if (errResp) return res.status(errResp.status).json({ message: errResp.message });
 
@@ -1338,18 +1337,17 @@ app.post('/api/public/offer/:token/accept', uploadIdPhoto.single('id_photo'), (r
         if (!name) return res.status(400).json({ message: 'Namn saknas.' });
         if (!signature.startsWith('data:image/')) return res.status(400).json({ message: 'Signatur saknas.' });
         if (signature.length > 2 * 1024 * 1024) return res.status(400).json({ message: 'Signaturen är för stor.' });
-        if (!req.file) return res.status(400).json({ message: 'Foto på legitimation saknas eller har fel filformat (måste vara en bild).' });
 
         db.query(`UPDATE quotes SET
                 customer_response = 'accepted', customer_response_at = NOW(), customer_response_ip = ?, customer_response_user_agent = ?,
                 customer_response_snapshot = ?, customer_decline_reason = NULL,
-                customer_signature_data = ?, customer_id_photo_path = ?,
+                customer_signature_data = ?,
                 customer_confirmed_name = ?, customer_confirmed_personnummer = ?, customer_confirmed_address = ?,
                 customer_confirmed_address2 = ?, customer_confirmed_apartment_number = ?, customer_confirmed_brf_org_nr = ?,
                 customer_confirmed_property_designation = ?, customer_confirmed_email = ?, customer_confirmed_phone = ?
             WHERE id = ?`,
             [req.ip || null, (req.headers['user-agent'] || '').slice(0, 255), snapshot,
-                signature, req.file.filename,
+                signature,
                 name, (req.body.personnummer || '').trim(), (req.body.address || '').trim(),
                 (req.body.address2 || '').trim(), (req.body.apartment_number || '').trim(), (req.body.brf_org_nr || '').trim(),
                 (req.body.property_designation || '').trim(), (req.body.email || '').trim(), (req.body.phone || '').trim(),
@@ -1370,17 +1368,6 @@ app.post('/api/public/offer/:token/decline', (req, res) => {
                 if (err2) return res.status(500).json({ message: err2.message });
                 res.json({ message: 'Offerten avböjdes.' });
             });
-    });
-});
-
-// Kundens legitimationsfoto, sparat vid godkännande - inloggningsskyddad, bara för Superadmin/
-// Admin/Säljare, och filen ligger utanför public/ så den aldrig kan nås direkt via URL.
-app.get('/api/quotes/:id/id-photo', requireAuth, requireStaff, (req, res) => {
-    db.query('SELECT customer_id_photo_path FROM quotes WHERE id = ?', [req.params.id], (err, rows) => {
-        if (err || !rows.length || !rows[0].customer_id_photo_path) return res.status(404).json({ message: 'Ingen legitimation sparad för den här offerten.' });
-        // Filnamnet kommer alltid från multers egen slumpgenerering (aldrig direkt från
-        // användarinput) - path.basename() är ändå ett extra skyddslager mot path traversal.
-        res.sendFile(path.join(privateUploadDir, path.basename(rows[0].customer_id_photo_path)));
     });
 });
 
