@@ -49,6 +49,20 @@ purgeExpiredSessions(); // rensa gamla sessioner vid serverstart, samma mönster
 const requireStaff = requireRole('Superadmin', 'Admin', 'Säljare'); // "ej Montör"
 const requireAdmin = requireRole('Superadmin', 'Admin');
 
+// Säkerställer att en Montör bara kan läsa/ändra ordrar de själva är tilldelade som installatör -
+// annars visar bara gränssnittet "mina jobb" medan API:et i praktiken tillåter en Montör att
+// läsa/ändra VILKEN ORDER SOM HELST bara genom att byta ut :id i anropet (IDOR). Staff
+// (Superadmin/Admin/Säljare) har som tidigare full åtkomst till alla ordrar.
+function requireOrderAccess(req, res, next) {
+    if (req.user.role !== 'Montör') return next();
+    db.query('SELECT installer_id FROM quotes WHERE id = ?', [req.params.id], (err, rows) => {
+        if (err) return res.status(500).json({ message: err.message });
+        if (!rows.length) return res.status(404).json({ message: 'Ordern hittades inte.' });
+        if (rows[0].installer_id !== req.user.id) return res.status(403).json({ message: 'Du saknar behörighet för den här ordern.' });
+        next();
+    });
+}
+
 // Enhetligt svar för enkla INSERT/UPDATE/DELETE-anrop: {message: string} med 500 vid db-fel,
 // annars 200 med successMessage (och ev. extra fält, t.ex. { id: result.insertId }).
 function dbResult(res, successMessage, extra) {
@@ -557,8 +571,12 @@ app.post('/api/countertops/colors/:id/image', requireAuth, requireAdmin, upload.
 
 app.get('/api/quotes', requireAuth, requireStaff, (req, res) => db.query(`SELECT q.*, c.name as customer_name, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.status != 'Order' AND q.deleted_at IS NULL ORDER BY q.created_at DESC`, (err, results) => res.json(results || [])));
 app.get('/api/orders', requireAuth, (req, res) => {
-    const installerId = req.query.installer_id;
-    db.query(`SELECT q.*, c.name as customer_name, c.address, c.phone, c.email, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.status = 'Order' AND q.deleted_at IS NULL ORDER BY q.created_at DESC`, installerId ? [installerId] : [], (err, results) => res.json(results || []));
+    // En Montör får ALLTID bara sina egna tilldelade ordrar, oavsett vad som skickas i
+    // query-parametern - annars kunde en Montör se alla kunders ordrar genom att bara
+    // utelämna ?installer_id. Staff kan filtrera fritt (eller inte alls) som tidigare.
+    const installerId = req.user.role === 'Montör' ? req.user.id : req.query.installer_id;
+    const sql = `SELECT q.*, c.name as customer_name, c.address, c.phone, c.email, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.status = 'Order' AND q.deleted_at IS NULL${installerId ? ' AND q.installer_id = ?' : ''} ORDER BY q.created_at DESC`;
+    db.query(sql, installerId ? [installerId] : [], (err, results) => res.json(results || []));
 });
 
 // ==========================================
@@ -791,9 +809,9 @@ app.post('/api/quotes/:id/duplicate', requireAuth, requireStaff, (req, res) => {
         });
     });
 });
-app.put('/api/orders/:id/comments', requireAuth, (req, res) => db.query('UPDATE quotes SET internal_comment = ?, public_comment = ? WHERE id = ?', [req.body.internal_comment || null, req.body.public_comment || null, req.params.id], dbResult(res, 'Kommentarer sparade!')));
-app.get('/api/orders/:id/files', requireAuth, (req, res) => db.query('SELECT * FROM order_files WHERE quote_id = ? ORDER BY created_at DESC', [req.params.id], (err, results) => res.json(results || [])));
-app.post('/api/orders/:id/files', requireAuth, upload.single('file'), (req, res) => {
+app.put('/api/orders/:id/comments', requireAuth, requireOrderAccess, (req, res) => db.query('UPDATE quotes SET internal_comment = ?, public_comment = ? WHERE id = ?', [req.body.internal_comment || null, req.body.public_comment || null, req.params.id], dbResult(res, 'Kommentarer sparade!')));
+app.get('/api/orders/:id/files', requireAuth, requireOrderAccess, (req, res) => db.query('SELECT * FROM order_files WHERE quote_id = ? ORDER BY created_at DESC', [req.params.id], (err, results) => res.json(results || [])));
+app.post('/api/orders/:id/files', requireAuth, requireOrderAccess, upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Ingen fil mottagen' });
     const fileType = ['.jpg', '.jpeg', '.png', '.heic', '.gif'].includes(path.extname(req.file.originalname).toLowerCase()) ? 'image' : 'document';
     db.query('INSERT INTO order_files (quote_id, file_name, file_url, file_type, uploaded_by) VALUES (?,?,?,?,?)', [req.params.id, req.file.originalname, '/uploads/' + req.file.filename, fileType, req.body.user_id || null], dbResult(res, 'Fil uppladdad!'));
@@ -882,22 +900,42 @@ app.post('/api/maintenance/uploads-cleanup', requireAuth, requireAdmin, async (r
 });
 
 app.delete('/api/orders/files/:fileId', requireAuth, (req, res) => {
-    db.query('SELECT file_url FROM order_files WHERE id = ?', [req.params.fileId], (err, results) => {
+    // fileId pekar inte direkt på en order/offert, så requireOrderAccess (som förväntar sig
+    // req.params.id) kan inte återanvändas rakt av - slår istället upp filens quote_id här och
+    // gör samma Montör-ägarskapskontroll manuellt innan filen raderas.
+    db.query('SELECT file_url, quote_id FROM order_files WHERE id = ?', [req.params.fileId], (err, results) => {
         if (err) return res.status(500).json({ message: err.message });
-        if(results && results.length > 0) db.query('DELETE FROM order_files WHERE id = ?', [req.params.fileId], (err2) => {
+        if (!results || results.length === 0) return res.json({ message: 'Redan raderad' });
+        const file = results[0];
+        const proceed = () => db.query('DELETE FROM order_files WHERE id = ?', [req.params.fileId], (err2) => {
             if (err2) return res.status(500).json({ message: err2.message });
-            fs.unlink(path.join(__dirname, 'public', results[0].file_url), () => res.json({ message: 'Raderad' }));
+            fs.unlink(path.join(__dirname, 'public', file.file_url), () => res.json({ message: 'Raderad' }));
         });
-        else res.json({message: 'Redan raderad'});
+        if (req.user.role !== 'Montör') return proceed();
+        db.query('SELECT installer_id FROM quotes WHERE id = ?', [file.quote_id], (err3, quoteRows) => {
+            if (err3) return res.status(500).json({ message: err3.message });
+            if (!quoteRows.length || quoteRows[0].installer_id !== req.user.id) return res.status(403).json({ message: 'Du saknar behörighet för den här filen.' });
+            proceed();
+        });
     });
 });
-app.get('/api/orders/:id/assembly', requireAuth, (req, res) => {
+app.get('/api/orders/:id/assembly', requireAuth, requireOrderAccess, (req, res) => {
     db.query('SELECT q.*, c.name as customer_name, c.address, c.phone, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.id = ?', [req.params.id], (err, quoteRes) => {
         db.query('SELECT id, sku, name, is_delivered, is_packed, is_assembled, assembly_comment FROM quote_items WHERE quote_id = ? AND is_free_text = 0', [req.params.id], (err, itemsRes) => res.json({ quote: quoteRes[0], items: itemsRes || [] }));
     });
 });
-app.put('/api/orders/:id/assembly/status', requireAuth, (req, res) => db.query(`UPDATE quotes SET factory_date = ?, assembly_start_date = ?, assembly_completed_date = ?, assembly_status = ? WHERE id = ?`, [req.body.factory_date || null, req.body.assembly_start_date || null, req.body.assembly_completed_date || null, req.body.assembly_status || 'Ej påbörjad', req.params.id], dbResult(res, 'Sparat!')));
-app.put('/api/orders/assembly/item/:itemId', requireAuth, (req, res) => db.query(`UPDATE quote_items SET is_delivered = ?, is_packed = ?, is_assembled = ?, assembly_comment = ? WHERE id = ?`, [req.body.is_delivered ? 1 : 0, req.body.is_packed ? 1 : 0, req.body.is_assembled ? 1 : 0, req.body.assembly_comment, req.params.itemId], dbResult(res, 'Sparat!')));
+app.put('/api/orders/:id/assembly/status', requireAuth, requireOrderAccess, (req, res) => db.query(`UPDATE quotes SET factory_date = ?, assembly_start_date = ?, assembly_completed_date = ?, assembly_status = ? WHERE id = ?`, [req.body.factory_date || null, req.body.assembly_start_date || null, req.body.assembly_completed_date || null, req.body.assembly_status || 'Ej påbörjad', req.params.id], dbResult(res, 'Sparat!')));
+app.put('/api/orders/assembly/item/:itemId', requireAuth, (req, res) => {
+    // :itemId pekar på en quote_items-rad, inte direkt en order - slår upp radens quote_id och
+    // gör samma Montör-ägarskapskontroll som requireOrderAccess innan uppdateringen tillåts.
+    const proceed = () => db.query(`UPDATE quote_items SET is_delivered = ?, is_packed = ?, is_assembled = ?, assembly_comment = ? WHERE id = ?`, [req.body.is_delivered ? 1 : 0, req.body.is_packed ? 1 : 0, req.body.is_assembled ? 1 : 0, req.body.assembly_comment, req.params.itemId], dbResult(res, 'Sparat!'));
+    if (req.user.role !== 'Montör') return proceed();
+    db.query('SELECT q.installer_id FROM quote_items qi JOIN quotes q ON qi.quote_id = q.id WHERE qi.id = ?', [req.params.itemId], (err, rows) => {
+        if (err) return res.status(500).json({ message: err.message });
+        if (!rows.length || rows[0].installer_id !== req.user.id) return res.status(403).json({ message: 'Du saknar behörighet för den här raden.' });
+        proceed();
+    });
+});
 // requireStaff (inte requireAdmin) - dashboard.html (startsidan) visas för alla utom Montör
 // och anropar dessa statistik-endpoints, inte bara den admin-gated statistics.html-sidan.
 app.get('/api/statistics', requireAuth, requireStaff, (req, res) => db.query('SELECT category, COUNT(*) as count FROM products GROUP BY category', (err, results) => res.json({ categories: results && results.length > 0 ? results : [{ category: 'Inga', count: 0 }] })));
@@ -1371,7 +1409,7 @@ app.post('/api/public/offer/:token/decline', (req, res) => {
     });
 });
 
-app.get('/api/orders/:id/assembly/pdf', requireAuth, (req, res) => {
+app.get('/api/orders/:id/assembly/pdf', requireAuth, requireOrderAccess, (req, res) => {
     if (!PdfPrinter) return res.status(500).send("PDF-motorn saknas!");
     const printer = getPdfPrinter();
     db.query('SELECT q.*, c.name as customer_name, c.address, c.phone, u.name as installer_name FROM quotes q JOIN customers c ON q.customer_id = c.id LEFT JOIN users u ON q.installer_id = u.id WHERE q.id = ?', [req.params.id], (err, quoteResults) => {
@@ -1410,7 +1448,7 @@ app.get('/api/orders/:id/assembly/pdf', requireAuth, (req, res) => {
 // till en katalogprodukt (fritext, samt luckor/lådfronter som prissätts via dörrmodell
 // istället för produktregistret) kan inte knytas till en leverantör och hamnar i en egen
 // grupp längst ner, liksom produkter som saknar leverantör i produktregistret.
-app.get('/api/orders/:id/purchase-list-pdf', requireAuth, (req, res) => {
+app.get('/api/orders/:id/purchase-list-pdf', requireAuth, requireOrderAccess, (req, res) => {
     if (!PdfPrinter) return res.status(500).send("PDF-motorn saknas!");
     const printer = getPdfPrinter();
     db.query('SELECT q.*, c.name as customer_name FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?', [req.params.id], (err, quoteResults) => {
