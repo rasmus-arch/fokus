@@ -229,18 +229,13 @@
                         </div>
                     </div>
                     <div>
-                        <h4 class="text-sm font-semibold text-gray-700 mb-2">Foto på giltig legitimation *</h4>
-                        <p class="text-xs text-gray-500 mb-2">Sparas säkert och tas bara fram om det skulle uppstå en tvist om godkännandet.</p>
-                        <input id="accIdPhoto" type="file" accept="image/*" capture="environment" class="text-sm">
-                    </div>
-                    <div>
                         <h4 class="text-sm font-semibold text-gray-700 mb-2">Signera med finger/mus *</h4>
                         <canvas id="sigCanvas" class="w-full h-40 bg-white border border-gray-300 rounded" style="touch-action:none;"></canvas>
                         <button type="button" onclick="clearSignature()" class="text-xs text-gray-500 mt-1 underline">Rensa signatur</button>
                     </div>
                     <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
                         <input type="checkbox" id="acceptCheckbox" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-green-600">
-                        Jag har läst igenom offerten ovan och bekräftar att mina uppgifter, foto och signatur är korrekta.
+                        Jag har läst igenom offerten ovan och bekräftar att mina uppgifter och signatur är korrekta.
                     </label>
                     <div class="flex gap-2">
                         <button onclick="confirmAccept()" class="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-md text-sm transition">Bekräfta godkännande</button>
@@ -325,30 +320,27 @@
         async function confirmAccept() {
             const name = document.getElementById('accName').value.trim();
             const email = document.getElementById('accEmail').value.trim();
-            const idPhotoInput = document.getElementById('accIdPhoto');
 
             if (!name) return showAcceptError('Fyll i ditt namn.');
             if (!email) return showAcceptError('Fyll i din e-postadress.');
-            if (!idPhotoInput.files || idPhotoInput.files.length === 0) return showAcceptError('Ladda upp/ta ett foto på din legitimation.');
             if (!sigHasInk) return showAcceptError('Signera i rutan ovan innan du bekräftar.');
             if (!document.getElementById('acceptCheckbox').checked) return showAcceptError('Kryssa i rutan för att bekräfta.');
 
             const canvas = document.getElementById('sigCanvas');
-            const formData = new FormData();
-            formData.append('name', name);
-            formData.append('email', email);
-            formData.append('personnummer', document.getElementById('accPersonnummer').value.trim());
-            formData.append('address', document.getElementById('accAddress').value.trim());
-            formData.append('address2', document.getElementById('accAddress2').value.trim());
-            formData.append('apartment_number', document.getElementById('accApartment').value.trim());
-            formData.append('phone', document.getElementById('accPhone').value.trim());
-            formData.append('brf_org_nr', document.getElementById('accBrfOrgNr').value.trim());
-            formData.append('property_designation', document.getElementById('accPropertyDesignation').value.trim());
-            formData.append('signature', canvas.toDataURL('image/png'));
-            formData.append('id_photo', idPhotoInput.files[0]);
+            const payload = {
+                name, email,
+                personnummer: document.getElementById('accPersonnummer').value.trim(),
+                address: document.getElementById('accAddress').value.trim(),
+                address2: document.getElementById('accAddress2').value.trim(),
+                apartment_number: document.getElementById('accApartment').value.trim(),
+                phone: document.getElementById('accPhone').value.trim(),
+                brf_org_nr: document.getElementById('accBrfOrgNr').value.trim(),
+                property_designation: document.getElementById('accPropertyDesignation').value.trim(),
+                signature: canvas.toDataURL('image/png')
+            };
 
             try {
-                const res = await fetch(`/api/public/offer/${token}/accept`, { method: 'POST', body: formData });
+                const res = await fetch(`/api/public/offer/${token}/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const data = await res.json();
                 if (!res.ok) return showAcceptError(data.message);
                 offerData.customer_response = 'accepted';
