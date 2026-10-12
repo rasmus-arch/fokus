@@ -235,6 +235,13 @@
                         </label>
                     </div>
 
+                    <div class="bg-amber-50 p-2.5 rounded border border-amber-200 mb-3 shadow-sm flex items-center">
+                        <label class="flex items-center gap-2 font-medium text-gray-700 cursor-pointer w-full select-none">
+                            <input type="checkbox" id="selfInstallCheckbox" onchange="renderCart()" class="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500">
+                            Kunden monterar själv (ingen montering på produkterna ingår)
+                        </label>
+                    </div>
+
                     <div class="bg-blue-50 border border-blue-100 p-2 rounded text-[11px] mb-3">
                         <div class="flex justify-between text-blue-700"><span><span data-company-name>Klarälvskök</span>s del:</span><span id="sumCompanyCut" class="font-bold kundlage-price">0.00 kr</span></div>
                         <div class="flex justify-between text-blue-700 mt-0.5"><span>Montörens del:</span><span id="sumInstallerCut" class="font-bold kundlage-price">0.00 kr</span></div>
@@ -1827,6 +1834,7 @@
                         if (Array.isArray(qd.drawingWalls)) drawingWalls = qd.drawingWalls;
                         if (qd.selectedConditions) { for (const key in qd.selectedConditions) { if(selectedConditions[key]) { selectedConditions[key].responsibility = qd.selectedConditions[key].responsibility || ''; selectedConditions[key].qty = qd.selectedConditions[key].qty || 1; selectedConditions[key].customPrice = qd.selectedConditions[key].customPrice || 0; } } }
                         if (qd.useRot !== undefined) document.getElementById('useRotCheckbox').checked = qd.useRot;
+                        if (qd.selfInstall !== undefined) document.getElementById('selfInstallCheckbox').checked = qd.selfInstall;
                         if (qd.kitchenSpecs) { document.getElementById('qsMaterial').value = qd.kitchenSpecs.material || ''; document.getElementById('qsColor').value = qd.kitchenSpecs.color || ''; document.getElementById('qsDoor').value = qd.kitchenSpecs.door || ''; if (qd.kitchenSpecs.doorModelId) { document.getElementById('qsDoorModelId').value = qd.kitchenSpecs.doorModelId; onDoorModelChange(); } updateSpecSummary(); }
                         if (qd.extraFees) { document.getElementById('startFeeProduct').value = qd.extraFees.startFeeProduct || 0; document.getElementById('startFeeNonRot').value = qd.extraFees.startFeeNonRot || 0; document.getElementById('startFeeRotComp').value = qd.extraFees.startFeeRotComp || 0; document.getElementById('startFeeRotInst').value = qd.extraFees.startFeeRotInst || 0; document.getElementById('colorSelect').value = qd.extraFees.colorSelect || ''; document.getElementById('colorCustom').value = qd.extraFees.colorCustom || ''; document.getElementById('feeColor').value = qd.extraFees.feeColor || 0; toggleCustomColor(); }
                         if (qd.coverPage) {
@@ -2079,7 +2087,7 @@
         }
 
         function buildQuotePayload() {
-            return { quoteCart, selectedConditions, kitchenSpecs: { material: document.getElementById('qsMaterial').value, color: document.getElementById('qsColor').value, door: document.getElementById('qsDoor').value, doorModelId: document.getElementById('qsDoorModelId').value }, extraFees: { startFeeProduct: document.getElementById('startFeeProduct').value, startFeeNonRot: document.getElementById('startFeeNonRot').value, startFeeRotComp: document.getElementById('startFeeRotComp').value, startFeeRotInst: document.getElementById('startFeeRotInst').value, colorSelect: document.getElementById('colorSelect').value, colorCustom: document.getElementById('colorCustom').value, feeColor: document.getElementById('feeColor').value }, globalDiscount: document.getElementById('globalDiscount').value, discountType: document.getElementById('globalDiscountType').value, useRot: document.getElementById('useRotCheckbox').checked, internal_comment: document.getElementById('internalComment').value, public_comment: document.getElementById('publicComment').value, coverPage: coverPageData, drawingWalls };
+            return { quoteCart, selectedConditions, kitchenSpecs: { material: document.getElementById('qsMaterial').value, color: document.getElementById('qsColor').value, door: document.getElementById('qsDoor').value, doorModelId: document.getElementById('qsDoorModelId').value }, extraFees: { startFeeProduct: document.getElementById('startFeeProduct').value, startFeeNonRot: document.getElementById('startFeeNonRot').value, startFeeRotComp: document.getElementById('startFeeRotComp').value, startFeeRotInst: document.getElementById('startFeeRotInst').value, colorSelect: document.getElementById('colorSelect').value, colorCustom: document.getElementById('colorCustom').value, feeColor: document.getElementById('feeColor').value }, globalDiscount: document.getElementById('globalDiscount').value, discountType: document.getElementById('globalDiscountType').value, useRot: document.getElementById('useRotCheckbox').checked, selfInstall: document.getElementById('selfInstallCheckbox').checked, internal_comment: document.getElementById('internalComment').value, public_comment: document.getElementById('publicComment').value, coverPage: coverPageData, drawingWalls };
         }
 
         // silent=true används av auto-sparningen (ingen alert, bara en liten statustext).
@@ -2149,7 +2157,11 @@
             const globalDiscountVal = parseFloat(document.getElementById('globalDiscount').value) || 0; const globalDiscountType = document.getElementById('globalDiscountType').value;
             const startFeeProduct = parseFloat(document.getElementById('startFeeProduct').value) || 0; const startFeeNonRot = parseFloat(document.getElementById('startFeeNonRot').value) || 0; const startFeeRotComp = parseFloat(document.getElementById('startFeeRotComp').value) || 0; const startFeeRotInst = parseFloat(document.getElementById('startFeeRotInst').value) || 0; const colorFee = parseFloat(document.getElementById('feeColor').value) || 0;
             const useRot = document.getElementById('useRotCheckbox').checked;
-            
+            // Kunden monterar själv: nollar bara ut den AUTOMATISKA per-produkt-monteringskostnaden
+            // (ingen manuell kontroll finns annars för den) - "Monteringsvillkor & Avgifter" längre
+            // ner påverkas INTE, eftersom de redan har sin egen Kund/Företag-markering per rad.
+            const selfInstall = document.getElementById('selfInstallCheckbox').checked;
+
             let totalMaterialBeforeGlobalDiscount = 0, totalRotInstallIncVat = 0, totalNonRotInstallIncVat = 0, totalCompanyCut = 0, totalInstallerCut = 0, totalMaterialCostExVat = 0, marginEligibleMaterialRevenue = 0, excludedMaterialRevenueIncVat = 0, excludedRowCount = 0;
             installBreakdownRows = [];
             excludedRows = [];
@@ -2160,9 +2172,9 @@
             // addManualFrontRow), övrigt (produkter, bänkskivor, fritext) i en egen grupp.
             const frontEntries = []; const otherEntries = [];
             quoteCart.forEach((item, index) => {
-                const rowMaterialTotal = (item.priceIncVat * (1 - (item.discount / 100))) * item.qty; const rowInstallTotal = item.installIncVat * item.qty;
+                const rowMaterialTotal = (item.priceIncVat * (1 - (item.discount / 100))) * item.qty; const rowInstallTotal = selfInstall ? 0 : item.installIncVat * item.qty;
                 totalMaterialBeforeGlobalDiscount += rowMaterialTotal; totalRotInstallIncVat += rowInstallTotal;
-                totalCompanyCut += (item.companyShare || 0) * item.qty; totalInstallerCut += (item.installerShare || 0) * item.qty;
+                totalCompanyCut += selfInstall ? 0 : (item.companyShare || 0) * item.qty; totalInstallerCut += selfInstall ? 0 : (item.installerShare || 0) * item.qty;
                 if (rowInstallTotal > 0) installBreakdownRows.push({ name: item.name, qty: item.qty, installTotal: rowInstallTotal, companyShare: (item.companyShare || 0) * item.qty, installerShare: (item.installerShare || 0) * item.qty });
                 if (hasCostData(item.costExVat)) {
                     totalMaterialCostExVat += parseFloat(item.costExVat) * item.qty;
