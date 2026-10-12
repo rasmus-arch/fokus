@@ -1056,13 +1056,14 @@ function getPdfPrinter() {
 // riskera att råka ändra något i det befintliga PDF-flödet. Om formeln nedan någonsin
 // ändras i PDF-rutten måste samma ändring göras här.
 function computeCustomerFacingTotals(order, cart) {
-    let extraFees = {}; let selectedConditions = {}; let useRot = true;
+    let extraFees = {}; let selectedConditions = {}; let useRot = true; let selfInstall = false;
     if (order.quote_data) {
         try {
             const parsed = typeof order.quote_data === 'string' ? JSON.parse(order.quote_data) : order.quote_data;
             if (parsed.extraFees) extraFees = parsed.extraFees;
             if (parsed.selectedConditions) selectedConditions = parsed.selectedConditions;
             if (parsed.useRot !== undefined) useRot = parsed.useRot;
+            if (parsed.selfInstall !== undefined) selfInstall = parsed.selfInstall;
         } catch (e) {}
     }
     let totalMaterialBeforeGlobalDiscount = 0, totalRotInstallIncVat = 0, totalMaterialFullPrice = 0, totalRowDiscountAmount = 0;
@@ -1071,7 +1072,9 @@ function computeCustomerFacingTotals(order, cart) {
         const rowDiscountAmount = rowFullPrice * ((parseFloat(item.discount) || 0) / 100);
         totalMaterialFullPrice += rowFullPrice; totalRowDiscountAmount += rowDiscountAmount;
         totalMaterialBeforeGlobalDiscount += rowFullPrice - rowDiscountAmount;
-        totalRotInstallIncVat += (parseFloat(item.installIncVat) || 0) * item.qty;
+        // Kunden monterar själv: räkna inte med produktradens automatiska monteringskostnad -
+        // "Monteringsvillkor & Avgifter" (nedan) påverkas inte, de har sin egen Kund/Företag-markering.
+        if (!selfInstall) totalRotInstallIncVat += (parseFloat(item.installIncVat) || 0) * item.qty;
     });
     const conditionsList = [ { id: 'demontering_luckor', price: 2000, hasQty: false, isRot: true }, { id: 'demontering_helkok', price: 600, hasQty: true, isRot: true }, { id: 'bortforsling', price: 2000, hasQty: false, isRot: false }, { id: 'bortforsling_vit', price: 1000, hasQty: true, isRot: false }, { id: 'inkoppling_vit', price: 1000, hasQty: true, isRot: true }, { id: 'el', price: 0, hasQty: false, hasCustomPrice: true, isRot: true }, { id: 'vvs', price: 0, hasQty: false, hasCustomPrice: true, isRot: true } ];
     let totalNonRotInstallIncVat = 0;
@@ -1110,7 +1113,7 @@ function generateQuotePdf(req, res) {
     db.query('SELECT q.*, c.name as customer_name, c.address, c.address2, c.apartment_number, c.brf_org_nr, c.property_designation, c.email, c.phone, c.personnummer FROM quotes q JOIN customers c ON q.customer_id = c.id WHERE q.id = ?', [req.params.id], (err, results) => {
         if (err || results.length === 0) return res.status(404).send('Hittades inte');
         const order = results[0];
-        let cart = []; let specs = {}; let selectedConditions = {}; let extraFees = {}; let useRot = true; let coverPage = null;
+        let cart = []; let specs = {}; let selectedConditions = {}; let extraFees = {}; let useRot = true; let selfInstall = false; let coverPage = null;
         // quote_data är en JSON-kolumn i MySQL - mysql2 packar redan upp den till ett objekt
         // automatiskt vid SELECT (den är ALDRIG en rå sträng här), så ett blint JSON.parse()
         // kastar tyst ett fel som fångas av catch(e){} och lämnar allt vid sina tomma
@@ -1119,7 +1122,7 @@ function generateQuotePdf(req, res) {
         if (order.quote_data) {
             try {
                 const parsed = typeof order.quote_data === 'string' ? JSON.parse(order.quote_data) : order.quote_data;
-                if (parsed.quoteCart) cart = parsed.quoteCart; if (parsed.kitchenSpecs) specs = parsed.kitchenSpecs; if (parsed.selectedConditions) selectedConditions = parsed.selectedConditions; if (parsed.extraFees) extraFees = parsed.extraFees; if (parsed.useRot !== undefined) useRot = parsed.useRot; if (parsed.coverPage) coverPage = parsed.coverPage;
+                if (parsed.quoteCart) cart = parsed.quoteCart; if (parsed.kitchenSpecs) specs = parsed.kitchenSpecs; if (parsed.selectedConditions) selectedConditions = parsed.selectedConditions; if (parsed.extraFees) extraFees = parsed.extraFees; if (parsed.useRot !== undefined) useRot = parsed.useRot; if (parsed.selfInstall !== undefined) selfInstall = parsed.selfInstall; if (parsed.coverPage) coverPage = parsed.coverPage;
             } catch(e) {}
         }
         const isOrder = order.status === 'Order'; const docTitle = isOrder ? 'KÖPEAVTAL' : 'OFFERT'; const dateStr = new Date(order.created_at).toLocaleDateString('sv-SE');
@@ -1169,7 +1172,9 @@ function generateQuotePdf(req, res) {
                 const rowDiscountAmount = rowFullPrice * (rowDiscountPercent / 100);
                 const rowMaterialTotal = rowFullPrice - rowDiscountAmount;
                 totalMaterialFullPrice += rowFullPrice; totalRowDiscountAmount += rowDiscountAmount; totalMaterialBeforeGlobalDiscount += rowMaterialTotal;
-                totalRotInstallIncVat += (parseFloat(item.installIncVat) || 0) * item.qty;
+                // Kunden monterar själv: räkna inte med produktradens automatiska monteringskostnad -
+                // "Monteringsvillkor & Avgifter" (nedan) påverkas inte, de har sin egen Kund/Företag-markering.
+                if (!selfInstall) totalRotInstallIncVat += (parseFloat(item.installIncVat) || 0) * item.qty;
                 let pdfImageCell;
                 if (item.colorId) {
                     const dbColor = dbColors.find(c => c.id == item.colorId);
