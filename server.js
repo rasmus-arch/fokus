@@ -724,6 +724,24 @@ app.post('/api/quotes/:id/public-link/regenerate', requireAuth, requireStaff, (r
 function hasCostDataServer(v) {
     return v !== null && v !== undefined && v !== '' && !isNaN(parseFloat(v));
 }
+// Artikelnummer -> produkt, byggs en gång per produktlista. Behövs när en offertrad pekar på ett
+// produkt-id som inte längre finns (t.ex. efter att färg-/storleksvarianter slagits ihop till en
+// variantprodukt) - artikelnumret finns kvar som variant på den sammanslagna produkten.
+const productsBySkuCache = new WeakMap();
+function getProductsBySku(products) {
+    let map = productsBySkuCache.get(products);
+    if (map) return map;
+    map = new Map();
+    products.forEach(p => {
+        if (p.has_variations) {
+            let vars = [];
+            try { vars = typeof p.variations === 'string' ? JSON.parse(p.variations || '[]') : (p.variations || []); } catch (e) {}
+            vars.forEach(v => { if (v && v.sku && !map.has(String(v.sku))) map.set(String(v.sku), p); });
+        } else if (p.sku && !map.has(String(p.sku))) map.set(String(p.sku), p);
+    });
+    productsBySkuCache.set(products, map);
+    return map;
+}
 function recalcQuoteCartCosts(quoteCart, products, doorPriceItems) {
     let updatedCount = 0, unrecomputableCount = 0, stillMissingCount = 0;
     const details = [];
@@ -752,7 +770,7 @@ function recalcQuoteCartCosts(quoteCart, products, doorPriceItems) {
             details.push({ name: label, sku: item.sku, reason: item.sku === 'BÄNKSKIVA' ? 'bänkskiva' : 'ingen-produktkoppling' });
             return;
         }
-        const product = productsById.get(item.id);
+        const product = productsById.get(item.id) || (item.sku ? getProductsBySku(products).get(String(item.sku)) : null);
         if (!product) { stillMissingCount++; details.push({ name: label, sku: item.sku, reason: 'produkt-borttagen' }); return; }
         let newCost = null;
         if (product.has_variations) {
@@ -793,7 +811,7 @@ app.post('/api/quotes/:id/recalculate-costs', requireAuth, requireStaff, async (
         if (!results || results.length === 0) return res.status(404).json({ message: 'Offerten hittades inte.' });
         const qd = typeof results[0].quote_data === 'string' ? JSON.parse(results[0].quote_data || '{}') : (results[0].quote_data || {});
         const cart = Array.isArray(qd.quoteCart) ? qd.quoteCart : [];
-        const products = await dbQueryP('SELECT id, has_variations, variations, pricing_type, price_per_sqm, purchase_price FROM products', []);
+        const products = await dbQueryP('SELECT id, sku, has_variations, variations, pricing_type, price_per_sqm, purchase_price FROM products', []);
         const doorPriceItems = await getDoorPriceItemsForModel(qd.kitchenSpecs && qd.kitchenSpecs.doorModelId);
         const summary = recalcQuoteCartCosts(cart, products || [], doorPriceItems);
         qd.quoteCart = cart;
@@ -806,7 +824,7 @@ app.post('/api/quotes/:id/recalculate-costs', requireAuth, requireStaff, async (
 app.post('/api/quotes/recalculate-costs', requireAuth, requireStaff, async (req, res) => {
     try {
         const quotes = await dbQueryP('SELECT id, quote_data FROM quotes WHERE deleted_at IS NULL', []);
-        const products = await dbQueryP('SELECT id, has_variations, variations, pricing_type, price_per_sqm, purchase_price FROM products', []);
+        const products = await dbQueryP('SELECT id, sku, has_variations, variations, pricing_type, price_per_sqm, purchase_price FROM products', []);
         const doorPriceItemsCache = new Map();
         const toUpdate = [];
         const reasonCounts = {};
@@ -876,7 +894,7 @@ const dbP = db.promise();
 async function findOrphanedUploads() {
     const [[companyRow], products, colors, quotes, orderFiles] = await Promise.all([
         dbP.query('SELECT logo_url FROM company_settings WHERE id = 1').then(r => r[0]),
-        dbP.query('SELECT image_url, gallery FROM products').then(r => r[0]),
+        dbP.query('SELECT image_url, gallery, variations FROM products').then(r => r[0]),
         dbP.query('SELECT image_url FROM countertop_colors').then(r => r[0]),
         dbP.query('SELECT quote_data FROM quotes').then(r => r[0]),
         dbP.query('SELECT file_url FROM order_files').then(r => r[0])
@@ -892,6 +910,11 @@ async function findOrphanedUploads() {
         try {
             const gallery = typeof p.gallery === 'string' ? JSON.parse(p.gallery || '[]') : (p.gallery || []);
             (gallery || []).forEach(addUrl);
+        } catch (e) {}
+        // Varianter (t.ex. en färg) kan ha en egen bild - får inte flaggas som oanvänd.
+        try {
+            const vars = typeof p.variations === 'string' ? JSON.parse(p.variations || '[]') : (p.variations || []);
+            (vars || []).forEach(v => addUrl(v && v.image_url));
         } catch (e) {}
     });
     colors.forEach(c => addUrl(c.image_url));
