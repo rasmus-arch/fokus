@@ -822,7 +822,7 @@
                     servicesList.innerHTML += `
                         <div class="flex justify-between items-center bg-gray-50 border border-gray-200 rounded p-2">
                             <div><p class="text-sm font-medium text-gray-800">${s.name}</p><p class="text-[10px] text-gray-500">${parseFloat(s.price).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr / ${s.price_type === 'per_lm' ? 'lpm' : 'st'}</p></div>
-                            <input type="number" id="ctSrv_${s.id}" data-type="${s.price_type}" data-price="${s.price}" min="0" value="0" oninput="ctCalculate()" class="w-16 border border-gray-300 rounded text-center py-1 text-sm bg-white outline-none focus:border-blue-500">
+                            <input type="number" id="ctSrv_${s.id}" data-type="${s.price_type}" data-price="${s.price}" data-purchase="${s.purchase_price ?? ''}" min="0" value="0" oninput="ctCalculate()" class="w-16 border border-gray-300 rounded text-center py-1 text-sm bg-white outline-none focus:border-blue-500">
                         </div>`;
                 });
             } else {
@@ -869,7 +869,7 @@
                     const edgeSelect = document.getElementById(`ctEdgeProfile_${i}`); const edgeSection = document.getElementById(`ctEdgeSection_${i}`);
                     if (validEdges.length > 0) {
                         edgeSection.classList.remove('hidden'); edgeSelect.innerHTML = '<option value="">Välj profil...</option>';
-                        validEdges.forEach(e => edgeSelect.innerHTML += `<option value="${e.id}" data-price="${e.price_per_lm}">${e.name} (${e.price_per_lm}kr/m)</option>`);
+                        validEdges.forEach(e => edgeSelect.innerHTML += `<option value="${e.id}" data-price="${e.price_per_lm}" data-purchase="${e.purchase_price_per_lm ?? ''}">${e.name} (${e.price_per_lm}kr/m)</option>`);
                     } else {
                         edgeSection.classList.add('hidden'); edgeSelect.innerHTML = ''; document.getElementById(`ctEdgeFront_${i}`).checked = false; document.getElementById(`ctEdgeBack_${i}`).checked = false; document.getElementById(`ctEdgeLeft_${i}`).checked = false; document.getElementById(`ctEdgeRight_${i}`).checked = false;
                     }
@@ -1203,6 +1203,7 @@
                 if (edgeSelect && edgeSelect.value) {
                     const edgeName = edgeSelect.options[edgeSelect.selectedIndex].text.split('(')[0].trim();
                     const pricePerLm = parseFloat(edgeSelect.options[edgeSelect.selectedIndex].dataset.price) || 0;
+                    const purchasePerLm = edgeSelect.options[edgeSelect.selectedIndex].dataset.purchase;
                     
                     let partEdges = []; let edgeMeters = 0;
                     let fEdge = (part.id === 2 || part.id === 3) ? part.d : part.calcL;
@@ -1220,7 +1221,8 @@
                             cartId: 'edge_' + Date.now() + part.id, id: null, sku: 'TJÄNST', 
                             name: `Kantprofil: ${edgeName} (Del ${part.id}: ${partEdges.join(', ')}) - Totalt ${edgeMeters.toFixed(2)}m`, 
                             priceIncVat: (edgeMeters * pricePerLm), installIncVat: 0, companyShare: 0, installerShare: 0, 
-                            qty: 1, discount: 0, isFreeText: true 
+                            qty: 1, discount: 0, isFreeText: true,
+                            costExVat: hasCostData(purchasePerLm) ? edgeMeters * parseFloat(purchasePerLm) : null
                         });
                     }
                 }
@@ -1237,13 +1239,15 @@
                             quoteCart.push({ 
                                 cartId: 'srv_' + Date.now() + s.id, id: null, sku: 'TJÄNST', name: `${s.name} (${qty}x)`, 
                                 priceIncVat: (qty * totalLpm * parseFloat(input.dataset.price)), installIncVat: 0, companyShare: 0, installerShare: 0, 
-                                qty: 1, discount: 0, isFreeText: true 
+                                qty: 1, discount: 0, isFreeText: true,
+                                costExVat: hasCostData(input.dataset.purchase) ? qty * totalLpm * parseFloat(input.dataset.purchase) : null
                             });
                         } else {
                             quoteCart.push({ 
                                 cartId: 'srv_' + Date.now() + s.id, id: null, sku: 'TJÄNST', name: s.name, 
                                 priceIncVat: parseFloat(input.dataset.price), installIncVat: 0, companyShare: 0, installerShare: 0, 
-                                qty: qty, discount: 0, isFreeText: true 
+                                qty: qty, discount: 0, isFreeText: true,
+                                costExVat: hasCostData(input.dataset.purchase) ? parseFloat(input.dataset.purchase) : null
                             });
                         }
                     }

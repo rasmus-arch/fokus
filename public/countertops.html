@@ -412,7 +412,10 @@
                             <p class="text-xs text-gray-500">Tjocklek: <span class="font-mono text-gray-700">${e.thickness} mm</span></p>
                         </div>
                         <div class="flex items-center gap-4">
-                            <span class="text-sm font-bold text-blue-700">${parseFloat(e.price_per_lm).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr / m</span>
+                            <div class="text-right">
+                                <span class="text-sm font-bold text-blue-700 kundlage-price">${parseFloat(e.price_per_lm).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr / m</span>
+                                <div class="mt-0.5">${marginBadgeHtml(calcMarginPercent(e.price_per_lm, e.purchase_price_per_lm), calcMarginKr(e.price_per_lm, e.purchase_price_per_lm))}</div>
+                            </div>
                             <div class="flex gap-2">
                                 <button onclick="openModal('edge', ${e.id})" class="text-gray-400 hover:text-blue-600 hidden group-hover:block"><i class="fas fa-edit"></i></button>
                                 <button onclick="deleteData('edges', ${e.id})" class="text-gray-400 hover:text-red-600 hidden group-hover:block"><i class="fas fa-trash"></i></button>
@@ -437,7 +440,10 @@
                         <td class="p-3 font-semibold text-gray-800">${s.name}</td>
                         <td class="p-3 text-gray-600 text-xs">${matName}</td>
                         <td class="p-3"><span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">${isLm ? 'Per löpmeter' : 'Fast Pris'}</span></td>
-                        <td class="p-3 text-right font-bold text-blue-700">${parseFloat(s.price).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr</td>
+                        <td class="p-3 text-right">
+                            <span class="font-bold text-blue-700 kundlage-price">${parseFloat(s.price).toLocaleString('sv-SE', {minimumFractionDigits: 2, maximumFractionDigits: 2})} kr</span>
+                            <div class="mt-0.5">${marginBadgeHtml(calcMarginPercent(s.price, s.purchase_price), calcMarginKr(s.price, s.purchase_price))}</div>
+                        </td>
                         <td class="p-3 text-right">
                             <button onclick="openModal('service', ${s.id})" class="text-gray-400 hover:text-blue-600 px-1"><i class="fas fa-edit"></i></button>
                             <button onclick="deleteData('services', ${s.id})" class="text-gray-400 hover:text-red-600 px-1"><i class="fas fa-trash"></i></button>
@@ -551,8 +557,9 @@
                     <div><label class="block text-xs font-semibold text-gray-600 mb-1">Namn på Profil (T.ex. Rak fasad, Rundad)</label><input type="text" id="eName" value="${item ? item.name : ''}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
                     <div class="grid grid-cols-2 gap-3 mt-2">
                         <div><label class="block text-xs font-semibold text-gray-600 mb-1">Tjocklek (mm)</label><input type="number" id="eThick" value="${item ? item.thickness : '20'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
-                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Pris / Lpm (Ink moms)</label><input type="number" id="ePrice" value="${item ? item.price_per_lm : '0'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Pris / Lpm (Ink moms)</label><input type="number" step="any" id="ePrice" value="${item ? item.price_per_lm : '0'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
                     </div>
+                    <div class="mt-2"><label class="block text-xs font-semibold text-gray-600 mb-1">Inköpspris / Lpm (Ex moms, valfritt)</label><input type="number" step="any" id="ePurchase" value="${item ? (item.purchase_price_per_lm ?? '') : ''}" class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
                 `;
             }
             else if (type === 'service') {
@@ -571,13 +578,14 @@
                     </div>
                     <div class="mt-2"><label class="block text-xs font-semibold text-gray-600 mb-1">Namn (T.ex. Håltagning Spis)</label><input type="text" id="sName" value="${item ? item.name : ''}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
                     <div class="grid grid-cols-2 gap-3 mt-2">
-                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Pris (Inkl. moms)</label><input type="number" id="sPrice" value="${item ? item.price : '0'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
+                        <div><label class="block text-xs font-semibold text-gray-600 mb-1">Pris (Inkl. moms)</label><input type="number" step="any" id="sPrice" value="${item ? item.price : '0'}" required class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
                         <div><label class="block text-xs font-semibold text-gray-600 mb-1">Pristyp</label>
                         <select id="sType" class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500 bg-white">
                             <option value="fixed" ${item && item.price_type==='fixed' ? 'selected':''}>Fast pris (Styck)</option>
                             <option value="per_lm" ${item && item.price_type==='per_lm' ? 'selected':''}>Per Löpmeter</option>
                         </select></div>
                     </div>
+                    <div class="mt-2"><label class="block text-xs font-semibold text-gray-600 mb-1">Inköpspris (Ex moms, valfritt - samma enhet som priset)</label><input type="number" step="any" id="sPurchase" value="${item ? (item.purchase_price ?? '') : ''}" class="w-full border px-2 py-1.5 rounded outline-none focus:border-blue-500"></div>
                 `;
             }
 
@@ -637,12 +645,12 @@
                 endpoint = 'price_groups'; payload = { name: document.getElementById('pgName').value, material_id: activeMaterialId };
             }
             else if (currentModalType === 'edge') {
-                endpoint = 'edges'; payload = { name: document.getElementById('eName').value, thickness: document.getElementById('eThick').value, price_per_lm: document.getElementById('ePrice').value, material_id: activeEdgeMaterialId };
+                endpoint = 'edges'; payload = { name: document.getElementById('eName').value, thickness: document.getElementById('eThick').value, price_per_lm: document.getElementById('ePrice').value, purchase_price_per_lm: document.getElementById('ePurchase').value || null, material_id: activeEdgeMaterialId };
             }
             else if (currentModalType === 'service') {
                 endpoint = 'services'; 
                 const matVal = document.getElementById('sMat').value;
-                payload = { name: document.getElementById('sName').value, price: document.getElementById('sPrice').value, price_type: document.getElementById('sType').value, material_id: matVal ? parseInt(matVal) : null };
+                payload = { name: document.getElementById('sName').value, price: document.getElementById('sPrice').value, purchase_price: document.getElementById('sPurchase').value || null, price_type: document.getElementById('sType').value, material_id: matVal ? parseInt(matVal) : null };
             }
 
             const method = currentEditId ? 'PUT' : 'POST';
