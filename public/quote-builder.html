@@ -765,6 +765,23 @@
             return ctConfig.prices.filter(p => p.color_id == colId);
         }
 
+        // En prisrad är antingen 'lpm' (pris per löpmeter inom ett djupintervall) eller 'sqm' (pris
+        // per m², oavsett djup). Täcker båda typerna samma djup vinner den specifika intervallraden.
+        function findCountertopPriceBand(colId, thk, depth) {
+            const rows = priceRowsForColor(colId).filter(p => p.thickness == thk && depth >= p.depth_min && depth <= p.depth_max);
+            return rows.find(p => p.pricing_type !== 'sqm') || rows.find(p => p.pricing_type === 'sqm') || null;
+        }
+        // Materialpris för en bänkskivedel: löpmeter x pris/lpm, eller area (längd x djup i m²) x pris/m².
+        function countertopPartPrice(band, calcL, depth) {
+            if (band.pricing_type === 'sqm') return (calcL / 1000) * (depth / 1000) * parseFloat(band.price_per_sqm);
+            return (calcL / 1000) * parseFloat(band.price_per_lm);
+        }
+        // Samma som ovan fast med inköpspris (ex moms) - null om inköpspris saknas på prisraden.
+        function countertopPartCost(band, calcL, depth) {
+            if (band.pricing_type === 'sqm') return hasCostData(band.purchase_price_per_sqm) ? (calcL / 1000) * (depth / 1000) * parseFloat(band.purchase_price_per_sqm) : null;
+            return hasCostData(band.purchase_price_per_lm) ? (calcL / 1000) * parseFloat(band.purchase_price_per_lm) : null;
+        }
+
         function openCountertopModal() {
             document.getElementById('countertopModal').classList.remove('hidden');
             
@@ -926,8 +943,8 @@
                 totalLpm += (part.calcL / 1000);
 
                 if (colId && thk) {
-                    const priceBand = priceRowsForColor(colId).find(p => p.thickness == thk && part.d >= p.depth_min && part.d <= p.depth_max);
-                    if (priceBand) materialPrice += (part.calcL / 1000) * parseFloat(priceBand.price_per_lm);
+                    const priceBand = findCountertopPriceBand(colId, thk, part.d);
+                    if (priceBand) materialPrice += countertopPartPrice(priceBand, part.calcL, part.d);
                     else { anyDepthError = true; allPartsValid = false; }
                 } else { allPartsValid = false; }
 
@@ -1153,8 +1170,8 @@
             let addedDrawing = false;
 
             activeParts.forEach(part => {
-                const priceBand = priceRowsForColor(colSelect.value).find(p => p.thickness == thk && part.d >= p.depth_min && part.d <= p.depth_max);
-                const materialPrice = (part.calcL / 1000) * parseFloat(priceBand.price_per_lm);
+                const priceBand = findCountertopPriceBand(colSelect.value, thk, part.d);
+                const materialPrice = countertopPartPrice(priceBand, part.calcL, part.d);
 
                 const installIncVat = (part.calcL / 1000) * 1000;
                 const companyShare = (part.calcL / 1000) * 100;
@@ -1171,7 +1188,7 @@
                     if (count >= 3 && joint3 === 'vertical') extraInfo += ' (Ansluter till höger om Del 3)';
                 }
 
-                const materialCostExVat = hasCostData(priceBand.purchase_price_per_lm) ? (part.calcL / 1000) * parseFloat(priceBand.purchase_price_per_lm) : null;
+                const materialCostExVat = countertopPartCost(priceBand, part.calcL, part.d);
                 quoteCart.push({
                     cartId: 'ct_' + Date.now() + part.id, id: null, sku: 'BÄNKSKIVA', colorId: colorId,
                     name: `Bänkskiva ${matName} - ${colName} (${thk}mm) | Del ${part.id} (Kapsnitt: ${part.calcL}x${part.d}mm | Ryggmått: ${part.rawL}mm)${extraInfo}`,
