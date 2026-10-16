@@ -739,15 +739,7 @@
 
         window.currentCountertopSvg = '';
         
-        const conditionsList = [
-            { id: 'demontering_luckor', label: 'Demontering luckbyte', hasQty: false, price: 2000, isRot: true, installerCut: 1200 },
-            { id: 'demontering_helkok', label: 'Demontering helkök per stomme', hasQty: true, price: 600, isRot: true, installerCut: 500 },
-            { id: 'bortforsling', label: 'Bortforsling', hasQty: false, price: 2000, isRot: false, installerCut: 2000 },
-            { id: 'bortforsling_vit', label: 'Bortforsling av vitvaror (vid köp av nya)', hasQty: true, price: 1000, isRot: false, installerCut: 1000 },
-            { id: 'inkoppling_vit', label: 'Inkoppling av vitvaror', hasQty: true, price: 1000, isRot: true, installerCut: 1000 },
-            { id: 'el', label: 'In/Urkoppling el', hasQty: false, hasCustomPrice: true, price: 0, isRot: true, installerCut: 0 },
-            { id: 'vvs', label: 'In/Urkoppling VVS', hasQty: false, hasCustomPrice: true, price: 0, isRot: true, installerCut: 0 }
-        ];
+        const conditionsList = QUOTE_CONDITIONS; // delad med marginalberäkningen i common.js
         
         let selectedConditions = {}; 
         conditionsList.forEach(c => { selectedConditions[c.id] = { responsibility: '', qty: 1, customPrice: 0 }; });
