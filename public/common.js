@@ -133,33 +133,75 @@ function marginBadgeHtml(marginPercent, profitKr) {
     return `<span class="kundlage-price inline-block px-1.5 py-0.5 rounded text-[11px] font-bold ${color}">${text}</span>`;
 }
 
+// Monteringsvillkor & avgifter som kan läggas på en offert (visas som val i offertbyggaren).
+// installerCut = den del av priset som går till montören. Delas av offertbyggaren och
+// marginalberäkningen nedan så de aldrig kan glida isär. (Servern har en egen kopia i server.js.)
+const QUOTE_CONDITIONS = [
+    { id: 'demontering_luckor', label: 'Demontering luckbyte', hasQty: false, price: 2000, isRot: true, installerCut: 1200 },
+    { id: 'demontering_helkok', label: 'Demontering helkök per stomme', hasQty: true, price: 600, isRot: true, installerCut: 500 },
+    { id: 'bortforsling', label: 'Bortforsling', hasQty: false, price: 2000, isRot: false, installerCut: 2000 },
+    { id: 'bortforsling_vit', label: 'Bortforsling av vitvaror (vid köp av nya)', hasQty: true, price: 1000, isRot: false, installerCut: 1000 },
+    { id: 'inkoppling_vit', label: 'Inkoppling av vitvaror', hasQty: true, price: 1000, isRot: true, installerCut: 1000 },
+    { id: 'el', label: 'In/Urkoppling el', hasQty: false, hasCustomPrice: true, price: 0, isRot: true, installerCut: 0 },
+    { id: 'vvs', label: 'In/Urkoppling VVS', hasQty: false, hasCustomPrice: true, price: 0, isRot: true, installerCut: 0 }
+];
+
 // Räknar total marginal (kr + %) för en hel offert/order utifrån dess sparade quote_data -
 // används i offert-/orderlistorna (quotes.html, orders.html) för en snabb överblick utan att
 // behöva öppna offertbyggaren. quote = hela raden från /api/quotes (måste innehålla quote_data,
-// global_discount, discount_type). Rader utan kostnadsdata (costExVat saknas) exkluderas helt -
-// varken deras intäkt eller kostnad räknas med. Notera: räknar bara med kundvagnens rader
-// (produkter/luckor/bänkskivor) plus deras montage - monteringsvillkor och startavgifter (som
-// sätts i offertbyggaren) räknas INTE med här, så siffran är en approximation. Den exakta,
-// fullständiga marginalen visas i offertbyggaren.
+// global_discount, discount_type). MÅSTE räkna exakt som renderCart() i quote-builder.html:
+// kundvagnens rader och deras montage (inte alls om "Kunden monterar själv" är ibockat),
+// startavgift material, färgtillägg, startavgifter för montage och de monteringsvillkor som
+// företaget utför - där montörens andel är kostnad och resten vinst. Rader utan kostnadsdata
+// (costExVat saknas) exkluderas helt - varken deras intäkt eller kostnad räknas med.
 function calcQuoteMargin(quote) {
     const qd = parseJsonField(quote.quote_data, {});
     const cart = Array.isArray(qd.quoteCart) ? qd.quoteCart : [];
     if (cart.length === 0) return { percent: null, kr: null, excludedRevenueIncVat: 0, excludedCount: 0 };
 
+    const fees = qd.extraFees || {};
+    const startFeeProduct = parseFloat(fees.startFeeProduct) || 0, startFeeNonRot = parseFloat(fees.startFeeNonRot) || 0;
+    const startFeeRotComp = parseFloat(fees.startFeeRotComp) || 0, startFeeRotInst = parseFloat(fees.startFeeRotInst) || 0;
+    const colorFee = parseFloat(fees.feeColor) || 0;
+    const selfInstall = !!qd.selfInstall;
+    const selectedConditions = qd.selectedConditions || {};
+
     let materialRevenueIncVatAll = 0, marginRevenueIncVat = 0, marginCostExVat = 0, installRevenueIncVat = 0, installerCutIncVat = 0, excludedRevenueIncVat = 0, excludedCount = 0;
     cart.forEach(item => {
-        const rowRevenueIncVat = (parseFloat(item.priceIncVat) || 0) * (1 - ((parseFloat(item.discount) || 0) / 100)) * (item.qty || 1);
+        const qty = item.qty || 1;
+        const rowRevenueIncVat = (parseFloat(item.priceIncVat) || 0) * (1 - ((parseFloat(item.discount) || 0) / 100)) * qty;
         materialRevenueIncVatAll += rowRevenueIncVat;
         if (hasCostData(item.costExVat)) {
             marginRevenueIncVat += rowRevenueIncVat;
-            marginCostExVat += parseFloat(item.costExVat) * (item.qty || 1);
+            marginCostExVat += parseFloat(item.costExVat) * qty;
         } else {
             excludedRevenueIncVat += rowRevenueIncVat;
             excludedCount++;
         }
-        installRevenueIncVat += (parseFloat(item.installIncVat) || 0) * (item.qty || 1);
-        installerCutIncVat += (parseFloat(item.installerShare) || 0) * (item.qty || 1);
+        if (!selfInstall) {
+            installRevenueIncVat += (parseFloat(item.installIncVat) || 0) * qty;
+            installerCutIncVat += (parseFloat(item.installerShare) || 0) * qty;
+        }
     });
+
+    // Monteringsvillkor som företaget utför: hela priset är intäkt, montörens andel är kostnad.
+    QUOTE_CONDITIONS.forEach(cond => {
+        const current = selectedConditions[cond.id];
+        if (!current || current.responsibility !== 'Klarälvskök') return;
+        const unitPrice = cond.hasCustomPrice ? (parseFloat(current.customPrice) || 0) : cond.price;
+        if (unitPrice <= 0) return;
+        const qty = cond.hasQty ? (parseFloat(current.qty) || 1) : 1;
+        installRevenueIncVat += unitPrice * qty;
+        installerCutIncVat += cond.installerCut * qty;
+    });
+    // Startavgifter för montage: ROT-företagets del är ren vinst, montörens delar går vidare till montören.
+    installRevenueIncVat += startFeeRotComp + startFeeRotInst + startFeeNonRot;
+    installerCutIncVat += startFeeRotInst + startFeeNonRot;
+
+    // Startavgift material och färgtillägg har ingen inköpskostnad - ren vinst, alltid med i underlaget.
+    const feeRevenue = startFeeProduct + colorFee;
+    materialRevenueIncVatAll += feeRevenue;
+    marginRevenueIncVat += feeRevenue;
 
     // Global rabatt slår proportionerligt mot hela materialsumman - skalas ner lika mycket på den
     // marginalberäknade delsumman så den stämmer med vad kunden faktiskt betalar för de varorna.

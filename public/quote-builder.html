@@ -579,10 +579,10 @@
                     <div class="p-4 md:p-6 overflow-y-auto">
                         <span id="modalSku" class="text-[10px] font-mono text-gray-400 block"></span>
                         <h2 id="modalTitle" class="text-xl font-bold text-gray-800 mb-2"></h2>
-                        <div id="modalDesc" class="text-xs md:text-sm text-gray-600 html-desc mb-4"></div>
 
                         <div id="modalVariations" class="hidden space-y-3 border-t border-gray-200 pt-4">
                             <h4 class="text-xs font-bold text-gray-800 mb-1">Välj alternativ:</h4>
+                            <div id="modalVariantSwatches" class="hidden flex flex-wrap gap-2"></div>
                             <div class="flex gap-3">
                                 <div id="modalVar1Container" class="hidden flex-1">
                                     <label id="modalVar1Label" class="block text-[10px] text-gray-500 uppercase font-bold mb-1"></label>
@@ -594,6 +594,8 @@
                                 </div>
                             </div>
                         </div>
+
+                        <div id="modalDesc" class="text-xs md:text-sm text-gray-600 html-desc mb-4 mt-2"></div>
 
                         <div id="modalSqmDims" class="hidden space-y-3 border-t border-gray-200 pt-4">
                             <h4 class="text-xs font-bold text-gray-800 mb-1">Ange mått (priset räknas per m²):</h4>
@@ -737,15 +739,7 @@
 
         window.currentCountertopSvg = '';
         
-        const conditionsList = [
-            { id: 'demontering_luckor', label: 'Demontering luckbyte', hasQty: false, price: 2000, isRot: true, installerCut: 1200 },
-            { id: 'demontering_helkok', label: 'Demontering helkök per stomme', hasQty: true, price: 600, isRot: true, installerCut: 500 },
-            { id: 'bortforsling', label: 'Bortforsling', hasQty: false, price: 2000, isRot: false, installerCut: 2000 },
-            { id: 'bortforsling_vit', label: 'Bortforsling av vitvaror (vid köp av nya)', hasQty: true, price: 1000, isRot: false, installerCut: 1000 },
-            { id: 'inkoppling_vit', label: 'Inkoppling av vitvaror', hasQty: true, price: 1000, isRot: true, installerCut: 1000 },
-            { id: 'el', label: 'In/Urkoppling el', hasQty: false, hasCustomPrice: true, price: 0, isRot: true, installerCut: 0 },
-            { id: 'vvs', label: 'In/Urkoppling VVS', hasQty: false, hasCustomPrice: true, price: 0, isRot: true, installerCut: 0 }
-        ];
+        const conditionsList = QUOTE_CONDITIONS; // delad med marginalberäkningen i common.js
         
         let selectedConditions = {}; 
         conditionsList.forEach(c => { selectedConditions[c.id] = { responsibility: '', qty: 1, customPrice: 0 }; });
@@ -1398,6 +1392,22 @@
             document.getElementById('productModal').classList.remove('hidden');
         }
 
+        // Bildval för varianter (t.ex. färger): visar en miniatyr per första attributvärde som har en
+        // egen bild. Klick väljer värdet i rullistan. Visas bara när minst två värden har bild.
+        function renderVariantSwatches() {
+            const box = document.getElementById('modalVariantSwatches');
+            const v1Sel = document.getElementById('modalVar1Select');
+            const seen = new Map();
+            parsedVariations.forEach(v => { if (v.image_url && !seen.has(v.attr1_value)) seen.set(v.attr1_value, v.image_url); });
+            if (seen.size < 2) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+            box.classList.remove('hidden');
+            box.innerHTML = Array.from(seen.entries()).map(([val, img]) => {
+                const active = v1Sel.value === val;
+                return `<button type="button" data-val="${escapeHtml(val)}" title="${escapeHtml(val)}" class="w-12 h-12 rounded border-2 bg-white p-0.5 ${active ? 'border-blue-500' : 'border-gray-200 hover:border-gray-400'}"><img src="${escapeHtml(img)}" class="w-full h-full object-contain"></button>`;
+            }).join('');
+            box.querySelectorAll('button').forEach(btn => btn.onclick = () => { v1Sel.value = btn.dataset.val; updateVariationSelection(); });
+        }
+
         function updateVariationSelection() {
             const v1Sel = document.getElementById('modalVar1Select'); const v2Sel = document.getElementById('modalVar2Select');
             const val1 = v1Sel.value; const matchingVars = parsedVariations.filter(v => v.attr1_value === val1);
@@ -1417,6 +1427,7 @@
                 document.getElementById('modalAddBtn').disabled = false; document.getElementById('modalAddBtn').classList.remove('opacity-50', 'cursor-not-allowed');
                 // Variantens egen bild (t.ex. en viss färg) tar över produktens huvudbild, om satt.
                 if (selectedVariation.image_url) document.getElementById('modalMainImage').src = selectedVariation.image_url;
+                renderVariantSwatches();
             } else {
                 document.getElementById('modalPrice').innerText = '- kr'; document.getElementById('modalInstall').innerText = '- kr';
                 document.getElementById('modalAddBtn').disabled = true; document.getElementById('modalAddBtn').classList.add('opacity-50', 'cursor-not-allowed');
