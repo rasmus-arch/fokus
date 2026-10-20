@@ -1291,7 +1291,7 @@ function generateQuotePdf(req, res) {
                 coverPageContent = [
                     { text: '', margin: [0, 30, 0, 0] },
                     coverLogoBlock,
-                    { text: `Offert till ${order.customer_name || ''}`, fontSize: 24, bold: true, color: accentColor, alignment: 'center', margin: [0, 25, 0, 6] },
+                    { text: `${isOrder ? 'Köpeavtal' : 'Offert'} till ${order.customer_name || ''}`, fontSize: 24, bold: true, color: accentColor, alignment: 'center', margin: [0, 25, 0, 6] },
                     { canvas: [{ type: 'line', x1: 200, y1: 0, x2: 315, y2: 0, lineWidth: 2, lineColor: goldColor }], margin: [0, 0, 0, 30] },
                     ...(heroBlock ? [{ ...heroBlock, margin: [0, 0, 0, 30] }] : []),
                     { columns: [ galleryCol(handleCell, 'Handtag'), galleryCol(modelCell, 'Modell'), galleryCol(countertopCell, 'Bänkskiva'), galleryCol(colorCell, 'Färg') ], columnGap: 15 },
@@ -1315,8 +1315,15 @@ function generateQuotePdf(req, res) {
                 ], styles: { th: { bold: true, fillColor: '#000000', color: '#ffffff', padding: 6 }, thOffer: { bold: true, fillColor: accentColor, color: '#ffffff', padding: 6 } }
             };
 
-            const termsText = order.public_comment || company.agreement_text || '';
-            if (termsText) docDefinition.content.push({ text: 'KOMMENTAR / ÖVRIGA VILLKOR', bold: true, color: '#000000', margin: [0, 30, 0, 8] }, ...htmlToPdfmakeNodes(termsText));
+            // Köpeavtal: företagets köpvillkor (Företagsinfo) ska alltid stå på avtalet, och ordens egen
+            // kommentar visas separat. Offert: som tidigare - kommentaren om den finns, annars köpvillkoren.
+            if (isOrder) {
+                if (company.agreement_text) docDefinition.content.push({ text: 'KÖPVILLKOR', bold: true, color: '#000000', margin: [0, 30, 0, 8] }, ...htmlToPdfmakeNodes(company.agreement_text));
+                if (order.public_comment) docDefinition.content.push({ text: 'KOMMENTAR', bold: true, color: '#000000', margin: [0, 20, 0, 8] }, ...htmlToPdfmakeNodes(order.public_comment));
+            } else {
+                const termsText = order.public_comment || company.agreement_text || '';
+                if (termsText) docDefinition.content.push({ text: 'KOMMENTAR / ÖVRIGA VILLKOR', bold: true, color: '#000000', margin: [0, 30, 0, 8] }, ...htmlToPdfmakeNodes(termsText));
+            }
             if (isOrder) docDefinition.content.push({ text: 'SIGNATUR', bold: true, color: '#000000', margin: [0, 40, 0, 20] }, { columns: [ { width: '*', text: 'Ort och Datum\n\n__________________________________', alignment: 'left', color: '#000000' }, { width: '*', text: 'Köparens Underskrift\n\n__________________________________', alignment: 'left', color: '#000000' } ] });
             const pdfDoc = printer.createPdfKitDocument(docDefinition); res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `inline; filename="${docTitle}_${order.customer_name}.pdf"`); res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate'); res.setHeader('Pragma', 'no-cache'); pdfDoc.pipe(res); pdfDoc.end();
             } catch (pdfErr) {
