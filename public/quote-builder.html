@@ -85,6 +85,7 @@
                     <div class="flex gap-1.5">
                         <button onclick="openCountertopModal()" class="text-[11px] bg-blue-600 hover:bg-blue-500 px-2.5 py-1.5 rounded border border-blue-500 font-medium shadow-sm transition"><i class="fas fa-layer-group mr-1"></i> Bänkskiva</button>
                         <button onclick="openManualFrontModal()" class="text-[11px] bg-gray-700 hover:bg-gray-600 px-2.5 py-1.5 rounded border border-gray-600 font-medium transition"><i class="fas fa-door-open mr-1"></i> Lucka/Front</button>
+                        <button onclick="openWinnerImportModal()" class="text-[11px] bg-teal-700 hover:bg-teal-600 px-2.5 py-1.5 rounded border border-teal-600 font-medium shadow-sm transition" title="Importera artiklar från en Winner-fil (.e01)"><i class="fas fa-file-import mr-1"></i> Winner</button>
                         <button onclick="openPackageModal()" class="text-[11px] bg-amber-600 hover:bg-amber-500 px-2.5 py-1.5 rounded border border-amber-500 font-medium shadow-sm transition"><i class="fas fa-box-open mr-1"></i> Paket</button>
                         <button onclick="document.getElementById('freeTextModal').classList.remove('hidden')" class="text-[11px] bg-gray-700 hover:bg-gray-600 px-2.5 py-1.5 rounded border border-gray-600 font-medium transition">+ Fritext</button>
                     </div>
@@ -656,6 +657,20 @@
         </div>
     </div>
 
+    <div id="winnerImportModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+        <div class="bg-white p-5 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <h3 class="font-bold text-gray-800 mb-1 border-b pb-2"><i class="fas fa-file-import mr-2 text-teal-700"></i> Importera från Winner</h3>
+            <p class="text-xs text-gray-500 mb-3">Välj exportfilen (.e01) från Winner. Artiklar som finns i produktregistret (samma artikelnummer) läggs in med era vanliga priser. Övriga läggs som fritextrader med Winners listpris som förslag - justera priset innan du lägger till. Luckor och lådfronter räknas som vanligt via dörrmodellen.</p>
+            <input type="file" id="winnerFileInput" accept=".e01,.E01,.txt" onchange="onWinnerFileSelected(this)" class="text-sm mb-3">
+            <div id="winnerImportInfo" class="text-xs text-gray-600 mb-2"></div>
+            <div id="winnerImportList" class="overflow-y-auto flex-1 border rounded text-xs"></div>
+            <div class="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
+                <button onclick="closeWinnerImportModal()" class="px-4 py-2 bg-gray-200 rounded text-xs font-medium hover:bg-gray-300">Avbryt</button>
+                <button id="winnerImportAddBtn" onclick="addWinnerRowsToQuote()" disabled class="px-4 py-2 bg-teal-700 text-white rounded text-xs font-medium hover:bg-teal-800 shadow-sm opacity-50">Lägg till i offerten</button>
+            </div>
+        </div>
+    </div>
+
     <div id="manualFrontModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
         <div class="bg-white p-5 rounded-lg shadow-xl w-full max-w-md relative">
             <h3 class="font-bold text-gray-800 mb-3 border-b pb-2">Lägg till lös lucka/front</h3>
@@ -711,6 +726,7 @@
     </div>
 
     <script src="/common.js"></script>
+    <script src="/winner-import.js"></script>
     <script src="/menu.js"></script>
     <script>
         let products = []; let quoteCart = []; const quoteId = new URLSearchParams(window.location.search).get('id');
@@ -1454,6 +1470,111 @@
             document.getElementById('modalAddBtn').classList.toggle('cursor-not-allowed', !valid);
         }
 
+        // Bygger en offertrad för en katalogprodukt (variant eller vanlig produkt). Används av
+        // "Lägg till i offert" i produktrutan och av Winner-importen så raderna blir identiska.
+        function buildCatalogCartRow(product, variation, qty) {
+            if (variation) {
+                const varDesc = []; if (variation.attr1_value) varDesc.push(variation.attr1_value); if (variation.attr2_value) varDesc.push(variation.attr2_value);
+                const nameSuffix = varDesc.length > 0 ? ` - ${varDesc.join(' / ')}` : '';
+                const installTot = parseFloat(variation.install_price) || 0; const instShare = parseFloat(variation.installer_share) || 0;
+                return { cartId: product.id + '_' + variation.sku, id: product.id, sku: variation.sku, name: product.name + nameSuffix, priceIncVat: parseFloat(variation.price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: qty, discount: 0, imageUrl: variation.image_url || product.image_url || '', costExVat: hasCostData(variation.purchase_price) ? parseFloat(variation.purchase_price) : null };
+            }
+            const installTot = parseFloat(product.installation_price) || 0; const instShare = parseFloat(product.installer_share) || 0;
+            return { cartId: product.id + '_base', id: product.id, sku: product.sku, name: product.name, priceIncVat: parseFloat(product.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: qty, discount: 0, imageUrl: product.image_url || '', costExVat: hasCostData(product.purchase_price) ? parseFloat(product.purchase_price) : null };
+        }
+
+        // ==========================================
+        // IMPORT FRÅN WINNER (.e01) - se winner-import.js för filformatet
+        // ==========================================
+        let winnerRows = [];
+        let winnerSkuIndex = null;
+        function getWinnerSkuIndex() {
+            if (winnerSkuIndex) return winnerSkuIndex;
+            winnerSkuIndex = new Map();
+            products.forEach(p => {
+                if (p.has_variations === 1) parseJsonField(p.variations, []).forEach(v => { if (v.sku) { const k = String(v.sku).trim().toUpperCase(); if (!winnerSkuIndex.has(k)) winnerSkuIndex.set(k, { product: p, variation: v }); } });
+                else if (p.sku) { const k = String(p.sku).trim().toUpperCase(); if (!winnerSkuIndex.has(k)) winnerSkuIndex.set(k, { product: p, variation: null }); }
+            });
+            return winnerSkuIndex;
+        }
+        function openWinnerImportModal() {
+            winnerRows = []; winnerSkuIndex = null;
+            document.getElementById('winnerFileInput').value = '';
+            document.getElementById('winnerImportInfo').innerText = '';
+            document.getElementById('winnerImportList').innerHTML = '';
+            const b = document.getElementById('winnerImportAddBtn'); b.disabled = true; b.classList.add('opacity-50');
+            document.getElementById('winnerImportModal').classList.remove('hidden');
+        }
+        function closeWinnerImportModal() { document.getElementById('winnerImportModal').classList.add('hidden'); }
+        async function onWinnerFileSelected(input) {
+            const file = input.files && input.files[0]; if (!file) return;
+            let parsed;
+            try { parsed = parseWinnerE01(new TextDecoder('windows-1252').decode(await file.arrayBuffer())); }
+            catch (e) { return alert('Kunde inte läsa filen.'); }
+            if (parsed.articles.length === 0) { document.getElementById('winnerImportInfo').innerText = 'Hittade inga artikelrader i filen. Är det en Winner-export (.e01)?'; return; }
+            const idx = getWinnerSkuIndex();
+            winnerRows = parsed.articles.map(a => {
+                const match = idx.get(a.sku.toUpperCase()) || null;
+                const noPrice = !match && a.price <= 0;
+                return { ...a, match, include: !noPrice, salePrice: Math.round(a.price * 1.25), cost: '' };
+            });
+            const matched = winnerRows.filter(r => r.match).length;
+            document.getElementById('winnerImportInfo').innerText = `${parsed.customer ? 'Kund i filen: ' + parsed.customer + '. ' : ''}${winnerRows.length} artiklar - ${matched} finns i produktregistret, ${winnerRows.length - matched} saknas.`;
+            renderWinnerRows();
+        }
+        function renderWinnerRows() {
+            const fmt = n => (Math.round(n * 100) / 100).toLocaleString('sv-SE');
+            document.getElementById('winnerImportList').innerHTML = `<table class="w-full"><thead class="bg-gray-100 text-gray-600 sticky top-0"><tr><th class="p-2 w-8"></th><th class="p-2 text-left">Artikel i Winner</th><th class="p-2 text-right">Antal</th><th class="p-2 text-left">Läggs in som</th></tr></thead><tbody>${winnerRows.map((r, i) => {
+                let how;
+                if (r.match) {
+                    const p = r.match.product, v = r.match.variation;
+                    const label = v ? [v.attr1_value, v.attr2_value].filter(Boolean).join(' / ') : '';
+                    const price = r.match.product.pricing_type === 'per_sqm' ? '' : ` - ${fmt(parseFloat(v ? v.price : p.standard_price) || 0)} kr/st`;
+                    how = `<span class="text-green-700 font-semibold">I registret:</span> ${escapeHtml(p.name)}${label ? ' (' + escapeHtml(label) + ')' : ''}${price}`;
+                } else {
+                    how = `<span class="text-amber-600 font-semibold">Saknas - fritextrad</span> <span class="text-gray-500">Pris ink moms:</span> <input type="number" value="${r.salePrice}" onchange="winnerRows[${i}].salePrice=parseFloat(this.value)||0" class="w-20 border rounded px-1 py-0.5"> <span class="text-gray-500">Inköp ex moms:</span> <input type="number" value="${r.cost}" placeholder="okänt" onchange="winnerRows[${i}].cost=this.value" class="w-20 border rounded px-1 py-0.5">${r.price <= 0 ? ' <span class="text-red-500">(inget pris i filen)</span>' : ''}`;
+                }
+                return `<tr class="border-t"><td class="p-2"><input type="checkbox" ${r.include ? 'checked' : ''} onchange="winnerRows[${i}].include=this.checked"></td><td class="p-2"><div class="font-medium">${escapeHtml(r.name)}</div><div class="text-[10px] font-mono text-gray-400">${escapeHtml(r.sku)}</div></td><td class="p-2 text-right whitespace-nowrap">${r.qty.toLocaleString('sv-SE')} ${escapeHtml(r.unit)}</td><td class="p-2">${how}</td></tr>`;
+            }).join('')}</tbody></table>`;
+            const b = document.getElementById('winnerImportAddBtn'); b.disabled = false; b.classList.remove('opacity-50');
+        }
+        function addWinnerRowsToQuote() {
+            const rows = winnerRows.filter(r => r.include);
+            if (rows.length === 0) return alert('Inga rader valda.');
+            let added = 0, frontsSkipped = false;
+            rows.forEach(r => {
+                const stamp = Date.now() + '_' + added;
+                if (r.match) {
+                    const p = r.match.product, v = r.match.variation;
+                    if (p.pricing_type === 'per_sqm' && !v) {
+                        // Winner anger redan åtgången yta i m² - priset räknas som i produktrutans m²-läge
+                        const area = Math.max(r.qty, parseFloat(p.min_billable_sqm) || 0);
+                        const price = Math.round(area * (parseFloat(p.price_per_sqm) || 0) * 100) / 100;
+                        const installTot = parseFloat(p.installation_price) || 0; const instShare = parseFloat(p.installer_share) || 0;
+                        quoteCart.push({ cartId: `sqm_${p.id}_${stamp}`, id: p.id, sku: p.sku, name: `${p.name} (${area.toLocaleString('sv-SE', { maximumFractionDigits: 2 })} m²)`, priceIncVat: price, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, isFreeText: true, imageUrl: p.image_url || '', costExVat: hasCostData(p.purchase_price) ? area * parseFloat(p.purchase_price) : null });
+                    } else {
+                        const qty = Math.max(1, Math.round(r.qty));
+                        const row = buildCatalogCartRow(p, v, qty);
+                        const existing = quoteCart.find(item => item.cartId === row.cartId);
+                        if (existing) existing.qty += qty; else quoteCart.push(row);
+                        if (p.effective_front_layout) {
+                            if (!selectedDoorModelId) frontsSkipped = true;
+                            else for (let n = 0; n < qty; n++) addAutoFrontsForProduct(v ? { ...p, width: getVariantWidth(v, p) } : p);
+                        }
+                    }
+                } else {
+                    // Fritextrad: bråkdelsantal (t.ex. m²) slås ihop till en rad med totalpris
+                    const whole = Number.isInteger(r.qty);
+                    const factor = whole ? 1 : r.qty;
+                    const cost = parseFloat(r.cost);
+                    quoteCart.push({ cartId: 'wi_' + r.sku + '_' + stamp, id: null, sku: r.sku, name: whole ? r.name : `${r.name} (${r.qty.toLocaleString('sv-SE')} ${r.unit})`, priceIncVat: r.salePrice * factor, installIncVat: 0, companyShare: 0, installerShare: 0, qty: whole ? r.qty : 1, discount: 0, isFreeText: true, costExVat: isNaN(cost) ? null : cost * factor });
+                }
+                added++;
+            });
+            renderCart(); closeWinnerImportModal();
+            if (frontsSkipped) alert(`${added} artiklar lades till. Några skåp har en frontkonfiguration men ingen dörrmodell är vald - välj dörrmodell under Specifikationer och lägg till luckorna (eller importera om).`);
+        }
+
         function closeProductModal() { document.getElementById('productModal').classList.add('hidden'); }
 
         function addProductToQuote() {
@@ -1466,7 +1587,7 @@
                 
                 const existing = quoteCart.find(item => item.cartId === cartId);
                 if(existing) { existing.qty += 1; } else {
-                    quoteCart.push({ cartId: cartId, id: currentModalProduct.id, sku: selectedVariation.sku, name: currentModalProduct.name + nameSuffix, priceIncVat: parseFloat(selectedVariation.price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, imageUrl: selectedVariation.image_url || currentModalProduct.image_url || '', costExVat: hasCostData(selectedVariation.purchase_price) ? parseFloat(selectedVariation.purchase_price) : null });
+                    quoteCart.push(buildCatalogCartRow(currentModalProduct, selectedVariation, 1));
                 }
                 const variantWidth = getVariantWidth(selectedVariation, currentModalProduct);
                 addAutoFrontsForProduct({ ...currentModalProduct, width: variantWidth });
@@ -1483,7 +1604,7 @@
                 const cartId = currentModalProduct.id + '_base'; const existing = quoteCart.find(item => item.cartId === cartId);
                 if(existing) { existing.qty += 1; } else {
                     const installTot = parseFloat(currentModalProduct.installation_price) || 0; const instShare = parseFloat(currentModalProduct.installer_share) || 0;
-                    quoteCart.push({ cartId: cartId, id: currentModalProduct.id, sku: currentModalProduct.sku, name: currentModalProduct.name, priceIncVat: parseFloat(currentModalProduct.standard_price) || 0, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, imageUrl: currentModalProduct.image_url || '', costExVat: hasCostData(currentModalProduct.purchase_price) ? parseFloat(currentModalProduct.purchase_price) : null });
+                    quoteCart.push(buildCatalogCartRow(currentModalProduct, null, 1));
                 }
                 addAutoFrontsForProduct(currentModalProduct);
             }
