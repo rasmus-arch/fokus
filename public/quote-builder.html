@@ -663,11 +663,26 @@
             <p class="text-xs text-gray-500 mb-3">Välj exportfilen (.e01) från Winner. Artiklar som finns i produktregistret (samma artikelnummer) läggs in med era vanliga priser. Övriga läggs som fritextrader med Winners listpris som förslag - justera priset innan du lägger till. Luckor och lådfronter räknas som vanligt via dörrmodellen.</p>
             <input type="file" id="winnerFileInput" accept=".e01,.E01,.txt" onchange="onWinnerFileSelected(this)" class="text-sm mb-3">
             <div id="winnerImportInfo" class="text-xs text-gray-600 mb-2"></div>
+            <div id="winnerDoorRow" class="hidden mb-2 flex flex-wrap items-center gap-2 text-xs bg-blue-50 border border-blue-100 rounded p-2">
+                <label class="font-semibold text-blue-800"><i class="fas fa-door-open mr-1"></i> Dörrmodell för luckor/lådfronter:</label>
+                <select id="winnerDoorSelect" class="border border-gray-300 rounded px-2 py-1 bg-white"></select>
+                <span id="winnerDoorHint" class="text-gray-500"></span>
+            </div>
             <div id="winnerImportList" class="overflow-y-auto flex-1 border rounded text-xs"></div>
             <div class="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
                 <button onclick="closeWinnerImportModal()" class="px-4 py-2 bg-gray-200 rounded text-xs font-medium hover:bg-gray-300">Avbryt</button>
                 <button id="winnerImportAddBtn" onclick="addWinnerRowsToQuote()" disabled class="px-4 py-2 bg-teal-700 text-white rounded text-xs font-medium hover:bg-teal-800 shadow-sm opacity-50">Lägg till i offerten</button>
             </div>
+        </div>
+    </div>
+
+    <div id="winnerPickerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[60] p-4">
+        <div class="bg-white p-4 rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <h3 class="font-bold text-gray-800 mb-1 text-sm">Välj ersättningsprodukt</h3>
+            <p id="winnerPickerFor" class="text-[11px] text-gray-500 mb-2"></p>
+            <input type="text" id="winnerPickerSearch" oninput="renderWinnerPicker()" placeholder="Sök på namn eller artikelnummer..." class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm mb-2">
+            <div id="winnerPickerList" class="overflow-y-auto flex-1 border rounded text-xs"></div>
+            <div class="flex justify-end mt-3"><button onclick="closeWinnerPicker()" class="px-4 py-2 bg-gray-200 rounded text-xs font-medium hover:bg-gray-300">Avbryt</button></div>
         </div>
     </div>
 
@@ -1488,6 +1503,11 @@
         // ==========================================
         let winnerRows = [];
         let winnerSkuIndex = null;
+        let winnerDoorNames = [];
+        const WINNER_MAP_KEY = 'winnerSkuMap';
+        // Valda ersättningsprodukter kommer ihåg per Winner-artikelnummer (i den här webbläsaren)
+        function loadWinnerMap() { try { return JSON.parse(localStorage.getItem(WINNER_MAP_KEY) || '{}'); } catch (e) { return {}; } }
+        function saveWinnerMap(m) { try { localStorage.setItem(WINNER_MAP_KEY, JSON.stringify(m)); } catch (e) {} }
         function getWinnerSkuIndex() {
             if (winnerSkuIndex) return winnerSkuIndex;
             winnerSkuIndex = new Map();
@@ -1498,81 +1518,171 @@
             return winnerSkuIndex;
         }
         function openWinnerImportModal() {
-            winnerRows = []; winnerSkuIndex = null;
+            winnerRows = []; winnerSkuIndex = null; winnerDoorNames = [];
             document.getElementById('winnerFileInput').value = '';
             document.getElementById('winnerImportInfo').innerText = '';
             document.getElementById('winnerImportList').innerHTML = '';
+            document.getElementById('winnerDoorRow').classList.add('hidden');
             const b = document.getElementById('winnerImportAddBtn'); b.disabled = true; b.classList.add('opacity-50');
             document.getElementById('winnerImportModal').classList.remove('hidden');
         }
         function closeWinnerImportModal() { document.getElementById('winnerImportModal').classList.add('hidden'); }
+
+        // Föreslår den dörrmodell i Fokus som bäst liknar dörrmodellen i Winner-filen (ordöverlapp)
+        function suggestDoorModel(names) {
+            let best = null, bestScore = 0;
+            const words = s => String(s).toLowerCase().split(/[^a-zåäö0-9]+/).filter(w => w.length > 1);
+            names.forEach(n => {
+                const nw = words(n);
+                doorModels.forEach(m => {
+                    const mw = words(m.name); const score = nw.filter(w => mw.includes(w)).length / Math.max(1, mw.length);
+                    if (score > bestScore) { bestScore = score; best = m; }
+                });
+            });
+            return bestScore >= 0.5 ? best : null;
+        }
         async function onWinnerFileSelected(input) {
             const file = input.files && input.files[0]; if (!file) return;
             let parsed;
             try { parsed = parseWinnerE01(new TextDecoder('windows-1252').decode(await file.arrayBuffer())); }
             catch (e) { return alert('Kunde inte läsa filen.'); }
             if (parsed.articles.length === 0) { document.getElementById('winnerImportInfo').innerText = 'Hittade inga artikelrader i filen. Är det en Winner-export (.e01)?'; return; }
-            const idx = getWinnerSkuIndex();
+            const idx = getWinnerSkuIndex(); const savedMap = loadWinnerMap();
             winnerRows = parsed.articles.map(a => {
-                const match = idx.get(a.sku.toUpperCase()) || null;
+                let match = idx.get(a.sku.toUpperCase()) || null; let replaced = false;
+                if (!match && savedMap[a.sku]) { match = idx.get(String(savedMap[a.sku]).toUpperCase()) || null; replaced = !!match; }
                 const noPrice = !match && a.price <= 0;
-                return { ...a, match, include: !noPrice, salePrice: Math.round(a.price * 1.25), cost: '' };
+                return { ...a, match, replaced, include: !noPrice, salePrice: Math.round(a.price * 1.25), cost: '' };
             });
             const matched = winnerRows.filter(r => r.match).length;
-            document.getElementById('winnerImportInfo').innerText = `${parsed.customer ? 'Kund i filen: ' + parsed.customer + '. ' : ''}${winnerRows.length} artiklar - ${matched} finns i produktregistret, ${winnerRows.length - matched} saknas.`;
+            document.getElementById('winnerImportInfo').innerText = `${parsed.customer ? 'Kund i filen: ' + parsed.customer + '. ' : ''}${winnerRows.length} artiklar - ${matched} finns i produktregistret, ${winnerRows.length - matched} saknas (välj ersättningsprodukt eller lägg som fritext).`;
+            // dörrmodell
+            winnerDoorNames = parsed.doorModels || [];
+            const sel = document.getElementById('winnerDoorSelect');
+            const suggested = selectedDoorModelId ? null : suggestDoorModel(winnerDoorNames);
+            sel.innerHTML = '<option value="">-- Ingen (lägg inte till luckor) --</option>' + doorModels.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
+            sel.value = selectedDoorModelId || (suggested ? suggested.id : '');
+            document.getElementById('winnerDoorHint').innerText = winnerDoorNames.length ? `I Winner: ${winnerDoorNames.join(', ')}` : '';
+            document.getElementById('winnerDoorRow').classList.remove('hidden');
             renderWinnerRows();
+        }
+
+        function winnerRowTitle(r) {
+            const d = winnerDetailLabel(r.detail);
+            return r.perPiece && d ? `${r.name} (${d})` : r.name;
         }
         function renderWinnerRows() {
             const fmt = n => (Math.round(n * 100) / 100).toLocaleString('sv-SE');
             document.getElementById('winnerImportList').innerHTML = `<table class="w-full"><thead class="bg-gray-100 text-gray-600 sticky top-0"><tr><th class="p-2 w-8"></th><th class="p-2 text-left">Artikel i Winner</th><th class="p-2 text-right">Antal</th><th class="p-2 text-left">Läggs in som</th></tr></thead><tbody>${winnerRows.map((r, i) => {
                 let how;
+                const change = `<button onclick="openWinnerPicker(${i})" class="ml-1 underline text-blue-600 hover:text-blue-800">${r.match ? 'Byt produkt' : 'Välj produkt'}</button>`;
                 if (r.match) {
                     const p = r.match.product, v = r.match.variation;
                     const label = v ? [v.attr1_value, v.attr2_value].filter(Boolean).join(' / ') : '';
-                    const price = r.match.product.pricing_type === 'per_sqm' ? '' : ` - ${fmt(parseFloat(v ? v.price : p.standard_price) || 0)} kr/st`;
-                    how = `<span class="text-green-700 font-semibold">I registret:</span> ${escapeHtml(p.name)}${label ? ' (' + escapeHtml(label) + ')' : ''}${price}`;
+                    const price = p.pricing_type === 'per_sqm' ? ` - ${fmt(parseFloat(p.price_per_sqm) || 0)} kr/m²` : ` - ${fmt(parseFloat(v ? v.price : p.standard_price) || 0)} kr/st`;
+                    how = `<span class="text-green-700 font-semibold">${r.replaced ? 'Ersatt med:' : 'I registret:'}</span> ${escapeHtml(p.name)}${label ? ' (' + escapeHtml(label) + ')' : ''}${price}${change}`;
                 } else {
-                    how = `<span class="text-amber-600 font-semibold">Saknas - fritextrad</span> <span class="text-gray-500">Pris ink moms:</span> <input type="number" value="${r.salePrice}" onchange="winnerRows[${i}].salePrice=parseFloat(this.value)||0" class="w-20 border rounded px-1 py-0.5"> <span class="text-gray-500">Inköp ex moms:</span> <input type="number" value="${r.cost}" placeholder="okänt" onchange="winnerRows[${i}].cost=this.value" class="w-20 border rounded px-1 py-0.5">${r.price <= 0 ? ' <span class="text-red-500">(inget pris i filen)</span>' : ''}`;
+                    const free = r.price <= 0 ? ' <span class="text-red-500">(0 kr i Winner - ingår troligen i skåpet)</span>' : '';
+                    how = `<span class="text-amber-600 font-semibold">Saknas - fritextrad</span>${change}<br><span class="text-gray-500">Pris ink moms:</span> <input type="number" value="${r.salePrice}" onchange="winnerRows[${i}].salePrice=parseFloat(this.value)||0" class="w-20 border rounded px-1 py-0.5"> <span class="text-gray-500">Inköp ex moms:</span> <input type="number" value="${r.cost}" placeholder="okänt" onchange="winnerRows[${i}].cost=this.value" class="w-20 border rounded px-1 py-0.5">${free}`;
                 }
-                return `<tr class="border-t"><td class="p-2"><input type="checkbox" ${r.include ? 'checked' : ''} onchange="winnerRows[${i}].include=this.checked"></td><td class="p-2"><div class="font-medium">${escapeHtml(r.name)}</div><div class="text-[10px] font-mono text-gray-400">${escapeHtml(r.sku)}</div></td><td class="p-2 text-right whitespace-nowrap">${r.qty.toLocaleString('sv-SE')} ${escapeHtml(r.unit)}</td><td class="p-2">${how}</td></tr>`;
+                const qtyTxt = r.perPiece ? `${r.pieces} st <span class="text-gray-400">(${r.qty.toLocaleString('sv-SE')} m² var)</span>` : `${r.qty.toLocaleString('sv-SE')} ${escapeHtml(r.unit)}`;
+                return `<tr class="border-t"><td class="p-2"><input type="checkbox" ${r.include ? 'checked' : ''} onchange="winnerRows[${i}].include=this.checked"></td><td class="p-2"><div class="font-medium">${escapeHtml(winnerRowTitle(r))}</div><div class="text-[10px] font-mono text-gray-400">${escapeHtml(r.sku)}</div></td><td class="p-2 text-right whitespace-nowrap">${qtyTxt}</td><td class="p-2">${how}</td></tr>`;
             }).join('')}</tbody></table>`;
             const b = document.getElementById('winnerImportAddBtn'); b.disabled = false; b.classList.remove('opacity-50');
         }
-        function addWinnerRowsToQuote() {
+
+        // ----- Välj ersättningsprodukt -----
+        let winnerPickerRow = -1;
+        function openWinnerPicker(i) {
+            winnerPickerRow = i; const r = winnerRows[i];
+            document.getElementById('winnerPickerFor').innerText = `Ersätter: ${r.name} (${r.sku})`;
+            const inp = document.getElementById('winnerPickerSearch');
+            // förifyll med ord ur Winner-benämningen (utan siffror/mått) för att snabba upp sökningen
+            inp.value = r.name.split(' ').filter(w => w.length > 2 && !/\d/.test(w)).slice(0, 2).join(' ');
+            document.getElementById('winnerPickerModal').classList.remove('hidden');
+            renderWinnerPicker(); inp.focus(); inp.select();
+        }
+        function closeWinnerPicker() { document.getElementById('winnerPickerModal').classList.add('hidden'); }
+        function renderWinnerPicker() {
+            const term = document.getElementById('winnerPickerSearch').value.toLowerCase().trim();
+            const words = term.split(/\s+/).filter(Boolean);
+            const hits = [];
+            for (const p of products) {
+                const vars = p.has_variations === 1 ? parseJsonField(p.variations, []) : [];
+                const hay = (p.name + ' ' + (p.sku || '') + ' ' + (p.brand || '') + ' ' + vars.map(v => v.sku).join(' ')).toLowerCase();
+                if (words.length && !words.every(w => hay.includes(w))) continue;
+                hits.push(p); if (hits.length >= 25) break;
+            }
+            const list = document.getElementById('winnerPickerList');
+            if (hits.length === 0) { list.innerHTML = '<p class="p-3 text-gray-400 italic">Inga produkter hittades.</p>'; return; }
+            const fmt = n => (Math.round(n * 100) / 100).toLocaleString('sv-SE');
+            list.innerHTML = hits.map(p => {
+                const head = `<div class="px-2 py-1.5 bg-gray-50 border-t font-medium">${escapeHtml(p.name)} <span class="text-[10px] font-mono text-gray-400">${escapeHtml(p.sku || '')}</span></div>`;
+                if (p.has_variations === 1) {
+                    const vars = parseJsonField(p.variations, []);
+                    return head + vars.slice(0, 40).map(v => `<div onclick="pickWinnerProduct(${p.id}, '${escapeJsAttr(v.sku || '')}')" class="px-3 py-1 cursor-pointer hover:bg-blue-50 flex justify-between"><span>${escapeHtml([v.attr1_value, v.attr2_value].filter(Boolean).join(' / ') || 'Standard')}</span><span class="text-gray-500">${fmt(parseFloat(v.price) || 0)} kr</span></div>`).join('');
+                }
+                const price = p.pricing_type === 'per_sqm' ? `${fmt(parseFloat(p.price_per_sqm) || 0)} kr/m²` : `${fmt(parseFloat(p.standard_price) || 0)} kr`;
+                return head + `<div onclick="pickWinnerProduct(${p.id}, '')" class="px-3 py-1 cursor-pointer hover:bg-blue-50 flex justify-between"><span>Välj denna</span><span class="text-gray-500">${price}</span></div>`;
+            }).join('');
+        }
+        function pickWinnerProduct(productId, variantSku) {
+            const p = products.find(x => x.id === productId); if (!p) return;
+            let v = null;
+            if (variantSku) v = parseJsonField(p.variations, []).find(x => x.sku === variantSku) || null;
+            const r = winnerRows[winnerPickerRow];
+            r.match = { product: p, variation: v }; r.replaced = true; r.include = true;
+            const map = loadWinnerMap(); map[r.sku] = v ? v.sku : p.sku; if (map[r.sku]) saveWinnerMap(map);
+            closeWinnerPicker(); renderWinnerRows();
+        }
+
+        async function addWinnerRowsToQuote() {
             const rows = winnerRows.filter(r => r.include);
             if (rows.length === 0) return alert('Inga rader valda.');
-            let added = 0, frontsSkipped = false;
+            // Dörrmodell först, så skåpens luckor/lådfronter kan prissättas direkt
+            const chosenDoor = document.getElementById('winnerDoorSelect').value;
+            if (chosenDoor && String(chosenDoor) !== String(selectedDoorModelId)) {
+                document.getElementById('qsDoorModelId').value = chosenDoor;
+                await onDoorModelChange();
+            }
+            let added = 0, cabinetsWithoutFronts = [];
             rows.forEach(r => {
                 const stamp = Date.now() + '_' + added;
                 if (r.match) {
                     const p = r.match.product, v = r.match.variation;
                     if (p.pricing_type === 'per_sqm' && !v) {
-                        // Winner anger redan åtgången yta i m² - priset räknas som i produktrutans m²-läge
-                        const area = Math.max(r.qty, parseFloat(p.min_billable_sqm) || 0);
+                        // Täcksida/passbit: ett tillverkat stycke per Winner-rad. Varje stycke prissätts på sin
+                        // egen yta (med produktens minsta debiterbara yta) och mått skrivs i namnet, så
+                        // tillverkningsunderlaget blir rätt. Identiska stycken blir en rad med antal.
+                        const area = Math.max(r.perPiece ? r.qty : r.qty, parseFloat(p.min_billable_sqm) || 0);
                         const price = Math.round(area * (parseFloat(p.price_per_sqm) || 0) * 100) / 100;
                         const installTot = parseFloat(p.installation_price) || 0; const instShare = parseFloat(p.installer_share) || 0;
-                        quoteCart.push({ cartId: `sqm_${p.id}_${stamp}`, id: p.id, sku: p.sku, name: `${p.name} (${area.toLocaleString('sv-SE', { maximumFractionDigits: 2 })} m²)`, priceIncVat: price, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: 1, discount: 0, isFreeText: true, imageUrl: p.image_url || '', costExVat: hasCostData(p.purchase_price) ? area * parseFloat(p.purchase_price) : null });
+                        const dims = r.perPiece ? winnerDetailLabel(r.detail) : '';
+                        const label = dims ? `${dims}, ${area.toLocaleString('sv-SE', { maximumFractionDigits: 2 })} m²` : `${area.toLocaleString('sv-SE', { maximumFractionDigits: 2 })} m²`;
+                        quoteCart.push({ cartId: `sqm_${p.id}_${stamp}`, id: p.id, sku: p.sku, name: `${p.name} (${label})`, priceIncVat: price, installIncVat: installTot, companyShare: installTot - instShare, installerShare: instShare, qty: r.perPiece ? r.pieces : 1, discount: 0, isFreeText: true, imageUrl: p.image_url || '', costExVat: hasCostData(p.purchase_price) ? area * parseFloat(p.purchase_price) : null });
                     } else {
-                        const qty = Math.max(1, Math.round(r.qty));
+                        const qty = Math.max(1, Math.round(r.qty * (r.perPiece ? r.pieces : 1)));
                         const row = buildCatalogCartRow(p, v, qty);
                         const existing = quoteCart.find(item => item.cartId === row.cartId);
                         if (existing) existing.qty += qty; else quoteCart.push(row);
                         if (p.effective_front_layout) {
-                            if (!selectedDoorModelId) frontsSkipped = true;
+                            if (!selectedDoorModelId) cabinetsWithoutFronts.push(p.name);
                             else for (let n = 0; n < qty; n++) addAutoFrontsForProduct(v ? { ...p, width: getVariantWidth(v, p) } : p);
                         }
                     }
                 } else {
-                    // Fritextrad: bråkdelsantal (t.ex. m²) slås ihop till en rad med totalpris
-                    const whole = Number.isInteger(r.qty);
-                    const factor = whole ? 1 : r.qty;
                     const cost = parseFloat(r.cost);
-                    quoteCart.push({ cartId: 'wi_' + r.sku + '_' + stamp, id: null, sku: r.sku, name: whole ? r.name : `${r.name} (${r.qty.toLocaleString('sv-SE')} ${r.unit})`, priceIncVat: r.salePrice * factor, installIncVat: 0, companyShare: 0, installerShare: 0, qty: whole ? r.qty : 1, discount: 0, isFreeText: true, costExVat: isNaN(cost) ? null : cost * factor });
+                    const perPiece = r.perPiece;
+                    const area = r.qty;
+                    const whole = perPiece || Number.isInteger(r.qty);
+                    const factor = perPiece ? area : (whole ? 1 : r.qty);
+                    const name = perPiece ? `${winnerRowTitle(r)}, ${area.toLocaleString('sv-SE', { maximumFractionDigits: 2 })} m²` : (whole ? r.name : `${r.name} (${r.qty.toLocaleString('sv-SE')} ${r.unit})`);
+                    quoteCart.push({ cartId: 'wi_' + r.sku + '_' + stamp, id: null, sku: r.sku, name, priceIncVat: r.salePrice * factor, installIncVat: 0, companyShare: 0, installerShare: 0, qty: perPiece ? r.pieces : (whole ? r.qty : 1), discount: 0, isFreeText: true, costExVat: isNaN(cost) ? null : cost * factor });
                 }
                 added++;
             });
             renderCart(); closeWinnerImportModal();
-            if (frontsSkipped) alert(`${added} artiklar lades till. Några skåp har en frontkonfiguration men ingen dörrmodell är vald - välj dörrmodell under Specifikationer och lägg till luckorna (eller importera om).`);
+            if (cabinetsWithoutFronts.length) alert(`${added} rader lades till, men luckor/lådfronter lades inte till för skåpen eftersom ingen dörrmodell var vald. Välj en dörrmodell och importera om skåpen (eller lägg till luckorna manuellt via "Lucka/Front").`);
         }
 
         function closeProductModal() { document.getElementById('productModal').classList.add('hidden'); }
